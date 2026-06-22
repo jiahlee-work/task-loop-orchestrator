@@ -551,6 +551,28 @@ describe("CLI JSON schema artifact", () => {
     expect(docs).toContain("No-run responses from `checkpoint`, `pr-plan`, `pr-exec`, and `approve-pr`");
     expect(docs).toContain("../schemas/cli-json.schema.json");
   });
+
+  it("keeps docs schema sections aligned with required payload fields", async () => {
+    const schema = await readSchema();
+    const docs = await readFile(join(root, "docs", "json-output.md"), "utf8");
+    const sections = [
+      { heading: "Init Schema", required: requiredFields(schema.$defs?.initPayload) },
+      { heading: "Doctor Schema", required: requiredFields(schema.$defs?.doctorPayload) },
+      { heading: "Run Report Schema", required: requiredFields(schema.$defs?.runReportPayload) },
+      { heading: "Checks Schema", required: requiredFields(schema.$defs?.checksPayload) },
+      { heading: "Checkpoint Schema", required: requiredFields(schema.$defs?.checkpointPayload) },
+      { heading: "PR Plan Schema", required: requiredFields(schema.$defs?.prPlanPayload) },
+      { heading: "PR Execution Schema", required: requiredFields(schema.$defs?.prExecPayload) },
+      { heading: "PR Approval Schema", required: requiredFields(schema.$defs?.approvalRecord) }
+    ];
+
+    for (const section of sections) {
+      const text = docsSection(docs, section.heading);
+      for (const field of section.required) {
+        expect(text, `${section.heading} should mention required field ${field}`).toMatch(backtickedField(field));
+      }
+    }
+  });
 });
 
 async function readSchema(): Promise<{
@@ -801,6 +823,29 @@ function branchesForCommand(schema: { allOf?: unknown[] }, command: string): Jso
 
     return commandConst === command || (Array.isArray(commandEnum) && commandEnum.includes(command));
   });
+}
+
+function requiredFields(definition: { required?: string[] } | undefined): string[] {
+  expect(definition?.required?.length).toBeGreaterThan(0);
+  return definition?.required ?? [];
+}
+
+function docsSection(docs: string, heading: string): string {
+  const headingText = `## ${heading}\n`;
+  const start = docs.indexOf(headingText);
+  expect(start, `Missing docs section ${heading}`).toBeGreaterThanOrEqual(0);
+
+  const contentStart = start + headingText.length;
+  const nextSection = docs.indexOf("\n## ", contentStart);
+  return docs.slice(contentStart, nextSection === -1 ? undefined : nextSection);
+}
+
+function backtickedField(field: string): RegExp {
+  return new RegExp(`\\\`${escapeRegExp(field)}\\\``);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function asRecord(value: unknown): JsonObject | undefined {
