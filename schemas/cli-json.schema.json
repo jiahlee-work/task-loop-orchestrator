@@ -236,6 +236,9 @@
       },
       "additionalProperties": true
     },
+    "approvePrPayload": {
+      "$ref": "#/$defs/approvalRecord"
+    },
     "ownerDecisionItem": {
       "type": "object",
       "required": ["source", "reason"],
@@ -634,6 +637,19 @@
       },
       "then": {
         "$ref": "#/$defs/prExecPayload"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "approve-pr"
+          }
+        },
+        "required": ["command", "id"]
+      },
+      "then": {
+        "$ref": "#/$defs/approvePrPayload"
       }
     }
   ],

@@ -215,6 +215,17 @@ describe("CLI JSON schema artifact", () => {
     );
   });
 
+  it("defines approve-pr payload as the approval record schema", async () => {
+    const schema = await readSchema();
+
+    expect(schema.$defs?.approvePrPayload).toEqual({ $ref: "#/$defs/approvalRecord" });
+    expect(schema.$defs?.approvalRecord?.required).toEqual(
+      expect.arrayContaining(["id", "scope", "planId", "runId", "status", "createdAt"])
+    );
+    expect(schema.$defs?.approvalRecord?.properties?.approvedBy).toEqual({ type: "string" });
+    expect(schema.$defs?.approvalRecord?.properties?.reason).toEqual({ type: "string" });
+  });
+
   it("applies the run report branch to run, resume, and default status reports", async () => {
     const schema = await readSchema();
 
@@ -338,6 +349,28 @@ describe("CLI JSON schema artifact", () => {
     );
   });
 
+  it("applies the approve-pr branch to concrete approval responses", async () => {
+    const schema = await readSchema();
+
+    expect(schema.allOf).toEqual(
+      expect.arrayContaining([
+        {
+          if: {
+            properties: {
+              command: {
+                const: "approve-pr"
+              }
+            },
+            required: ["command", "id"]
+          },
+          then: {
+            $ref: "#/$defs/approvePrPayload"
+          }
+        }
+      ])
+    );
+  });
+
   it("documents and links the schema artifact", async () => {
     const readme = await readFile(join(root, "README.md"), "utf8");
     const docs = await readFile(join(root, "docs", "json-output.md"), "utf8");
@@ -350,6 +383,7 @@ describe("CLI JSON schema artifact", () => {
     expect(docs).toContain("Checkpoint Schema");
     expect(docs).toContain("PR Plan Schema");
     expect(docs).toContain("PR Execution Schema");
+    expect(docs).toContain("PR Approval Schema");
     expect(docs).toContain("status --json --raw");
     expect(docs).toContain("../schemas/cli-json.schema.json");
   });
@@ -408,6 +442,7 @@ async function readSchema(): Promise<{
       properties?: Record<string, unknown>;
       additionalProperties?: boolean;
     };
+    approvePrPayload?: Record<string, unknown>;
     approvalPlanSnapshot?: {
       required?: string[];
     };
@@ -487,6 +522,7 @@ async function readSchema(): Promise<{
         properties?: Record<string, unknown>;
         additionalProperties?: boolean;
       };
+      approvePrPayload?: Record<string, unknown>;
       approvalPlanSnapshot?: {
         required?: string[];
       };

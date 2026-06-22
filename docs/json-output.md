@@ -86,6 +86,12 @@ Each `commandCandidates[]` item fixes `action`, `command`, `reason`, and `decisi
 
 `mode` is `dry-run` or `execute`; `status` is `dry_run`, `ready`, or `blocked`. `executedCommands` is an array of command arrays and remains empty while write execution is intentionally blocked. Approval records expose the minimum audit fields needed to connect the preflight result to a stored approval.
 
+## PR Approval Schema
+
+`approve-pr [runId] --approved-by <name> --json` has a command-specific schema branch for stored PR execution approvals. It reuses the same approval record shape exposed by `pr-exec --json`, including `id`, `scope`, `planId`, `runId`, `status`, `createdAt`, and optional audit fields such as `checkpointId`, `planSnapshot`, `approvedBy`, and `reason`.
+
+The command writes only the approval record under `.orchestrator/approvals/`; it does not create branches, commits, pushes, pull requests, merges, or releases.
+
 ## Not Found Responses
 
 Commands that need an existing run return an enveloped not-found response when `--json` is used and no run is available:
