@@ -28,6 +28,11 @@ async function main() {
 
     const help = await run(bin, ["--help"], { cwd: projectDir });
     assertIncludes(help.stdout, "task-loop-orchestrator init", "help output should include init usage");
+    assertIncludes(help.stdout, "task-loop-orchestrator doctor", "help output should include doctor usage");
+
+    const preInitDoctor = await run(bin, ["doctor", "--json"], { cwd: projectDir });
+    const preInitDoctorReport = JSON.parse(preInitDoctor.stdout);
+    assertEqual(preInitDoctorReport.status, "warn", "doctor before init should warn");
 
     await run("git", ["init"], { cwd: projectDir });
     const firstInit = await run(bin, ["init", "--json"], { cwd: projectDir });
@@ -40,6 +45,10 @@ async function main() {
     assertEqual(secondInitReport.files.config.status, "skipped", "second init should skip config");
     assertEqual(secondInitReport.files.gitignore.status, "skipped", "second init should skip gitignore");
 
+    const postInitDoctor = await run(bin, ["doctor", "--json"], { cwd: projectDir });
+    const postInitDoctorReport = JSON.parse(postInitDoctor.stdout);
+    assertEqual(postInitDoctorReport.status, "pass", "doctor after init should pass");
+
     const loop = await run(bin, ["run", "Smoke task", "--max-iterations", "1"], { cwd: projectDir });
     assertIncludes(loop.stdout, "Run run_", "run output should include a run id");
     assertIncludes(loop.stdout, "completed", "smoke run should complete");
@@ -50,6 +59,7 @@ async function main() {
     console.log("Package smoke passed:");
     console.log(`- tarball: ${tarballPath}`);
     console.log("- help output includes init usage");
+    console.log("- doctor reports pre-init warnings and post-init readiness");
     console.log("- init creates config and .gitignore");
     console.log("- init is idempotent on second run");
     console.log("- run/status work through the installed binary");

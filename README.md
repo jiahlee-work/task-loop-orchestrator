@@ -80,7 +80,9 @@ npm install --prefix "$tmpdir" /tmp/task-loop-orchestrator-0.1.0.tgz
 After installing the package in a target project, initialize local orchestrator files before the first run:
 
 ```bash
+task-loop-orchestrator doctor
 task-loop-orchestrator init
+task-loop-orchestrator doctor --github gh-cli
 task-loop-orchestrator run "Smoke task" --max-iterations 1
 task-loop-orchestrator checkpoint --github gh-cli --json
 ```
@@ -104,6 +106,10 @@ git -C "$tmpdir" init
 - skips an existing `orchestrator.config.json` unless `--force` is provided
 
 Use `--json` to see structured `created`, `updated`, and `skipped` statuses for each file.
+
+`doctor [--github none|gh-cli] [--json]` diagnoses the current project without writing files. Before `init`, it can point out missing config or `.gitignore` entries and recommend `task-loop-orchestrator init`. After `init`, it checks Node 24+, Git repository status, config loadability, `.orchestrator/` ignore coverage, and non-destructive store path accessibility.
+
+With `--github gh-cli`, doctor also attempts read-only GitHub repository and check-status diagnostics through `gh`. Missing `gh`, failed auth, missing checks, or insufficient repository access are reported as graceful warnings with recommended actions; doctor does not create or modify GitHub resources.
 
 ## Loop Model
 

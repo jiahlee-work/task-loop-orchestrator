@@ -9,6 +9,7 @@ import {
   normalizeReviewerMode
 } from "./config.js";
 import type { ExecutorMode, GitHubProviderMode, PermissionMode, ReviewerMode } from "./domain.js";
+import { runDoctor, type DoctorReport } from "./doctor.js";
 import { CodexCliExecutor } from "./executors.js";
 import { initProject } from "./init.js";
 import { createIntegrationCheckpoint } from "./integration.js";
@@ -84,6 +85,7 @@ function githubFlag(value: string | undefined): GitHubProviderMode {
 function printUsage(): void {
   console.log(`Usage:
   task-loop-orchestrator init [--force] [--json]
+  task-loop-orchestrator doctor [--github none|gh-cli] [--json]
   task-loop-orchestrator run <title> [--description text] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n]
   task-loop-orchestrator status [runId] [--json]
   task-loop-orchestrator resume <runId> [--max-iterations n]
@@ -92,6 +94,29 @@ function printUsage(): void {
   task-loop-orchestrator approve-pr [runId] --approved-by name [--reason text] [--json]
   task-loop-orchestrator pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]
   task-loop-orchestrator checks [ref] [--json]`);
+}
+
+async function doctorCommand(args: ParsedArgs): Promise<void> {
+  const githubMode = stringFlag(args.flags, "github") ? githubFlag(stringFlag(args.flags, "github")) : "none";
+  const report = await runDoctor(process.cwd(), { githubMode });
+
+  if (args.flags.json === true) {
+    console.log(JSON.stringify(report, null, 2));
+    return;
+  }
+
+  printDoctorReport(report);
+}
+
+function printDoctorReport(report: DoctorReport): void {
+  console.log(`Doctor: ${report.status}`);
+  console.log(`Root: ${report.rootDir}`);
+  for (const check of report.checks) {
+    console.log(`[${check.status}] ${check.id}: ${check.summary}`);
+    if (check.recommendedAction) {
+      console.log(`  Next: ${check.recommendedAction}`);
+    }
+  }
 }
 
 async function initCommand(args: ParsedArgs): Promise<void> {
@@ -414,6 +439,11 @@ async function main(): Promise<void> {
 
   if (args.command === "init") {
     await initCommand(args);
+    return;
+  }
+
+  if (args.command === "doctor") {
+    await doctorCommand(args);
     return;
   }
 

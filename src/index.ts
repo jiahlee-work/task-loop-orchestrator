@@ -3,6 +3,7 @@ export * from "./approval.js";
 export * from "./config.js";
 export * from "./context.js";
 export * from "./domain.js";
+export * from "./doctor.js";
 export * from "./executors.js";
 export * from "./graph.js";
 export * from "./init.js";
