@@ -90,6 +90,8 @@ Each `commandCandidates[]` item fixes `action`, `command`, `reason`, and `decisi
 
 `approve-pr [runId] --approved-by <name> --json` has a command-specific schema branch for stored PR execution approvals. It reuses the same approval record shape exposed by `pr-exec --json`, including `id`, `scope`, `planId`, `runId`, `status`, `createdAt`, and optional audit fields such as `checkpointId`, `planSnapshot`, `approvedBy`, and `reason`.
 
+When present, `planSnapshot` fixes `planTitle`, `baseBranch`, `sourceBranchHint`, `blockedReasons`, and `commandCandidateActions` for audit comparison.
+
 The command writes only the approval record under `.orchestrator/approvals/`; it does not create branches, commits, pushes, pull requests, merges, or releases.
 
 ## Doctor Schema

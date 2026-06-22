@@ -573,6 +573,31 @@ describe("CLI JSON schema artifact", () => {
       }
     }
   });
+
+  it("keeps docs schema sections aligned with selected nested required fields", async () => {
+    const schema = await readSchema();
+    const docs = await readFile(join(root, "docs", "json-output.md"), "utf8");
+    const sections = [
+      {
+        heading: "Doctor Schema",
+        required: [...requiredFields(schema.$defs?.doctorCheck), ...requiredFields(schema.$defs?.doctorSuggestion)]
+      },
+      { heading: "Init Schema", required: requiredFields(schema.$defs?.initFileResult) },
+      { heading: "Checks Schema", required: requiredFields(schema.$defs?.checkDetail) },
+      { heading: "PR Plan Schema", required: requiredFields(schema.$defs?.prPlanCommandCandidate) },
+      {
+        heading: "PR Approval Schema",
+        required: [...requiredFields(schema.$defs?.approvalRecord), ...requiredFields(schema.$defs?.approvalPlanSnapshot)]
+      }
+    ];
+
+    for (const section of sections) {
+      const text = docsSection(docs, section.heading);
+      for (const field of section.required) {
+        expect(text, `${section.heading} should mention nested required field ${field}`).toMatch(backtickedField(field));
+      }
+    }
+  });
 });
 
 async function readSchema(): Promise<{
