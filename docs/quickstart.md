@@ -4,6 +4,8 @@ This CLI is not published to npm yet. Use a local checkout or a locally packed t
 
 The current release candidate does not create GitHub PRs, merge, push, publish, create tags, or create GitHub releases. PR-related commands produce decision-ready plans, approvals, and dry-run preflight reports only.
 
+For command-by-command usage, see [commands.md](commands.md).
+
 ## Requirements
 
 - Node.js 24 or newer

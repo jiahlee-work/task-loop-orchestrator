@@ -19,6 +19,7 @@ pnpm run lint
 ## Quickstart
 
 For local clone and tarball installation flows, see [docs/quickstart.md](docs/quickstart.md).
+For command-by-command usage, see [docs/commands.md](docs/commands.md).
 
 Minimal local checkout flow:
 
@@ -85,6 +86,7 @@ Approval records are stored as JSON files under `.orchestrator/approvals/<approv
 The package can be installed from a local tarball through its `bin` entry, but it is not published to npm yet. The shipped file allowlist is intentionally small: `dist`, `schemas`, and `orchestrator.config.example.json`.
 
 - Install and first-run steps: [docs/quickstart.md](docs/quickstart.md)
+- Command reference: [docs/commands.md](docs/commands.md)
 - Release candidate checks: [docs/release-checklist.md](docs/release-checklist.md)
 - Release notes draft: [CHANGELOG.md](CHANGELOG.md)
 

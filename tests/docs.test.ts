@@ -181,6 +181,7 @@ describe("release readiness documentation", () => {
 
     expectContainsAll(readme, [
       "[docs/quickstart.md](docs/quickstart.md)",
+      "[docs/commands.md](docs/commands.md)",
       "[docs/release-checklist.md](docs/release-checklist.md)",
       "[CHANGELOG.md](CHANGELOG.md)",
       "pnpm run release:check",
@@ -219,6 +220,68 @@ describe("release readiness documentation", () => {
   });
 });
 
+describe("command reference documentation", () => {
+  it("documents every implemented CLI command", async () => {
+    const commands = await readCommands();
+    const cliSource = await readFile(join(root, "src", "cli.ts"), "utf8");
+
+    expectContainsAll(cliSource, [
+      "task-loop-orchestrator --help",
+      "task-loop-orchestrator --version",
+      "task-loop-orchestrator init",
+      "task-loop-orchestrator doctor",
+      "task-loop-orchestrator run",
+      "task-loop-orchestrator status",
+      "task-loop-orchestrator resume",
+      "task-loop-orchestrator checkpoint",
+      "task-loop-orchestrator pr-plan",
+      "task-loop-orchestrator approve-pr",
+      "task-loop-orchestrator pr-exec",
+      "task-loop-orchestrator checks"
+    ]);
+    expectContainsAll(commands, [
+      "### `--help`, `-h`",
+      "### `--version`, `-v`",
+      "### `init [--force] [--json]`",
+      "### `doctor [--github none|gh-cli] [--json]`",
+      "### `run <title> [options] [--json]`",
+      "### `resume <runId> [--max-iterations n] [--json]`",
+      "### `status [runId] [--json] [--raw]`",
+      "### `checkpoint [runId] [--github none|gh-cli] [--json]`",
+      "### `checks [ref] [--json]`",
+      "### `pr-plan [runId] [--json]`",
+      "### `approve-pr [runId] --approved-by name [--reason text] [--json]`",
+      "### `pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]`"
+    ]);
+  });
+
+  it("documents JSON support and write-side boundaries", async () => {
+    const commands = await readCommands();
+    const readme = await readFile(join(root, "README.md"), "utf8");
+    const quickstart = await readQuickstart();
+
+    expect(readme).toContain("[docs/commands.md](docs/commands.md)");
+    expect(quickstart).toContain("[commands.md](commands.md)");
+    expectContainsAll(commands, [
+      "JSON: supported with `--json`",
+      "JSON: not supported",
+      "read-only",
+      "writes local bootstrap files only",
+      "writes run state under `.orchestrator/runs/`",
+      "saves checkpoint JSON under `.orchestrator/checkpoints/`",
+      "writes an approval record under `.orchestrator/approvals/`",
+      "dry-run by default",
+      "executedCommands` remains empty",
+      "does not create GitHub PRs",
+      "merge",
+      "push",
+      "publish",
+      "create tags",
+      "create GitHub releases"
+    ]);
+  });
+});
+
 async function readQuickstart() {
   return readFile(join(root, "docs", "quickstart.md"), "utf8");
 }
@@ -229,6 +292,10 @@ async function readReleaseChecklist() {
 
 async function readChangelog() {
   return readFile(join(root, "CHANGELOG.md"), "utf8");
+}
+
+async function readCommands() {
+  return readFile(join(root, "docs", "commands.md"), "utf8");
 }
 
 function expectContainsAll(value: string, expectedFragments: string[]) {
