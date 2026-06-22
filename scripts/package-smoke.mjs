@@ -87,24 +87,38 @@ async function main() {
     const checkpoint = await run(bin, ["checkpoint", loopReport.runId, "--json"], { cwd: projectDir });
     const checkpointReport = JSON.parse(checkpoint.stdout);
     assertEnvelope(checkpointReport, "checkpoint");
+    assertString(checkpointReport.id, "checkpoint JSON should include id");
     assertEqual(checkpointReport.runId, loopReport.runId, "checkpoint JSON should preserve run id");
+    assertString(checkpointReport.status, "checkpoint JSON should include status");
+    assertObject(checkpointReport.ciCheck, "checkpoint JSON should include ciCheck");
+    assertArray(checkpointReport.maintainerActionCandidates, "checkpoint JSON should include maintainerActionCandidates");
 
     const prPlan = await run(bin, ["pr-plan", loopReport.runId, "--json"], { cwd: projectDir });
     const prPlanReport = JSON.parse(prPlan.stdout);
     assertEnvelope(prPlanReport, "pr-plan");
+    assertString(prPlanReport.id, "pr-plan JSON should include id");
     assertEqual(prPlanReport.runId, loopReport.runId, "pr-plan JSON should preserve run id");
+    assertArray(prPlanReport.commandCandidates, "pr-plan JSON should include commandCandidates");
 
     const prExec = await run(bin, ["pr-exec", loopReport.runId, "--json"], { cwd: projectDir });
     const prExecReport = JSON.parse(prExec.stdout);
     assertEnvelope(prExecReport, "pr-exec");
+    assertString(prExecReport.id, "pr-exec JSON should include id");
+    assertString(prExecReport.planId, "pr-exec JSON should include planId");
     assertEqual(prExecReport.runId, loopReport.runId, "pr-exec JSON should preserve run id");
+    assertString(prExecReport.status, "pr-exec JSON should include status");
+    assertArray(prExecReport.executedCommands, "pr-exec JSON should include executedCommands");
 
     const approval = await run(bin, ["approve-pr", loopReport.runId, "--approved-by", "package-smoke", "--json"], {
       cwd: projectDir
     });
     const approvalReport = JSON.parse(approval.stdout);
     assertEnvelope(approvalReport, "approve-pr");
+    assertString(approvalReport.id, "approve-pr JSON should include id");
+    assertEqual(approvalReport.scope, "pr_execution", "approve-pr JSON should include approval scope");
+    assertString(approvalReport.planId, "approve-pr JSON should include planId");
     assertEqual(approvalReport.runId, loopReport.runId, "approve-pr JSON should preserve run id");
+    assertEqual(approvalReport.status, "approved", "approve-pr JSON should persist approved status");
 
     const checks = await run(bin, ["checks", "HEAD", "--json"], { cwd: projectDir });
     const checksReport = JSON.parse(checks.stdout);
@@ -122,6 +136,7 @@ async function main() {
     console.log("- init is idempotent on second run");
     console.log("- all JSON smoke commands include schema metadata");
     console.log("- run/resume/status JSON and plain status work through the installed binary");
+    console.log("- checkpoint/pr-plan/pr-exec/approve-pr JSON fields work through the installed binary");
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
@@ -162,6 +177,24 @@ function assertIncludes(value, expected, message) {
 function assertEqual(actual, expected, message) {
   if (actual !== expected) {
     throw new Error(`${message}. Expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}.`);
+  }
+}
+
+function assertString(value, message) {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`${message}. Expected a non-empty string, got ${JSON.stringify(value)}.`);
+  }
+}
+
+function assertArray(value, message) {
+  if (!Array.isArray(value)) {
+    throw new Error(`${message}. Expected an array, got ${JSON.stringify(value)}.`);
+  }
+}
+
+function assertObject(value, message) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`${message}. Expected an object, got ${JSON.stringify(value)}.`);
   }
 }
 
