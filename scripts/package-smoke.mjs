@@ -31,99 +31,62 @@ async function main() {
     assertIncludes(help.stdout, "task-loop-orchestrator doctor", "help output should include doctor usage");
 
     const preInitDoctor = await run(bin, ["doctor", "--json"], { cwd: projectDir });
-    const preInitDoctorReport = JSON.parse(preInitDoctor.stdout);
-    assertEnvelope(preInitDoctorReport, "doctor");
-    assertEqual(preInitDoctorReport.status, "warn", "doctor before init should warn");
+    assertDoctorReport(parseJson(preInitDoctor), "warn", "doctor before init should warn");
 
     await run("git", ["init"], { cwd: projectDir });
     const firstInit = await run(bin, ["init", "--json"], { cwd: projectDir });
-    const firstInitReport = JSON.parse(firstInit.stdout);
-    assertEnvelope(firstInitReport, "init");
-    assertEqual(firstInitReport.files.config.status, "created", "first init should create config");
-    assertEqual(firstInitReport.files.gitignore.status, "created", "first init should create gitignore");
+    assertInitReport(parseJson(firstInit), {
+      configStatus: "created",
+      gitignoreStatus: "created",
+      label: "first init"
+    });
 
     const secondInit = await run(bin, ["init", "--json"], { cwd: projectDir });
-    const secondInitReport = JSON.parse(secondInit.stdout);
-    assertEnvelope(secondInitReport, "init");
-    assertEqual(secondInitReport.files.config.status, "skipped", "second init should skip config");
-    assertEqual(secondInitReport.files.gitignore.status, "skipped", "second init should skip gitignore");
+    assertInitReport(parseJson(secondInit), {
+      configStatus: "skipped",
+      gitignoreStatus: "skipped",
+      label: "second init"
+    });
 
     const postInitDoctor = await run(bin, ["doctor", "--json"], { cwd: projectDir });
-    const postInitDoctorReport = JSON.parse(postInitDoctor.stdout);
-    assertEnvelope(postInitDoctorReport, "doctor");
-    assertEqual(postInitDoctorReport.status, "pass", "doctor after init should pass");
+    assertDoctorReport(parseJson(postInitDoctor), "pass", "doctor after init should pass");
 
     const loop = await run(bin, ["run", "Smoke task", "--max-iterations", "1", "--json"], { cwd: projectDir });
-    const loopReport = JSON.parse(loop.stdout);
-    assertEnvelope(loopReport, "run");
-    assertIncludes(loopReport.runId, "run_", "run JSON should include a run id");
-    assertEqual(loopReport.status, "completed", "smoke run should complete");
-    assertEqual(loopReport.counts.completed, 1, "run JSON should include subtask counts");
-    assertIncludes(loopReport.savedPath, loopReport.runId, "run JSON should include saved path");
+    const loopReport = parseJson(loop);
+    assertRunReport(loopReport, "run", {
+      status: "completed",
+      completedCount: 1,
+      runIdIncludes: "run_"
+    });
 
     const resume = await run(bin, ["resume", loopReport.runId, "--max-iterations", "1", "--json"], { cwd: projectDir });
-    const resumeReport = JSON.parse(resume.stdout);
-    assertEnvelope(resumeReport, "resume");
-    assertEqual(resumeReport.runId, loopReport.runId, "resume JSON should use the same run id");
-    assertIncludes(resumeReport.savedPath, loopReport.runId, "resume JSON should include saved path");
+    assertRunReport(parseJson(resume), "resume", { runId: loopReport.runId });
 
     const statusJson = await run(bin, ["status", "--json"], { cwd: projectDir });
-    const statusReport = JSON.parse(statusJson.stdout);
-    assertEnvelope(statusReport, "status");
-    assertEqual(statusReport.runId, loopReport.runId, "latest status JSON should use the run report shape");
-    assertEqual(statusReport.counts.completed, 1, "latest status JSON should include subtask counts");
+    assertRunReport(parseJson(statusJson), "status", { runId: loopReport.runId, completedCount: 1 });
 
     const explicitStatusJson = await run(bin, ["status", loopReport.runId, "--json"], { cwd: projectDir });
-    const explicitStatusReport = JSON.parse(explicitStatusJson.stdout);
-    assertEnvelope(explicitStatusReport, "status");
-    assertEqual(explicitStatusReport.runId, loopReport.runId, "explicit status JSON should use the requested run id");
-    assertIncludes(explicitStatusReport.savedPath, loopReport.runId, "status JSON should include saved path");
+    assertRunReport(parseJson(explicitStatusJson), "status", { runId: loopReport.runId });
 
     const rawStatusJson = await run(bin, ["status", loopReport.runId, "--json", "--raw"], { cwd: projectDir });
-    const rawStatusReport = JSON.parse(rawStatusJson.stdout);
-    assertEnvelope(rawStatusReport, "status");
-    assertEqual(rawStatusReport.id, loopReport.runId, "raw status JSON should preserve the LoopRun shape");
+    assertRawStatusReport(parseJson(rawStatusJson), loopReport.runId);
 
     const checkpoint = await run(bin, ["checkpoint", loopReport.runId, "--json"], { cwd: projectDir });
-    const checkpointReport = JSON.parse(checkpoint.stdout);
-    assertEnvelope(checkpointReport, "checkpoint");
-    assertString(checkpointReport.id, "checkpoint JSON should include id");
-    assertEqual(checkpointReport.runId, loopReport.runId, "checkpoint JSON should preserve run id");
-    assertString(checkpointReport.status, "checkpoint JSON should include status");
-    assertObject(checkpointReport.ciCheck, "checkpoint JSON should include ciCheck");
-    assertArray(checkpointReport.maintainerActionCandidates, "checkpoint JSON should include maintainerActionCandidates");
+    assertCheckpointReport(parseJson(checkpoint), loopReport.runId);
 
     const prPlan = await run(bin, ["pr-plan", loopReport.runId, "--json"], { cwd: projectDir });
-    const prPlanReport = JSON.parse(prPlan.stdout);
-    assertEnvelope(prPlanReport, "pr-plan");
-    assertString(prPlanReport.id, "pr-plan JSON should include id");
-    assertEqual(prPlanReport.runId, loopReport.runId, "pr-plan JSON should preserve run id");
-    assertArray(prPlanReport.commandCandidates, "pr-plan JSON should include commandCandidates");
+    assertPrPlanReport(parseJson(prPlan), loopReport.runId);
 
     const prExec = await run(bin, ["pr-exec", loopReport.runId, "--json"], { cwd: projectDir });
-    const prExecReport = JSON.parse(prExec.stdout);
-    assertEnvelope(prExecReport, "pr-exec");
-    assertString(prExecReport.id, "pr-exec JSON should include id");
-    assertString(prExecReport.planId, "pr-exec JSON should include planId");
-    assertEqual(prExecReport.runId, loopReport.runId, "pr-exec JSON should preserve run id");
-    assertString(prExecReport.status, "pr-exec JSON should include status");
-    assertArray(prExecReport.executedCommands, "pr-exec JSON should include executedCommands");
+    assertPrExecReport(parseJson(prExec), loopReport.runId);
 
     const approval = await run(bin, ["approve-pr", loopReport.runId, "--approved-by", "package-smoke", "--json"], {
       cwd: projectDir
     });
-    const approvalReport = JSON.parse(approval.stdout);
-    assertEnvelope(approvalReport, "approve-pr");
-    assertString(approvalReport.id, "approve-pr JSON should include id");
-    assertEqual(approvalReport.scope, "pr_execution", "approve-pr JSON should include approval scope");
-    assertString(approvalReport.planId, "approve-pr JSON should include planId");
-    assertEqual(approvalReport.runId, loopReport.runId, "approve-pr JSON should preserve run id");
-    assertEqual(approvalReport.status, "approved", "approve-pr JSON should persist approved status");
+    assertApprovalReport(parseJson(approval), loopReport.runId);
 
     const checks = await run(bin, ["checks", "HEAD", "--json"], { cwd: projectDir });
-    const checksReport = JSON.parse(checks.stdout);
-    assertEnvelope(checksReport, "checks");
-    assertEqual(checksReport.source, "github", "checks JSON should preserve provider source");
+    assertChecksReport(parseJson(checks));
 
     const status = await run(bin, ["status"], { cwd: projectDir });
     assertIncludes(status.stdout, "Smoke task", "plain status output should show the smoke task");
@@ -166,6 +129,87 @@ async function run(command, args, options) {
       [`Command failed: ${command} ${args.join(" ")}`, stdout.trim(), stderr.trim()].filter(Boolean).join("\n")
     );
   }
+}
+
+function parseJson(result) {
+  return JSON.parse(result.stdout);
+}
+
+function assertDoctorReport(report, expectedStatus, message) {
+  assertEnvelope(report, "doctor");
+  assertEqual(report.status, expectedStatus, message);
+}
+
+function assertInitReport(report, expected) {
+  assertEnvelope(report, "init");
+  assertEqual(report.files.config.status, expected.configStatus, `${expected.label} should set config status`);
+  assertEqual(report.files.gitignore.status, expected.gitignoreStatus, `${expected.label} should set gitignore status`);
+}
+
+function assertRunReport(report, command, expected) {
+  assertEnvelope(report, command);
+
+  if (expected.runId) {
+    assertEqual(report.runId, expected.runId, `${command} JSON should use the expected run id`);
+  }
+
+  if (expected.runIdIncludes) {
+    assertIncludes(report.runId, expected.runIdIncludes, `${command} JSON should include a run id`);
+  }
+
+  if (expected.status) {
+    assertEqual(report.status, expected.status, `${command} JSON should include expected status`);
+  }
+
+  if (typeof expected.completedCount === "number") {
+    assertEqual(report.counts.completed, expected.completedCount, `${command} JSON should include subtask counts`);
+  }
+
+  assertIncludes(report.savedPath, report.runId, `${command} JSON should include saved path`);
+}
+
+function assertRawStatusReport(report, runId) {
+  assertEnvelope(report, "status");
+  assertEqual(report.id, runId, "raw status JSON should preserve the LoopRun shape");
+}
+
+function assertCheckpointReport(report, runId) {
+  assertEnvelope(report, "checkpoint");
+  assertString(report.id, "checkpoint JSON should include id");
+  assertEqual(report.runId, runId, "checkpoint JSON should preserve run id");
+  assertString(report.status, "checkpoint JSON should include status");
+  assertObject(report.ciCheck, "checkpoint JSON should include ciCheck");
+  assertArray(report.maintainerActionCandidates, "checkpoint JSON should include maintainerActionCandidates");
+}
+
+function assertPrPlanReport(report, runId) {
+  assertEnvelope(report, "pr-plan");
+  assertString(report.id, "pr-plan JSON should include id");
+  assertEqual(report.runId, runId, "pr-plan JSON should preserve run id");
+  assertArray(report.commandCandidates, "pr-plan JSON should include commandCandidates");
+}
+
+function assertPrExecReport(report, runId) {
+  assertEnvelope(report, "pr-exec");
+  assertString(report.id, "pr-exec JSON should include id");
+  assertString(report.planId, "pr-exec JSON should include planId");
+  assertEqual(report.runId, runId, "pr-exec JSON should preserve run id");
+  assertString(report.status, "pr-exec JSON should include status");
+  assertArray(report.executedCommands, "pr-exec JSON should include executedCommands");
+}
+
+function assertApprovalReport(report, runId) {
+  assertEnvelope(report, "approve-pr");
+  assertString(report.id, "approve-pr JSON should include id");
+  assertEqual(report.scope, "pr_execution", "approve-pr JSON should include approval scope");
+  assertString(report.planId, "approve-pr JSON should include planId");
+  assertEqual(report.runId, runId, "approve-pr JSON should preserve run id");
+  assertEqual(report.status, "approved", "approve-pr JSON should persist approved status");
+}
+
+function assertChecksReport(report) {
+  assertEnvelope(report, "checks");
+  assertEqual(report.source, "github", "checks JSON should preserve provider source");
 }
 
 function assertIncludes(value, expected, message) {
