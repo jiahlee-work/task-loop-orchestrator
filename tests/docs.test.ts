@@ -304,6 +304,49 @@ describe("command reference documentation", () => {
     expect(supportedInDocs).toEqual([...cliJsonCommands].sort());
     expect(unsupportedInDocs).toEqual(["--help", "--version"]);
   });
+
+  it("keeps per-command write-side boundaries explicit", async () => {
+    const commands = await readCommands();
+    const sections = extractCommandReferenceSections(commands);
+
+    expectSectionContains(sections, "--help", ["read-only", "no files or external systems are modified"]);
+    expectSectionContains(sections, "--version", ["read-only", "no files or external systems are modified"]);
+    expectSectionContains(sections, "doctor", ["read-only", "read-only GitHub CLI diagnostics", "instead of writing repository state"]);
+    expectSectionContains(sections, "status", ["read-only", "does not modify local state or external systems"]);
+    expectSectionContains(sections, "checks", ["read-only", "unknown", "not_found"]);
+    expectSectionContains(sections, "pr-plan", ["read-only planning", "command candidates", "does not execute them"]);
+
+    expectSectionContains(sections, "init", ["writes local bootstrap files only", "orchestrator.config.json", ".gitignore"]);
+    expectSectionContains(sections, "run", ["writes run state", ".orchestrator/runs/", "do not call external write-side systems"]);
+    expectSectionContains(sections, "resume", ["updates local run state"]);
+    expectSectionContains(sections, "checkpoint", ["saves checkpoint JSON", ".orchestrator/checkpoints/", "appends a run audit event"]);
+    expectSectionContains(sections, "approve-pr", ["writes an approval record", ".orchestrator/approvals/", "does not create or modify"]);
+
+    expectSectionContains(sections, "pr-exec", [
+      "dry-run by default",
+      "`--execute` requires approval data",
+      "checks stale approvals",
+      "blocks before write-side execution",
+      "`executedCommands` remains empty",
+      "branch creation",
+      "commit",
+      "push",
+      "`gh pr create` are not run"
+    ]);
+  });
+
+  it("keeps global write-side prohibitions visible in the command reference", async () => {
+    const commands = await readCommands();
+
+    expectContainsAll(commands, [
+      "does not create GitHub PRs",
+      "merge",
+      "push",
+      "publish",
+      "create tags",
+      "create GitHub releases"
+    ]);
+  });
 });
 
 async function readQuickstart() {
@@ -344,21 +387,37 @@ function extractCommandReferenceHeadings(commandsDoc: string) {
     .filter((heading) => heading !== undefined);
 }
 
-function extractCommandReferenceJsonSupport(commandsDoc: string) {
+function extractCommandReferenceSections(commandsDoc: string) {
   const sections = new Map<string, string>();
   const headingMatches = [...commandsDoc.matchAll(/^### `([^`]+)`/gm)];
 
   for (let index = 0; index < headingMatches.length; index += 1) {
     const match = headingMatches[index];
     const nextMatch = headingMatches[index + 1];
-    const section = commandsDoc.slice(match.index, nextMatch?.index);
-    const jsonLine = section.match(/^JSON: (.+)$/m)?.[1];
-
-    expect(jsonLine, `Missing JSON support line for ${match[1]}`).toBeDefined();
-    sections.set(commandNameFromSignature(match[1]), jsonLine!);
+    sections.set(commandNameFromSignature(match[1]), commandsDoc.slice(match.index, nextMatch?.index));
   }
 
   return sections;
+}
+
+function extractCommandReferenceJsonSupport(commandsDoc: string) {
+  const sections = extractCommandReferenceSections(commandsDoc);
+  const jsonSupportByCommand = new Map<string, string>();
+
+  for (const [command, section] of sections) {
+    const jsonLine = section.match(/^JSON: (.+)$/m)?.[1];
+
+    expect(jsonLine, `Missing JSON support line for ${command}`).toBeDefined();
+    jsonSupportByCommand.set(command, jsonLine!);
+  }
+
+  return jsonSupportByCommand;
+}
+
+function expectSectionContains(sections: Map<string, string>, command: string, expectedFragments: string[]) {
+  const section = sections.get(command);
+  expect(section, `Missing command section for ${command}`).toBeDefined();
+  expectContainsAll(section!, expectedFragments);
 }
 
 function commandNameFromSignature(signature: string) {
