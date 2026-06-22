@@ -108,6 +108,62 @@ describe("CLI JSON schema artifact", () => {
     expect(schema.$defs?.ownerDecisionItem?.required).toEqual(expect.arrayContaining(["source", "reason"]));
   });
 
+  it("defines a focused PR plan payload schema", async () => {
+    const schema = await readSchema();
+    const prPlanPayload = schema.$defs?.prPlanPayload;
+    const prPlanCommandCandidate = schema.$defs?.prPlanCommandCandidate;
+
+    expect(prPlanPayload?.required).toEqual(
+      expect.arrayContaining([
+        "id",
+        "runId",
+        "sourceBranchHint",
+        "baseBranch",
+        "title",
+        "body",
+        "preconditions",
+        "blockedReasons",
+        "commandCandidates",
+        "createdAt"
+      ])
+    );
+    expect(prPlanPayload?.properties?.checkpointId).toEqual({ type: "string" });
+    expect(prPlanPayload?.properties?.preconditions).toEqual({
+      type: "array",
+      items: {
+        type: "string"
+      }
+    });
+    expect(prPlanPayload?.properties?.blockedReasons).toEqual({
+      type: "array",
+      items: {
+        type: "string"
+      }
+    });
+    expect(prPlanPayload?.properties?.commandCandidates).toEqual({
+      type: "array",
+      items: {
+        $ref: "#/$defs/prPlanCommandCandidate"
+      }
+    });
+    expect(prPlanPayload?.additionalProperties).toBe(true);
+    expect(prPlanCommandCandidate?.required).toEqual(
+      expect.arrayContaining(["action", "command", "reason", "decisionReady"])
+    );
+    expect(prPlanCommandCandidate?.properties?.action).toEqual({
+      type: "string",
+      enum: ["create_branch", "commit", "push", "create_pr"]
+    });
+    expect(prPlanCommandCandidate?.properties?.command).toEqual({
+      type: "array",
+      items: {
+        type: "string"
+      }
+    });
+    expect(prPlanCommandCandidate?.properties?.decisionReady).toEqual({ const: true });
+    expect(prPlanCommandCandidate?.additionalProperties).toBe(true);
+  });
+
   it("applies the run report branch to run, resume, and default status reports", async () => {
     const schema = await readSchema();
 
@@ -187,6 +243,28 @@ describe("CLI JSON schema artifact", () => {
     );
   });
 
+  it("applies the PR plan branch to concrete PR plan responses", async () => {
+    const schema = await readSchema();
+
+    expect(schema.allOf).toEqual(
+      expect.arrayContaining([
+        {
+          if: {
+            properties: {
+              command: {
+                const: "pr-plan"
+              }
+            },
+            required: ["command", "id"]
+          },
+          then: {
+            $ref: "#/$defs/prPlanPayload"
+          }
+        }
+      ])
+    );
+  });
+
   it("documents and links the schema artifact", async () => {
     const readme = await readFile(join(root, "README.md"), "utf8");
     const docs = await readFile(join(root, "docs", "json-output.md"), "utf8");
@@ -197,6 +275,7 @@ describe("CLI JSON schema artifact", () => {
     expect(docs).toContain("Run Report Schema");
     expect(docs).toContain("Checks Schema");
     expect(docs).toContain("Checkpoint Schema");
+    expect(docs).toContain("PR Plan Schema");
     expect(docs).toContain("status --json --raw");
     expect(docs).toContain("../schemas/cli-json.schema.json");
   });
@@ -234,6 +313,16 @@ async function readSchema(): Promise<{
     };
     checkpointCiCheck?: {
       required?: string[];
+    };
+    prPlanPayload?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
+    };
+    prPlanCommandCandidate?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
     };
     maintainerActionCandidate?: {
       required?: string[];
@@ -290,6 +379,16 @@ async function readSchema(): Promise<{
       };
       checkpointCiCheck?: {
         required?: string[];
+      };
+      prPlanPayload?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
+      prPlanCommandCandidate?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
       };
       maintainerActionCandidate?: {
         required?: string[];

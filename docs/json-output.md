@@ -74,6 +74,12 @@ Each `details[]` item fixes `name` and `status`, with optional `summary`. Queued
 
 The nested `ciCheck` field reuses the check status/detail shape where possible, while still allowing the local placeholder status `not_run`. Maintainer actions remain decision-ready candidates only; the checkpoint command does not execute write actions.
 
+## PR Plan Schema
+
+`pr-plan [runId] --json` has a command-specific schema branch for decision-ready PR preparation. Consumers can rely on `id`, `runId`, `sourceBranchHint`, `baseBranch`, `title`, `body`, `preconditions`, `blockedReasons`, `commandCandidates`, and `createdAt`, with optional `checkpointId`.
+
+Each `commandCandidates[]` item fixes `action`, `command`, `reason`, and `decisionReady`. These are execution candidates only; `pr-plan` never creates a branch, commit, push, or pull request.
+
 ## Not Found Responses
 
 Commands that need an existing run return an enveloped not-found response when `--json` is used and no run is available:

@@ -145,6 +145,29 @@
       },
       "additionalProperties": true
     },
+    "prPlanCommandCandidate": {
+      "type": "object",
+      "required": ["action", "command", "reason", "decisionReady"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["create_branch", "commit", "push", "create_pr"]
+        },
+        "command": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reason": {
+          "type": "string"
+        },
+        "decisionReady": {
+          "const": true
+        }
+      },
+      "additionalProperties": true
+    },
     "ownerDecisionItem": {
       "type": "object",
       "required": ["source", "reason"],
@@ -158,6 +181,67 @@
         },
         "subtaskId": {
           "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "prPlanPayload": {
+      "type": "object",
+      "required": [
+        "id",
+        "runId",
+        "sourceBranchHint",
+        "baseBranch",
+        "title",
+        "body",
+        "preconditions",
+        "blockedReasons",
+        "commandCandidates",
+        "createdAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "runId": {
+          "type": "string"
+        },
+        "checkpointId": {
+          "type": "string"
+        },
+        "sourceBranchHint": {
+          "type": "string"
+        },
+        "baseBranch": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "preconditions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "blockedReasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "commandCandidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/prPlanCommandCandidate"
+          }
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
         }
       },
       "additionalProperties": true
@@ -390,6 +474,19 @@
       },
       "then": {
         "$ref": "#/$defs/checkpointPayload"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "pr-plan"
+          }
+        },
+        "required": ["command", "id"]
+      },
+      "then": {
+        "$ref": "#/$defs/prPlanPayload"
       }
     }
   ],
