@@ -45,6 +45,37 @@
       "type": "string",
       "enum": ["success", "pending", "failure", "error", "not_found", "unknown"]
     },
+    "checkpointStatus": {
+      "type": "string",
+      "enum": ["clean", "needs_attention", "blocked"]
+    },
+    "checkpointCounts": {
+      "type": "object",
+      "required": ["completed", "blocked", "pending", "active", "failed"],
+      "properties": {
+        "completed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "blocked": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pending": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "active": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    },
     "checkDetail": {
       "type": "object",
       "required": ["name", "status"],
@@ -57,6 +88,142 @@
         },
         "summary": {
           "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "checkpointCiCheck": {
+      "type": "object",
+      "required": ["status", "summary", "source"],
+      "properties": {
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/githubCheckStatus"
+            },
+            {
+              "const": "not_run"
+            }
+          ]
+        },
+        "summary": {
+          "type": "string"
+        },
+        "ref": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "enum": ["placeholder", "github"]
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/checkDetail"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "maintainerActionCandidate": {
+      "type": "object",
+      "required": ["action", "label", "reason", "decisionReady"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["push", "merge_pr", "jira_transition", "release", "create_pr"]
+        },
+        "label": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "decisionReady": {
+          "const": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "ownerDecisionItem": {
+      "type": "object",
+      "required": ["source", "reason"],
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": ["reviewer", "graph", "context"]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "subtaskId": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "checkpointPayload": {
+      "type": "object",
+      "required": [
+        "id",
+        "runId",
+        "status",
+        "counts",
+        "repoStatus",
+        "diffStat",
+        "ciCheck",
+        "conflictRisks",
+        "recommendedNextAction",
+        "maintainerActionCandidates",
+        "ownerDecisionItems",
+        "createdAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "runId": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/checkpointStatus"
+        },
+        "counts": {
+          "$ref": "#/$defs/checkpointCounts"
+        },
+        "repoStatus": {
+          "type": "string"
+        },
+        "diffStat": {
+          "type": "string"
+        },
+        "ciCheck": {
+          "$ref": "#/$defs/checkpointCiCheck"
+        },
+        "conflictRisks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "recommendedNextAction": {
+          "type": "string"
+        },
+        "maintainerActionCandidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/maintainerActionCandidate"
+          }
+        },
+        "ownerDecisionItems": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ownerDecisionItem"
+          }
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
         }
       },
       "additionalProperties": true
@@ -210,6 +377,19 @@
       },
       "then": {
         "$ref": "#/$defs/checksPayload"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "checkpoint"
+          }
+        },
+        "required": ["command", "id"]
+      },
+      "then": {
+        "$ref": "#/$defs/checkpointPayload"
       }
     }
   ],

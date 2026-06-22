@@ -58,6 +58,56 @@ describe("CLI JSON schema artifact", () => {
     expect(checkDetail?.additionalProperties).toBe(true);
   });
 
+  it("defines a focused checkpoint payload schema", async () => {
+    const schema = await readSchema();
+    const checkpointPayload = schema.$defs?.checkpointPayload;
+
+    expect(schema.$defs?.checkpointStatus).toEqual({
+      type: "string",
+      enum: ["clean", "needs_attention", "blocked"]
+    });
+    expect(checkpointPayload?.required).toEqual(
+      expect.arrayContaining([
+        "id",
+        "runId",
+        "status",
+        "counts",
+        "repoStatus",
+        "diffStat",
+        "ciCheck",
+        "conflictRisks",
+        "recommendedNextAction",
+        "maintainerActionCandidates",
+        "ownerDecisionItems",
+        "createdAt"
+      ])
+    );
+    expect(checkpointPayload?.properties?.status).toEqual({ $ref: "#/$defs/checkpointStatus" });
+    expect(checkpointPayload?.properties?.counts).toEqual({ $ref: "#/$defs/checkpointCounts" });
+    expect(checkpointPayload?.properties?.ciCheck).toEqual({ $ref: "#/$defs/checkpointCiCheck" });
+    expect(checkpointPayload?.properties?.maintainerActionCandidates).toEqual({
+      type: "array",
+      items: {
+        $ref: "#/$defs/maintainerActionCandidate"
+      }
+    });
+    expect(checkpointPayload?.properties?.ownerDecisionItems).toEqual({
+      type: "array",
+      items: {
+        $ref: "#/$defs/ownerDecisionItem"
+      }
+    });
+    expect(checkpointPayload?.additionalProperties).toBe(true);
+    expect(schema.$defs?.checkpointCounts?.required).toEqual(
+      expect.arrayContaining(["completed", "blocked", "pending", "active", "failed"])
+    );
+    expect(schema.$defs?.checkpointCiCheck?.required).toEqual(expect.arrayContaining(["status", "summary", "source"]));
+    expect(schema.$defs?.maintainerActionCandidate?.required).toEqual(
+      expect.arrayContaining(["action", "label", "reason", "decisionReady"])
+    );
+    expect(schema.$defs?.ownerDecisionItem?.required).toEqual(expect.arrayContaining(["source", "reason"]));
+  });
+
   it("applies the run report branch to run, resume, and default status reports", async () => {
     const schema = await readSchema();
 
@@ -115,6 +165,28 @@ describe("CLI JSON schema artifact", () => {
     );
   });
 
+  it("applies the checkpoint branch to checkpoint responses", async () => {
+    const schema = await readSchema();
+
+    expect(schema.allOf).toEqual(
+      expect.arrayContaining([
+        {
+          if: {
+            properties: {
+              command: {
+                const: "checkpoint"
+              }
+            },
+            required: ["command", "id"]
+          },
+          then: {
+            $ref: "#/$defs/checkpointPayload"
+          }
+        }
+      ])
+    );
+  });
+
   it("documents and links the schema artifact", async () => {
     const readme = await readFile(join(root, "README.md"), "utf8");
     const docs = await readFile(join(root, "docs", "json-output.md"), "utf8");
@@ -124,6 +196,7 @@ describe("CLI JSON schema artifact", () => {
     expect(docs).toContain("schemaVersion");
     expect(docs).toContain("Run Report Schema");
     expect(docs).toContain("Checks Schema");
+    expect(docs).toContain("Checkpoint Schema");
     expect(docs).toContain("status --json --raw");
     expect(docs).toContain("../schemas/cli-json.schema.json");
   });
@@ -146,6 +219,27 @@ async function readSchema(): Promise<{
     githubCheckStatus?: {
       type?: string;
       enum?: string[];
+    };
+    checkpointStatus?: {
+      type?: string;
+      enum?: string[];
+    };
+    checkpointPayload?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
+    };
+    checkpointCounts?: {
+      required?: string[];
+    };
+    checkpointCiCheck?: {
+      required?: string[];
+    };
+    maintainerActionCandidate?: {
+      required?: string[];
+    };
+    ownerDecisionItem?: {
+      required?: string[];
     };
     checksPayload?: {
       required?: string[];
@@ -181,6 +275,27 @@ async function readSchema(): Promise<{
       githubCheckStatus?: {
         type?: string;
         enum?: string[];
+      };
+      checkpointStatus?: {
+        type?: string;
+        enum?: string[];
+      };
+      checkpointPayload?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
+      checkpointCounts?: {
+        required?: string[];
+      };
+      checkpointCiCheck?: {
+        required?: string[];
+      };
+      maintainerActionCandidate?: {
+        required?: string[];
+      };
+      ownerDecisionItem?: {
+        required?: string[];
       };
       checksPayload?: {
         required?: string[];

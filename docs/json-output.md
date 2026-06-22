@@ -68,6 +68,12 @@ The schema fixes the summary fields automation commonly reads: `runId`, `status`
 
 Each `details[]` item fixes `name` and `status`, with optional `summary`. Queued or in-progress checks are reported as `pending`; missing checks, missing auth, or provider uncertainty remain non-crashing JSON responses such as `not_found` or `unknown`.
 
+## Checkpoint Schema
+
+`checkpoint [runId] --json` has a command-specific schema branch for integration automation. Consumers can rely on `id`, `runId`, `status`, `counts`, `repoStatus`, `diffStat`, `ciCheck`, `conflictRisks`, `recommendedNextAction`, `maintainerActionCandidates`, `ownerDecisionItems`, and `createdAt`.
+
+The nested `ciCheck` field reuses the check status/detail shape where possible, while still allowing the local placeholder status `not_run`. Maintainer actions remain decision-ready candidates only; the checkpoint command does not execute write actions.
+
 ## Not Found Responses
 
 Commands that need an existing run return an enveloped not-found response when `--json` is used and no run is available:
