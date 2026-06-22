@@ -343,6 +343,39 @@ describe("command json documentation boundaries", () => {
       "required top-level fields"
     ]);
   });
+
+  it("keeps schema command branches mapped to documented payload definitions", async () => {
+    const jsonOutput = await readJsonOutput();
+    const schema = await readCliJsonSchema();
+    const branchRefs = extractSchemaCommandBranchRefs(schema);
+    const expectedBranchRefs = new Map([
+      ["init", "#/$defs/initPayload"],
+      ["doctor", "#/$defs/doctorPayload"],
+      ["run", "#/$defs/runReportPayload"],
+      ["resume", "#/$defs/runReportPayload"],
+      ["status", "#/$defs/runReportPayload"],
+      ["checkpoint", "#/$defs/checkpointPayload"],
+      ["checks", "#/$defs/checksPayload"],
+      ["pr-plan", "#/$defs/prPlanPayload"],
+      ["pr-exec", "#/$defs/prExecPayload"],
+      ["approve-pr", "#/$defs/approvePrPayload"]
+    ]);
+
+    expect([...branchRefs.keys()].sort()).toEqual([...cliJsonCommands].sort());
+    expect(branchRefs).toEqual(expectedBranchRefs);
+
+    for (const ref of new Set(expectedBranchRefs.values())) {
+      const defName = ref.replace("#/$defs/", "");
+      expect(schema.$defs[defName], `Missing schema $defs.${defName}`).toBeDefined();
+      expect(jsonOutput, `docs/json-output.md should mention ${defName}`).toContain(defName);
+    }
+    expectContainsAll(jsonOutput, [
+      "allOf",
+      "$defs",
+      "command-specific branch",
+      "sample smoke"
+    ]);
+  });
 });
 
 describe("command reference documentation", () => {
@@ -544,6 +577,21 @@ async function readCliJsonSchema() {
       command: { enum: string[] };
       createdAt: { type: string; format: string };
     };
+    $defs: Record<string, unknown>;
+    allOf: Array<{
+      if: {
+        properties: {
+          command: {
+            const?: string;
+            enum?: string[];
+          };
+        };
+        required?: string[];
+      };
+      then: {
+        $ref: string;
+      };
+    }>;
   };
 }
 
@@ -612,6 +660,21 @@ function extractCommandReferenceExamples(commandsDoc: string) {
   }
 
   return examples;
+}
+
+function extractSchemaCommandBranchRefs(schema: Awaited<ReturnType<typeof readCliJsonSchema>>) {
+  const branchRefs = new Map<string, string>();
+
+  for (const branch of schema.allOf) {
+    const commandCondition = branch.if.properties.command;
+    const commands = commandCondition.enum ?? (commandCondition.const ? [commandCondition.const] : []);
+
+    for (const command of commands) {
+      branchRefs.set(command, branch.then.$ref);
+    }
+  }
+
+  return branchRefs;
 }
 
 function expectSectionContains(sections: Map<string, string>, command: string, expectedFragments: string[]) {
