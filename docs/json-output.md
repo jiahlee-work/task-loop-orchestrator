@@ -50,6 +50,18 @@ The envelope applies to every current JSON-capable command:
 
 `status --json --raw` returns the stored raw `LoopRun` shape with the same metadata fields added at the top level.
 
+## Run Report Schema
+
+The first command-specific schema extension covers the stable run report payload returned by:
+
+- `run <title> --json`
+- `resume <runId> --json`
+- `status [runId] --json`
+
+The schema fixes the summary fields automation commonly reads: `runId`, `status`, `iterations`, `permissionMode`, `task`, `counts`, `savedPath`, and `run`. Additional fields remain allowed for forward-compatible payload expansion.
+
+`status --json --raw` is intentionally excluded from the stricter run report payload branch because it returns the stored raw `LoopRun` object rather than the stable summary report.
+
 ## Not Found Responses
 
 Commands that need an existing run return an enveloped not-found response when `--json` is used and no run is available:
