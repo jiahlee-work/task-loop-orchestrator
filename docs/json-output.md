@@ -92,6 +92,12 @@ Each `commandCandidates[]` item fixes `action`, `command`, `reason`, and `decisi
 
 The command writes only the approval record under `.orchestrator/approvals/`; it does not create branches, commits, pushes, pull requests, merges, or releases.
 
+## Doctor Schema
+
+`doctor --json` has a command-specific schema branch for installation and project readiness diagnostics. Consumers can rely on top-level `status`, `rootDir`, `githubMode`, and `checks`.
+
+Each `checks[]` item fixes `id`, `status`, and `summary`, with optional `details`, `recommendedAction`, and structured `suggestions`. Each suggestion fixes `label`, `command`, `reason`, and `destructive` so automation or UI layers can present remediation candidates without doctor executing them.
+
 ## Not Found Responses
 
 Commands that need an existing run return an enveloped not-found response when `--json` is used and no run is available:

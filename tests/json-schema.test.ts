@@ -226,6 +226,45 @@ describe("CLI JSON schema artifact", () => {
     expect(schema.$defs?.approvalRecord?.properties?.reason).toEqual({ type: "string" });
   });
 
+  it("defines a focused doctor payload schema", async () => {
+    const schema = await readSchema();
+    const doctorPayload = schema.$defs?.doctorPayload;
+    const doctorCheck = schema.$defs?.doctorCheck;
+    const doctorSuggestion = schema.$defs?.doctorSuggestion;
+
+    expect(schema.$defs?.doctorStatus).toEqual({ type: "string", enum: ["pass", "warn", "fail"] });
+    expect(doctorPayload?.required).toEqual(expect.arrayContaining(["status", "rootDir", "githubMode", "checks"]));
+    expect(doctorPayload?.properties?.status).toEqual({ $ref: "#/$defs/doctorStatus" });
+    expect(doctorPayload?.properties?.githubMode).toEqual({ type: "string", enum: ["none", "gh-cli"] });
+    expect(doctorPayload?.properties?.checks).toEqual({
+      type: "array",
+      items: {
+        $ref: "#/$defs/doctorCheck"
+      }
+    });
+    expect(doctorPayload?.additionalProperties).toBe(true);
+    expect(doctorCheck?.required).toEqual(expect.arrayContaining(["id", "status", "summary"]));
+    expect(doctorCheck?.properties?.status).toEqual({ $ref: "#/$defs/doctorStatus" });
+    expect(doctorCheck?.properties?.suggestions).toEqual({
+      type: "array",
+      items: {
+        $ref: "#/$defs/doctorSuggestion"
+      }
+    });
+    expect(doctorCheck?.additionalProperties).toBe(true);
+    expect(doctorSuggestion?.required).toEqual(
+      expect.arrayContaining(["label", "command", "reason", "destructive"])
+    );
+    expect(doctorSuggestion?.properties?.command).toEqual({
+      type: "array",
+      items: {
+        type: "string"
+      }
+    });
+    expect(doctorSuggestion?.properties?.destructive).toEqual({ type: "boolean" });
+    expect(doctorSuggestion?.additionalProperties).toBe(true);
+  });
+
   it("applies the run report branch to run, resume, and default status reports", async () => {
     const schema = await readSchema();
 
@@ -371,6 +410,28 @@ describe("CLI JSON schema artifact", () => {
     );
   });
 
+  it("applies the doctor branch to doctor responses", async () => {
+    const schema = await readSchema();
+
+    expect(schema.allOf).toEqual(
+      expect.arrayContaining([
+        {
+          if: {
+            properties: {
+              command: {
+                const: "doctor"
+              }
+            },
+            required: ["command"]
+          },
+          then: {
+            $ref: "#/$defs/doctorPayload"
+          }
+        }
+      ])
+    );
+  });
+
   it("documents and links the schema artifact", async () => {
     const readme = await readFile(join(root, "README.md"), "utf8");
     const docs = await readFile(join(root, "docs", "json-output.md"), "utf8");
@@ -384,6 +445,7 @@ describe("CLI JSON schema artifact", () => {
     expect(docs).toContain("PR Plan Schema");
     expect(docs).toContain("PR Execution Schema");
     expect(docs).toContain("PR Approval Schema");
+    expect(docs).toContain("Doctor Schema");
     expect(docs).toContain("status --json --raw");
     expect(docs).toContain("../schemas/cli-json.schema.json");
   });
@@ -406,6 +468,25 @@ async function readSchema(): Promise<{
     githubCheckStatus?: {
       type?: string;
       enum?: string[];
+    };
+    doctorStatus?: {
+      type?: string;
+      enum?: string[];
+    };
+    doctorPayload?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
+    };
+    doctorCheck?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
+    };
+    doctorSuggestion?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
     };
     checkpointStatus?: {
       type?: string;
@@ -486,6 +567,25 @@ async function readSchema(): Promise<{
       githubCheckStatus?: {
         type?: string;
         enum?: string[];
+      };
+      doctorStatus?: {
+        type?: string;
+        enum?: string[];
+      };
+      doctorPayload?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
+      doctorCheck?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
+      doctorSuggestion?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
       };
       checkpointStatus?: {
         type?: string;

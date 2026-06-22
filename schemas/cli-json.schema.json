@@ -41,6 +41,81 @@
       "type": "string",
       "enum": ["read", "write", "maintainer"]
     },
+    "doctorStatus": {
+      "type": "string",
+      "enum": ["pass", "warn", "fail"]
+    },
+    "doctorSuggestion": {
+      "type": "object",
+      "required": ["label", "command", "reason", "destructive"],
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "command": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reason": {
+          "type": "string"
+        },
+        "destructive": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "doctorCheck": {
+      "type": "object",
+      "required": ["id", "status", "summary"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/doctorStatus"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "details": {},
+        "recommendedAction": {
+          "type": "string"
+        },
+        "suggestions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/doctorSuggestion"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "doctorPayload": {
+      "type": "object",
+      "required": ["status", "rootDir", "githubMode", "checks"],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/doctorStatus"
+        },
+        "rootDir": {
+          "type": "string"
+        },
+        "githubMode": {
+          "type": "string",
+          "enum": ["none", "gh-cli"]
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/doctorCheck"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
     "githubCheckStatus": {
       "type": "string",
       "enum": ["success", "pending", "failure", "error", "not_found", "unknown"]
@@ -650,6 +725,19 @@
       },
       "then": {
         "$ref": "#/$defs/approvePrPayload"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "doctor"
+          }
+        },
+        "required": ["command"]
+      },
+      "then": {
+        "$ref": "#/$defs/doctorPayload"
       }
     }
   ],
