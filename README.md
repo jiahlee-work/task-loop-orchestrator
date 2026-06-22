@@ -38,6 +38,7 @@ node dist/cli.js run "Machine-readable smoke" --max-iterations 1 --json
 node dist/cli.js resume run_xxx --max-iterations 1 --json
 node dist/cli.js status
 node dist/cli.js status --json
+node dist/cli.js status run_xxx --json --raw
 node dist/cli.js checkpoint
 node dist/cli.js checkpoint --json
 node dist/cli.js checkpoint --github gh-cli --json
@@ -127,7 +128,7 @@ Checkpoint generation records `integration_checkpoint_ready` on the run after a 
 
 `resume --max-iterations n` treats `n` as additional iterations from the loaded run's current `iterations` count.
 
-`run --json` and `resume --json` return a stable automation-friendly report with `runId`, status, iterations, permission mode, task summary, subtask counts, saved path, and the full run object. Prefer these JSON forms when integrating with scripts or UI.
+`run --json`, `resume --json`, and `status --json` return a stable automation-friendly report with `runId`, status, iterations, permission mode, task summary, subtask counts, saved path, and the full run object. Prefer these JSON forms when integrating with scripts or UI. Use `status <runId> --json --raw` only when you need the stored raw `LoopRun` shape.
 
 ## Permission Modes
 

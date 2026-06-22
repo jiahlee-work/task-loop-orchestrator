@@ -40,6 +40,7 @@ describe("run CLI report", () => {
 
     expect(cliSource).toContain("task-loop-orchestrator run <title>");
     expect(cliSource).toContain("[--max-iterations n] [--json]");
+    expect(cliSource).toContain("task-loop-orchestrator status [runId] [--json] [--raw]");
     expect(cliSource).toContain("task-loop-orchestrator resume <runId> [--max-iterations n] [--json]");
   });
 });

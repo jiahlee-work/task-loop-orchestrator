@@ -88,7 +88,7 @@ function printUsage(): void {
   task-loop-orchestrator init [--force] [--json]
   task-loop-orchestrator doctor [--github none|gh-cli] [--json]
   task-loop-orchestrator run <title> [--description text] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]
-  task-loop-orchestrator status [runId] [--json]
+  task-loop-orchestrator status [runId] [--json] [--raw]
   task-loop-orchestrator resume <runId> [--max-iterations n] [--json]
   task-loop-orchestrator checkpoint [runId] [--github none|gh-cli] [--json]
   task-loop-orchestrator pr-plan [runId] [--json]
@@ -186,12 +186,26 @@ async function statusCommand(args: ParsedArgs): Promise<void> {
   const run = runId ? await store.load(runId) : await store.latest();
 
   if (!run) {
+    if (args.flags.json === true) {
+      console.log(
+        JSON.stringify(
+          {
+            status: "not_found",
+            run: null
+          },
+          null,
+          2
+        )
+      );
+      return;
+    }
+
     console.log("No runs found.");
     return;
   }
 
   if (args.flags.json === true) {
-    console.log(JSON.stringify(run, null, 2));
+    console.log(JSON.stringify(args.flags.raw === true ? run : createRunCliReport(run, store), null, 2));
     return;
   }
 

@@ -61,8 +61,22 @@ async function main() {
     assertEqual(resumeReport.runId, loopReport.runId, "resume JSON should use the same run id");
     assertIncludes(resumeReport.savedPath, loopReport.runId, "resume JSON should include saved path");
 
+    const statusJson = await run(bin, ["status", "--json"], { cwd: projectDir });
+    const statusReport = JSON.parse(statusJson.stdout);
+    assertEqual(statusReport.runId, loopReport.runId, "latest status JSON should use the run report shape");
+    assertEqual(statusReport.counts.completed, 1, "latest status JSON should include subtask counts");
+
+    const explicitStatusJson = await run(bin, ["status", loopReport.runId, "--json"], { cwd: projectDir });
+    const explicitStatusReport = JSON.parse(explicitStatusJson.stdout);
+    assertEqual(explicitStatusReport.runId, loopReport.runId, "explicit status JSON should use the requested run id");
+    assertIncludes(explicitStatusReport.savedPath, loopReport.runId, "status JSON should include saved path");
+
+    const rawStatusJson = await run(bin, ["status", loopReport.runId, "--json", "--raw"], { cwd: projectDir });
+    const rawStatusReport = JSON.parse(rawStatusJson.stdout);
+    assertEqual(rawStatusReport.id, loopReport.runId, "raw status JSON should preserve the LoopRun shape");
+
     const status = await run(bin, ["status"], { cwd: projectDir });
-    assertIncludes(status.stdout, "Smoke task", "status output should show the smoke task");
+    assertIncludes(status.stdout, "Smoke task", "plain status output should show the smoke task");
 
     console.log("Package smoke passed:");
     console.log(`- tarball: ${tarballPath}`);
@@ -70,7 +84,7 @@ async function main() {
     console.log("- doctor reports pre-init warnings and post-init readiness");
     console.log("- init creates config and .gitignore");
     console.log("- init is idempotent on second run");
-    console.log("- run/resume JSON and status work through the installed binary");
+    console.log("- run/resume/status JSON and plain status work through the installed binary");
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
