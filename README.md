@@ -16,6 +16,17 @@ pnpm run typecheck
 pnpm run lint
 ```
 
+## Local Development
+
+This project requires Node.js 24 or newer. Use pnpm through Corepack or a compatible pnpm 11.x install.
+
+```bash
+corepack enable
+pnpm install --frozen-lockfile
+pnpm run build
+node dist/cli.js --help
+```
+
 Run a local loop:
 
 ```bash
@@ -39,6 +50,33 @@ node dist/cli.js pr-exec --execute --approved-by maintainer --json
 Runs are stored as JSON files under `.orchestrator/runs/<runId>.json`.
 Checkpoint reports are stored as JSON files under `.orchestrator/checkpoints/<checkpointId>.json`.
 Approval records are stored as JSON files under `.orchestrator/approvals/<approvalId>.json`.
+
+## Local Package Install
+
+The package is prepared for local installation through its `bin` entry, but it is not published to npm yet. `npm pack` runs the `prepack` script, which rebuilds `dist` before creating the tarball. The build also marks `dist/cli.js` executable for local tarball installs.
+
+```bash
+pnpm run build
+npm pack --dry-run
+npm pack --pack-destination /tmp
+```
+
+Install the packed tarball into a temporary project and run the installed command:
+
+```bash
+tmpdir="$(mktemp -d)"
+npm install --prefix "$tmpdir" /tmp/task-loop-orchestrator-0.1.0.tgz
+"$tmpdir/node_modules/.bin/task-loop-orchestrator" --help
+```
+
+For a fuller smoke test, initialize a temporary Git repository before running the loop so repo evidence commands have a local repository to inspect:
+
+```bash
+tmpdir="$(mktemp -d)"
+npm install --prefix "$tmpdir" /tmp/task-loop-orchestrator-0.1.0.tgz
+git -C "$tmpdir" init
+"$tmpdir/node_modules/.bin/task-loop-orchestrator" run "Smoke task" --max-iterations 1
+```
 
 ## Loop Model
 

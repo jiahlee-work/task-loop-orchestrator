@@ -9,6 +9,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "postbuild": "node -e \"const fs = require('node:fs'); if (fs.existsSync('dist/cli.js')) fs.chmodSync('dist/cli.js', 0o755);\"",
+    "prepack": "pnpm run build",
     "typecheck": "tsc --noEmit -p tsconfig.test.json",
     "lint": "pnpm run typecheck",
     "test": "vitest run"
@@ -17,7 +19,8 @@
     "node": ">=24"
   },
   "files": [
-    "dist"
+    "dist",
+    "orchestrator.config.example.json"
   ],
   "devDependencies": {
     "@types/node": "^24.0.4",
