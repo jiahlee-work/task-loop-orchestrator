@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { LoopRun } from "../src/domain.js";
+import type { GitHubCheckSummary, LoopRun } from "../src/domain.js";
 import { createPullRequestApproval, preparePullRequestExecution } from "../src/approval.js";
 import { createCliJsonReport, cliJsonSchemaVersion } from "../src/cli-json.js";
 import { runDoctor } from "../src/doctor.js";
@@ -44,6 +44,7 @@ describe("CLI JSON schema sample smoke", () => {
         }),
         "2026-06-22T00:00:00.000Z"
       )),
+      toJsonObject(createCliJsonReport("checks", checksSummary(), "2026-06-22T00:00:00.000Z")),
       toJsonObject(createCliJsonReport("checkpoint", checkpoint, "2026-06-22T00:00:00.000Z")),
       toJsonObject(createCliJsonReport("pr-plan", prPlan, "2026-06-22T00:00:00.000Z")),
       toJsonObject(createCliJsonReport("pr-exec", prExec, "2026-06-22T00:00:00.000Z")),
@@ -126,6 +127,22 @@ function requiredFields(schema: JsonObject, definition: JsonObject, seenRefs = n
   }
 
   return Array.isArray(definition.required) ? definition.required.filter((field): field is string => typeof field === "string") : [];
+}
+
+function checksSummary(): GitHubCheckSummary {
+  return {
+    status: "success",
+    summary: "GitHub checks success (1 check).",
+    ref: "HEAD",
+    source: "github",
+    details: [
+      {
+        name: "verify",
+        status: "success",
+        summary: "success"
+      }
+    ]
+  };
 }
 
 function loopRun(): LoopRun {
