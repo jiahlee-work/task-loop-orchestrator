@@ -104,6 +104,15 @@ Each `checks[]` item fixes `id`, `status`, and `summary`, with optional `details
 
 The `files` object currently reports `config` and `gitignore`. Each file result fixes `path` and `status`, with optional `reason`; status is one of `created`, `updated`, or `skipped`. `init` is the explicit bootstrap write command, but it still avoids destructive config overwrite unless `--force` is used.
 
+## Coverage and Exceptions
+
+Every current JSON-capable command is tracked by `schemas/cli-json.schema.json` with a command-specific branch: `init`, `doctor`, `run`, `resume`, `status`, `checkpoint`, `checks`, `pr-plan`, `pr-exec`, and `approve-pr`.
+
+Two response families intentionally stay on the flexible common envelope path:
+
+- `status --json --raw`: raw status returns the stored `LoopRun` shape. The strict run report branch applies only when a `status` response includes `runId`, which is the default `status --json` report shape.
+- No-run responses from `checkpoint`, `pr-plan`, `pr-exec`, and `approve-pr`: these return `{ "status": "not_found", "run": null }` with the common envelope. Their strict branches apply only to concrete records that include `id`.
+
 ## Not Found Responses
 
 Commands that need an existing run return an enveloped not-found response when `--json` is used and no run is available:

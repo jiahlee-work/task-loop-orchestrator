@@ -293,6 +293,55 @@ describe("CLI JSON schema artifact", () => {
     expect(initFileResult?.additionalProperties).toBe(true);
   });
 
+  it("tracks every CLI JSON command with a command-specific schema branch", async () => {
+    const schema = await readSchema();
+    const expectedRefs: Record<(typeof cliJsonCommands)[number], string> = {
+      init: "#/$defs/initPayload",
+      doctor: "#/$defs/doctorPayload",
+      run: "#/$defs/runReportPayload",
+      resume: "#/$defs/runReportPayload",
+      status: "#/$defs/runReportPayload",
+      checkpoint: "#/$defs/checkpointPayload",
+      checks: "#/$defs/checksPayload",
+      "pr-plan": "#/$defs/prPlanPayload",
+      "pr-exec": "#/$defs/prExecPayload",
+      "approve-pr": "#/$defs/approvePrPayload"
+    };
+
+    for (const command of cliJsonCommands) {
+      expect(branchRefsForCommand(schema, command)).toContain(expectedRefs[command]);
+    }
+  });
+
+  it("keeps raw status and no-run responses on the flexible envelope path", async () => {
+    const schema = await readSchema();
+
+    expect(branchesForCommand(schema, "status")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          if: expect.objectContaining({
+            required: ["command", "runId"]
+          }),
+          then: {
+            $ref: "#/$defs/runReportPayload"
+          }
+        })
+      ])
+    );
+
+    for (const command of ["checkpoint", "pr-plan", "pr-exec", "approve-pr"] as const) {
+      expect(branchesForCommand(schema, command)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            if: expect.objectContaining({
+              required: ["command", "id"]
+            })
+          })
+        ])
+      );
+    }
+  });
+
   it("applies the run report branch to run, resume, and default status reports", async () => {
     const schema = await readSchema();
 
@@ -497,7 +546,9 @@ describe("CLI JSON schema artifact", () => {
     expect(docs).toContain("PR Approval Schema");
     expect(docs).toContain("Doctor Schema");
     expect(docs).toContain("Init Schema");
+    expect(docs).toContain("Coverage and Exceptions");
     expect(docs).toContain("status --json --raw");
+    expect(docs).toContain("No-run responses from `checkpoint`, `pr-plan`, `pr-exec`, and `approve-pr`");
     expect(docs).toContain("../schemas/cli-json.schema.json");
   });
 });
@@ -729,3 +780,35 @@ async function readSchema(): Promise<{
     additionalProperties?: boolean;
   };
 }
+
+function branchRefsForCommand(schema: { allOf?: unknown[] }, command: string): string[] {
+  return branchesForCommand(schema, command)
+    .map((branch) => asRecord(branch.then)?.$ref)
+    .filter((value): value is string => typeof value === "string");
+}
+
+function branchesForCommand(schema: { allOf?: unknown[] }, command: string): JsonObject[] {
+  return (schema.allOf ?? []).filter((branch): branch is JsonObject => {
+    if (!isRecord(branch)) {
+      return false;
+    }
+
+    const condition = asRecord(branch.if);
+    const properties = asRecord(condition?.properties);
+    const commandSchema = asRecord(properties?.command);
+    const commandConst = commandSchema?.const;
+    const commandEnum = commandSchema?.enum;
+
+    return commandConst === command || (Array.isArray(commandEnum) && commandEnum.includes(command));
+  });
+}
+
+function asRecord(value: unknown): JsonObject | undefined {
+  return isRecord(value) ? value : undefined;
+}
+
+function isRecord(value: unknown): value is JsonObject {
+  return typeof value === "object" && value !== null;
+}
+
+type JsonObject = Record<string, unknown>;
