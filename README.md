@@ -130,6 +130,20 @@ Checkpoint generation records `integration_checkpoint_ready` on the run after a 
 
 `run --json`, `resume --json`, and `status --json` return a stable automation-friendly report with `runId`, status, iterations, permission mode, task summary, subtask counts, saved path, and the full run object. Prefer these JSON forms when integrating with scripts or UI. Use `status <runId> --json --raw` only when you need the stored raw `LoopRun` shape.
 
+## JSON Output
+
+Selected automation-oriented JSON commands include lightweight schema metadata while preserving existing top-level payload fields:
+
+```json
+{
+  "schemaVersion": 1,
+  "command": "run",
+  "createdAt": "2026-06-22T00:00:00.000Z"
+}
+```
+
+The metadata is currently applied to `init --json`, `doctor --json`, `run --json`, `resume --json`, and `status --json` including `status --json --raw` and not-found status responses. `checkpoint`, `pr-plan`, `pr-exec`, and `checks` JSON output still use their command-specific payloads and will be aligned in a later rollout.
+
 ## Permission Modes
 
 - `read`: permits `read_state` only.

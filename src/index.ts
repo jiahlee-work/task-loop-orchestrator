@@ -1,5 +1,6 @@
 export * from "./audit.js";
 export * from "./approval.js";
+export * from "./cli-json.js";
 export * from "./config.js";
 export * from "./context.js";
 export * from "./domain.js";

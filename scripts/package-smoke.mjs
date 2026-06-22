@@ -32,25 +32,30 @@ async function main() {
 
     const preInitDoctor = await run(bin, ["doctor", "--json"], { cwd: projectDir });
     const preInitDoctorReport = JSON.parse(preInitDoctor.stdout);
+    assertEnvelope(preInitDoctorReport, "doctor");
     assertEqual(preInitDoctorReport.status, "warn", "doctor before init should warn");
 
     await run("git", ["init"], { cwd: projectDir });
     const firstInit = await run(bin, ["init", "--json"], { cwd: projectDir });
     const firstInitReport = JSON.parse(firstInit.stdout);
+    assertEnvelope(firstInitReport, "init");
     assertEqual(firstInitReport.files.config.status, "created", "first init should create config");
     assertEqual(firstInitReport.files.gitignore.status, "created", "first init should create gitignore");
 
     const secondInit = await run(bin, ["init", "--json"], { cwd: projectDir });
     const secondInitReport = JSON.parse(secondInit.stdout);
+    assertEnvelope(secondInitReport, "init");
     assertEqual(secondInitReport.files.config.status, "skipped", "second init should skip config");
     assertEqual(secondInitReport.files.gitignore.status, "skipped", "second init should skip gitignore");
 
     const postInitDoctor = await run(bin, ["doctor", "--json"], { cwd: projectDir });
     const postInitDoctorReport = JSON.parse(postInitDoctor.stdout);
+    assertEnvelope(postInitDoctorReport, "doctor");
     assertEqual(postInitDoctorReport.status, "pass", "doctor after init should pass");
 
     const loop = await run(bin, ["run", "Smoke task", "--max-iterations", "1", "--json"], { cwd: projectDir });
     const loopReport = JSON.parse(loop.stdout);
+    assertEnvelope(loopReport, "run");
     assertIncludes(loopReport.runId, "run_", "run JSON should include a run id");
     assertEqual(loopReport.status, "completed", "smoke run should complete");
     assertEqual(loopReport.counts.completed, 1, "run JSON should include subtask counts");
@@ -58,21 +63,25 @@ async function main() {
 
     const resume = await run(bin, ["resume", loopReport.runId, "--max-iterations", "1", "--json"], { cwd: projectDir });
     const resumeReport = JSON.parse(resume.stdout);
+    assertEnvelope(resumeReport, "resume");
     assertEqual(resumeReport.runId, loopReport.runId, "resume JSON should use the same run id");
     assertIncludes(resumeReport.savedPath, loopReport.runId, "resume JSON should include saved path");
 
     const statusJson = await run(bin, ["status", "--json"], { cwd: projectDir });
     const statusReport = JSON.parse(statusJson.stdout);
+    assertEnvelope(statusReport, "status");
     assertEqual(statusReport.runId, loopReport.runId, "latest status JSON should use the run report shape");
     assertEqual(statusReport.counts.completed, 1, "latest status JSON should include subtask counts");
 
     const explicitStatusJson = await run(bin, ["status", loopReport.runId, "--json"], { cwd: projectDir });
     const explicitStatusReport = JSON.parse(explicitStatusJson.stdout);
+    assertEnvelope(explicitStatusReport, "status");
     assertEqual(explicitStatusReport.runId, loopReport.runId, "explicit status JSON should use the requested run id");
     assertIncludes(explicitStatusReport.savedPath, loopReport.runId, "status JSON should include saved path");
 
     const rawStatusJson = await run(bin, ["status", loopReport.runId, "--json", "--raw"], { cwd: projectDir });
     const rawStatusReport = JSON.parse(rawStatusJson.stdout);
+    assertEnvelope(rawStatusReport, "status");
     assertEqual(rawStatusReport.id, loopReport.runId, "raw status JSON should preserve the LoopRun shape");
 
     const status = await run(bin, ["status"], { cwd: projectDir });
@@ -84,6 +93,7 @@ async function main() {
     console.log("- doctor reports pre-init warnings and post-init readiness");
     console.log("- init creates config and .gitignore");
     console.log("- init is idempotent on second run");
+    console.log("- init/doctor/run/resume/status JSON include schema metadata");
     console.log("- run/resume/status JSON and plain status work through the installed binary");
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
@@ -125,6 +135,14 @@ function assertIncludes(value, expected, message) {
 function assertEqual(actual, expected, message) {
   if (actual !== expected) {
     throw new Error(`${message}. Expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}.`);
+  }
+}
+
+function assertEnvelope(value, command) {
+  assertEqual(value.schemaVersion, 1, `${command} JSON should include schemaVersion`);
+  assertEqual(value.command, command, `${command} JSON should include command`);
+  if (typeof value.createdAt !== "string" || value.createdAt.length === 0) {
+    throw new Error(`${command} JSON should include createdAt.`);
   }
 }
 

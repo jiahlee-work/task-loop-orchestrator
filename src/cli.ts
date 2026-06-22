@@ -8,6 +8,7 @@ import {
   normalizePermissionMode,
   normalizeReviewerMode
 } from "./config.js";
+import { createCliJsonReport, type CliJsonCommand } from "./cli-json.js";
 import type { ExecutorMode, GitHubProviderMode, PermissionMode, ReviewerMode } from "./domain.js";
 import { runDoctor, type DoctorReport } from "./doctor.js";
 import { CodexCliExecutor } from "./executors.js";
@@ -97,12 +98,16 @@ function printUsage(): void {
   task-loop-orchestrator checks [ref] [--json]`);
 }
 
+function printJson(command: CliJsonCommand, payload: object): void {
+  console.log(JSON.stringify(createCliJsonReport(command, payload), null, 2));
+}
+
 async function doctorCommand(args: ParsedArgs): Promise<void> {
   const githubMode = stringFlag(args.flags, "github") ? githubFlag(stringFlag(args.flags, "github")) : "none";
   const report = await runDoctor(process.cwd(), { githubMode });
 
   if (args.flags.json === true) {
-    console.log(JSON.stringify(report, null, 2));
+    printJson("doctor", report);
     return;
   }
 
@@ -129,7 +134,7 @@ async function initCommand(args: ParsedArgs): Promise<void> {
   });
 
   if (args.flags.json === true) {
-    console.log(JSON.stringify(report, null, 2));
+    printJson("init", report);
     return;
   }
 
@@ -170,7 +175,7 @@ async function runCommand(args: ParsedArgs): Promise<void> {
   );
 
   if (args.flags.json === true) {
-    console.log(JSON.stringify(createRunCliReport(run, store), null, 2));
+    printJson("run", createRunCliReport(run, store));
     return;
   }
 
@@ -187,16 +192,10 @@ async function statusCommand(args: ParsedArgs): Promise<void> {
 
   if (!run) {
     if (args.flags.json === true) {
-      console.log(
-        JSON.stringify(
-          {
-            status: "not_found",
-            run: null
-          },
-          null,
-          2
-        )
-      );
+      printJson("status", {
+        status: "not_found",
+        run: null
+      });
       return;
     }
 
@@ -205,7 +204,7 @@ async function statusCommand(args: ParsedArgs): Promise<void> {
   }
 
   if (args.flags.json === true) {
-    console.log(JSON.stringify(args.flags.raw === true ? run : createRunCliReport(run, store), null, 2));
+    printJson("status", args.flags.raw === true ? run : createRunCliReport(run, store));
     return;
   }
 
@@ -244,7 +243,7 @@ async function resumeCommand(args: ParsedArgs): Promise<void> {
   const run = await orchestrator.resume(runId);
 
   if (args.flags.json === true) {
-    console.log(JSON.stringify(createRunCliReport(run, store), null, 2));
+    printJson("resume", createRunCliReport(run, store));
     return;
   }
 
