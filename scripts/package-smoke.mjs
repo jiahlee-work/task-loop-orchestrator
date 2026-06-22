@@ -49,9 +49,17 @@ async function main() {
     const postInitDoctorReport = JSON.parse(postInitDoctor.stdout);
     assertEqual(postInitDoctorReport.status, "pass", "doctor after init should pass");
 
-    const loop = await run(bin, ["run", "Smoke task", "--max-iterations", "1"], { cwd: projectDir });
-    assertIncludes(loop.stdout, "Run run_", "run output should include a run id");
-    assertIncludes(loop.stdout, "completed", "smoke run should complete");
+    const loop = await run(bin, ["run", "Smoke task", "--max-iterations", "1", "--json"], { cwd: projectDir });
+    const loopReport = JSON.parse(loop.stdout);
+    assertIncludes(loopReport.runId, "run_", "run JSON should include a run id");
+    assertEqual(loopReport.status, "completed", "smoke run should complete");
+    assertEqual(loopReport.counts.completed, 1, "run JSON should include subtask counts");
+    assertIncludes(loopReport.savedPath, loopReport.runId, "run JSON should include saved path");
+
+    const resume = await run(bin, ["resume", loopReport.runId, "--max-iterations", "1", "--json"], { cwd: projectDir });
+    const resumeReport = JSON.parse(resume.stdout);
+    assertEqual(resumeReport.runId, loopReport.runId, "resume JSON should use the same run id");
+    assertIncludes(resumeReport.savedPath, loopReport.runId, "resume JSON should include saved path");
 
     const status = await run(bin, ["status"], { cwd: projectDir });
     assertIncludes(status.stdout, "Smoke task", "status output should show the smoke task");
@@ -62,7 +70,7 @@ async function main() {
     console.log("- doctor reports pre-init warnings and post-init readiness");
     console.log("- init creates config and .gitignore");
     console.log("- init is idempotent on second run");
-    console.log("- run/status work through the installed binary");
+    console.log("- run/resume JSON and status work through the installed binary");
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }

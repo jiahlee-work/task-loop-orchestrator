@@ -34,6 +34,8 @@ pnpm run build
 node dist/cli.js run "Create MVP scaffold" --description "Exercise the mock closed loop"
 node dist/cli.js run "Prepare executor adapter" --executor codex-cli-dry-run
 node dist/cli.js run "Review evidence" --reviewer local-evidence
+node dist/cli.js run "Machine-readable smoke" --max-iterations 1 --json
+node dist/cli.js resume run_xxx --max-iterations 1 --json
 node dist/cli.js status
 node dist/cli.js status --json
 node dist/cli.js checkpoint
@@ -83,7 +85,7 @@ After installing the package in a target project, initialize local orchestrator 
 task-loop-orchestrator doctor
 task-loop-orchestrator init
 task-loop-orchestrator doctor --github gh-cli
-task-loop-orchestrator run "Smoke task" --max-iterations 1
+task-loop-orchestrator run "Smoke task" --max-iterations 1 --json
 task-loop-orchestrator checkpoint --github gh-cli --json
 ```
 
@@ -124,6 +126,8 @@ The verify step also records `verification_evidence_collected` before reviewer e
 Checkpoint generation records `integration_checkpoint_ready` on the run after a checkpoint report is saved.
 
 `resume --max-iterations n` treats `n` as additional iterations from the loaded run's current `iterations` count.
+
+`run --json` and `resume --json` return a stable automation-friendly report with `runId`, status, iterations, permission mode, task summary, subtask counts, saved path, and the full run object. Prefer these JSON forms when integrating with scripts or UI.
 
 ## Permission Modes
 

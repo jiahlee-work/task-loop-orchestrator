@@ -14,4 +14,5 @@ export * from "./pr-plan.js";
 export * from "./providers.js";
 export * from "./reviewers.js";
 export * from "./roles.js";
+export * from "./run-report.js";
 export * from "./store.js";

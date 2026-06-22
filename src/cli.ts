@@ -19,6 +19,7 @@ import { createPullRequestPlan } from "./pr-plan.js";
 import { createGitToolProviders, GitHubCliProvider } from "./providers.js";
 import { LocalEvidenceReviewer } from "./reviewers.js";
 import { createMockRoleProviders, type RoleProviders } from "./roles.js";
+import { createRunCliReport } from "./run-report.js";
 import { FileRunStore } from "./store.js";
 
 interface ParsedArgs {
@@ -86,9 +87,9 @@ function printUsage(): void {
   console.log(`Usage:
   task-loop-orchestrator init [--force] [--json]
   task-loop-orchestrator doctor [--github none|gh-cli] [--json]
-  task-loop-orchestrator run <title> [--description text] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n]
+  task-loop-orchestrator run <title> [--description text] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]
   task-loop-orchestrator status [runId] [--json]
-  task-loop-orchestrator resume <runId> [--max-iterations n]
+  task-loop-orchestrator resume <runId> [--max-iterations n] [--json]
   task-loop-orchestrator checkpoint [runId] [--github none|gh-cli] [--json]
   task-loop-orchestrator pr-plan [runId] [--json]
   task-loop-orchestrator approve-pr [runId] --approved-by name [--reason text] [--json]
@@ -168,6 +169,11 @@ async function runCommand(args: ParsedArgs): Promise<void> {
     })
   );
 
+  if (args.flags.json === true) {
+    console.log(JSON.stringify(createRunCliReport(run, store), null, 2));
+    return;
+  }
+
   console.log(`Run ${run.id}: ${run.status}`);
   console.log(`Iterations: ${run.iterations}`);
   console.log(`Subtasks: ${run.graph.subtasks.length}`);
@@ -222,6 +228,12 @@ async function resumeCommand(args: ParsedArgs): Promise<void> {
     worktreeEnabled: config.worktree.enabled
   });
   const run = await orchestrator.resume(runId);
+
+  if (args.flags.json === true) {
+    console.log(JSON.stringify(createRunCliReport(run, store), null, 2));
+    return;
+  }
+
   console.log(`Run ${run.id}: ${run.status}`);
   console.log(`Iterations: ${run.iterations}`);
   console.log(`Saved: ${store.pathForRun(run.id)}`);
