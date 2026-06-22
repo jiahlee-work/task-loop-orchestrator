@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { normalize } from "node:path";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -25,6 +26,20 @@ describe("package metadata", () => {
     expect(packageJson.scripts?.["package:smoke"]).toBe("node scripts/package-smoke.mjs");
   });
 
+  it("guards the npm pack artifact allowlist", async () => {
+    const packageJson = JSON.parse(await readFile(join(root, "package.json"), "utf8")) as {
+      bin?: Record<string, string>;
+      files?: string[];
+      scripts?: Record<string, string>;
+      exports?: unknown;
+    };
+
+    expect(normalize(packageJson.bin?.["task-loop-orchestrator"] ?? "")).toBe(normalize("dist/cli.js"));
+    expect(packageJson.files?.sort()).toEqual(["dist", "orchestrator.config.example.json", "schemas"]);
+    expect(packageJson.scripts?.prepack).toMatch(/\bpnpm run build\b/);
+    expect(packageJson.exports).toBeUndefined();
+  });
+
   it("keeps the CLI source executable through a node shebang", async () => {
     const cliSource = await readFile(join(root, "src", "cli.ts"), "utf8");
 
@@ -45,6 +60,7 @@ describe("package metadata", () => {
     const readme = await readFile(join(root, "README.md"), "utf8");
 
     expect(readme).toContain("installs the tarball into a temporary project");
+    expect(readme).toContain("`dist`, `schemas`, and `orchestrator.config.example.json`");
     expect(readme).toContain("`checkpoint`, `pr-plan`, `pr-exec`, `approve-pr`, and `checks`");
     expect(readme).toContain("step label, command, cwd, exit code");
     expect(readme).toContain("never creates GitHub PRs, merges, pushes, releases, or publishes to npm");
