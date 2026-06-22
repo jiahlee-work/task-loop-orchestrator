@@ -218,4 +218,4 @@ Current approval model:
 
 ## CI
 
-GitHub Actions CI is defined in `.github/workflows/ci.yml` and runs on pull requests and pushes to `main`. It uses Node 24 with Corepack/pnpm cache, installs with `pnpm install --frozen-lockfile`, then runs typecheck, tests, and build.
+GitHub Actions CI is defined in `.github/workflows/ci.yml` and runs on pull requests and pushes to `main`. It uses Node 24 with Corepack/pnpm cache, installs with `pnpm install --frozen-lockfile`, then runs typecheck, tests, build, and `pnpm run package:smoke`. The package smoke step verifies `npm pack`, temporary install, installed binary help, project `init`, idempotent re-init, `run`, and `status` in CI.
