@@ -63,6 +63,8 @@ Release preparation notes live in [CHANGELOG.md](CHANGELOG.md) and [docs/release
 
 For the local pre-release verification bundle, run `pnpm run release:check`.
 
+For the dry-run package file listing review, run `pnpm run package:artifacts`.
+
 Run the repeatable package smoke before publishing or handing off an installable tarball:
 
 ```bash
