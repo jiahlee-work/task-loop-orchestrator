@@ -89,6 +89,7 @@ The package can be installed from a local tarball through its `bin` entry, but i
 - Command reference: [docs/commands.md](docs/commands.md)
 - Release candidate checks: [docs/release-checklist.md](docs/release-checklist.md)
 - Release readiness summary: [docs/release-readiness.md](docs/release-readiness.md)
+- Post-0.1.0 roadmap: [docs/roadmap.md](docs/roadmap.md)
 - Release notes draft: [CHANGELOG.md](CHANGELOG.md)
 
 For the local pre-release verification bundle, run `pnpm run release:check`; it includes typecheck, tests, build, package artifact dry-run review, lint, installed binary package smoke, version output, and read-only check refresh.

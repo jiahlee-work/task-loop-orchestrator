@@ -9,6 +9,7 @@ This is a human review summary for the current `0.1.0 - Unreleased` candidate. I
 - GitHub release status: no release or release tag is created by this document.
 - Local package shape: installable through the local tarball flow documented in [`quickstart.md`](quickstart.md).
 - Command surface: documented in [`commands.md`](commands.md).
+- Post-release backlog: candidate work is summarized in [`roadmap.md`](roadmap.md).
 
 ## Verification Summary
 

@@ -185,6 +185,7 @@ describe("release readiness documentation", () => {
       "[docs/commands.md](docs/commands.md)",
       "[docs/release-checklist.md](docs/release-checklist.md)",
       "[docs/release-readiness.md](docs/release-readiness.md)",
+      "[docs/roadmap.md](docs/roadmap.md)",
       "[CHANGELOG.md](CHANGELOG.md)",
       "pnpm run release:check",
       "pnpm run package:artifacts",
@@ -234,6 +235,7 @@ describe("release readiness documentation", () => {
       "[`../CHANGELOG.md`](../CHANGELOG.md)",
       "[`quickstart.md`](quickstart.md)",
       "[`commands.md`](commands.md)",
+      "[`roadmap.md`](roadmap.md)",
       "[`release-checklist.md`](release-checklist.md)",
       "[`json-output.md`](json-output.md)",
       "[`../schemas/cli-json.schema.json`](../schemas/cli-json.schema.json)",
@@ -251,6 +253,31 @@ describe("release readiness documentation", () => {
       "not a release procedure"
     ]);
   });
+
+  it("keeps the post-0.1.0 roadmap scoped as a candidate backlog", async () => {
+    const readme = await readFile(join(root, "README.md"), "utf8");
+    const readiness = await readReleaseReadiness();
+    const roadmap = await readRoadmap();
+
+    expect(readme).toContain("[docs/roadmap.md](docs/roadmap.md)");
+    expect(readiness).toContain("[`roadmap.md`](roadmap.md)");
+    expectContainsAll(roadmap, [
+      "# Post-0.1.0 Roadmap",
+      "candidate backlog",
+      "not a committed schedule",
+      "not a release promise",
+      "Approval-Gated Write Execution Model",
+      "Codex CLI Executor Hardening",
+      "Reviewer And Evidence Expansion",
+      "Multi-Run Context And Graph UX",
+      "Persistent Audit And Report Export",
+      "GitHub Provider Expansion",
+      "Jira Provider Skeleton To Read-Only Adapter",
+      "Packaging And Publish Workflow",
+      "Safety boundary",
+      "no `npm publish`, git tag, or GitHub release without explicit human approval"
+    ]);
+  });
 });
 
 describe("documentation role boundaries", () => {
@@ -262,6 +289,7 @@ describe("documentation role boundaries", () => {
       "[docs/commands.md](docs/commands.md)",
       "[docs/release-checklist.md](docs/release-checklist.md)",
       "[docs/release-readiness.md](docs/release-readiness.md)",
+      "[docs/roadmap.md](docs/roadmap.md)",
       "[CHANGELOG.md](CHANGELOG.md)",
       "corepack enable",
       "pnpm install --frozen-lockfile",
@@ -304,6 +332,11 @@ describe("documentation role boundaries", () => {
       "pnpm run release:check",
       "## Package Artifact Review",
       "## Explicitly Out Of Scope"
+    ]);
+    expectContainsAll(await readRoadmap(), [
+      "# Post-0.1.0 Roadmap",
+      "## Candidate Backlog",
+      "## Documentation And Test Maintenance"
     ]);
     expectContainsAll(changelog, [
       "## 0.1.0 - Unreleased",
@@ -609,6 +642,10 @@ async function readReleaseChecklist() {
 
 async function readReleaseReadiness() {
   return readFile(join(root, "docs", "release-readiness.md"), "utf8");
+}
+
+async function readRoadmap() {
+  return readFile(join(root, "docs", "roadmap.md"), "utf8");
 }
 
 async function readChangelog() {
