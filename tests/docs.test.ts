@@ -376,6 +376,23 @@ describe("command json documentation boundaries", () => {
       "sample smoke"
     ]);
   });
+
+  it("keeps payload required fields mentioned in JSON output docs", async () => {
+    const jsonOutput = await readJsonOutput();
+    const schema = await readCliJsonSchema();
+    const payloadRefs = new Set(extractSchemaCommandBranchRefs(schema).values());
+
+    expectContainsAll(jsonOutput, schema.required);
+    for (const ref of payloadRefs) {
+      const defName = ref.replace("#/$defs/", "");
+      const requiredFields = schemaRequiredFieldsForDef(schema, defName);
+
+      expect(requiredFields.length, `Missing required fields for $defs.${defName}`).toBeGreaterThan(0);
+      for (const field of requiredFields) {
+        expect(jsonOutput, `docs/json-output.md should mention $defs.${defName}.required field ${field}`).toContain(`\`${field}\``);
+      }
+    }
+  });
 });
 
 describe("command reference documentation", () => {
@@ -577,7 +594,10 @@ async function readCliJsonSchema() {
       command: { enum: string[] };
       createdAt: { type: string; format: string };
     };
-    $defs: Record<string, unknown>;
+    $defs: Record<string, {
+      $ref?: string;
+      required?: string[];
+    }>;
     allOf: Array<{
       if: {
         properties: {
@@ -675,6 +695,17 @@ function extractSchemaCommandBranchRefs(schema: Awaited<ReturnType<typeof readCl
   }
 
   return branchRefs;
+}
+
+function schemaRequiredFieldsForDef(schema: Awaited<ReturnType<typeof readCliJsonSchema>>, defName: string) {
+  const schemaDef = schema.$defs[defName];
+  expect(schemaDef, `Missing schema $defs.${defName}`).toBeDefined();
+
+  if (schemaDef.$ref) {
+    return schemaRequiredFieldsForDef(schema, schemaDef.$ref.replace("#/$defs/", ""));
+  }
+
+  return schemaDef.required ?? [];
 }
 
 function expectSectionContains(sections: Map<string, string>, command: string, expectedFragments: string[]) {
