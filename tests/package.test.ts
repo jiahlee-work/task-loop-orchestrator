@@ -30,4 +30,13 @@ describe("package metadata", () => {
 
     expect(cliSource.startsWith("#!/usr/bin/env node\n")).toBe(true);
   });
+
+  it("documents package smoke coverage and diagnostics", async () => {
+    const readme = await readFile(join(root, "README.md"), "utf8");
+
+    expect(readme).toContain("installs the tarball into a temporary project");
+    expect(readme).toContain("`checkpoint`, `pr-plan`, `pr-exec`, `approve-pr`, and `checks`");
+    expect(readme).toContain("step label, command, cwd, exit code");
+    expect(readme).toContain("never creates GitHub PRs, merges, pushes, releases, or publishes to npm");
+  });
 });

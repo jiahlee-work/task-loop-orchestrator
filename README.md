@@ -64,7 +64,9 @@ Run the repeatable package smoke before publishing or handing off an installable
 pnpm run package:smoke
 ```
 
-The smoke script packs the current checkout, installs the tarball into a temporary project, initializes that project, verifies `init` idempotency, and runs the installed `task-loop-orchestrator` binary through `run` and `status`.
+The smoke script packs the current checkout, installs the tarball into a temporary project, and runs the installed `task-loop-orchestrator` binary. It verifies the core `--json` flows for `init`, `doctor`, `run`, `resume`, `status`, `checkpoint`, `pr-plan`, `pr-exec`, `approve-pr`, and `checks`, while keeping all writes inside the temporary project.
+
+If it fails, the error includes the package smoke step label, command, cwd, exit code, and short stdout/stderr excerpts. It never creates GitHub PRs, merges, pushes, releases, or publishes to npm.
 
 ```bash
 pnpm run build
@@ -247,4 +249,4 @@ Current approval model:
 
 ## CI
 
-GitHub Actions CI is defined in `.github/workflows/ci.yml` and runs on pull requests and pushes to `main`. It uses Node 24 with Corepack/pnpm cache, installs with `pnpm install --frozen-lockfile`, then runs typecheck, tests, build, and `pnpm run package:smoke`. The package smoke step verifies `npm pack`, temporary install, installed binary help, project `init`, idempotent re-init, `run`, and `status` in CI.
+GitHub Actions CI is defined in `.github/workflows/ci.yml` and runs on pull requests and pushes to `main`. It uses Node 24 with Corepack/pnpm cache, installs with `pnpm install --frozen-lockfile`, then runs typecheck, tests, build, and `pnpm run package:smoke`. The package smoke step verifies `npm pack`, temporary install, installed binary help, project bootstrap, JSON command contracts, read-only checkpoint/PR preflight flows, and CI check refresh diagnostics.

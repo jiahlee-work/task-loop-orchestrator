@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// Verifies the packed tarball the same way a user would consume it: install into a
+// temporary project, run the installed binary, and check the core JSON workflows.
+// Failures are wrapped with step labels plus command/cwd/output excerpts; this
+// script never creates branches, pushes, PRs, merges, releases, or publishes.
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
