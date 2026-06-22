@@ -10,6 +10,7 @@ import {
 } from "./config.js";
 import type { ExecutorMode, GitHubProviderMode, PermissionMode, ReviewerMode } from "./domain.js";
 import { CodexCliExecutor } from "./executors.js";
+import { initProject } from "./init.js";
 import { createIntegrationCheckpoint } from "./integration.js";
 import { RootOrchestrator, createTaskSpec } from "./orchestrator.js";
 import { checkPermission } from "./permission.js";
@@ -82,6 +83,7 @@ function githubFlag(value: string | undefined): GitHubProviderMode {
 
 function printUsage(): void {
   console.log(`Usage:
+  task-loop-orchestrator init [--force] [--json]
   task-loop-orchestrator run <title> [--description text] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n]
   task-loop-orchestrator status [runId] [--json]
   task-loop-orchestrator resume <runId> [--max-iterations n]
@@ -90,6 +92,27 @@ function printUsage(): void {
   task-loop-orchestrator approve-pr [runId] --approved-by name [--reason text] [--json]
   task-loop-orchestrator pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]
   task-loop-orchestrator checks [ref] [--json]`);
+}
+
+async function initCommand(args: ParsedArgs): Promise<void> {
+  const report = await initProject(process.cwd(), {
+    force: args.flags.force === true
+  });
+
+  if (args.flags.json === true) {
+    console.log(JSON.stringify(report, null, 2));
+    return;
+  }
+
+  console.log("Initialized task-loop-orchestrator project files.");
+  console.log(`Config: ${report.files.config.status} ${report.files.config.path}`);
+  if (report.files.config.reason) {
+    console.log(`- ${report.files.config.reason}`);
+  }
+  console.log(`Gitignore: ${report.files.gitignore.status} ${report.files.gitignore.path}`);
+  if (report.files.gitignore.reason) {
+    console.log(`- ${report.files.gitignore.reason}`);
+  }
 }
 
 async function runCommand(args: ParsedArgs): Promise<void> {
@@ -386,6 +409,11 @@ async function main(): Promise<void> {
 
   if (args.command === "run") {
     await runCommand(args);
+    return;
+  }
+
+  if (args.command === "init") {
+    await initCommand(args);
     return;
   }
 

@@ -69,14 +69,33 @@ npm install --prefix "$tmpdir" /tmp/task-loop-orchestrator-0.1.0.tgz
 "$tmpdir/node_modules/.bin/task-loop-orchestrator" --help
 ```
 
+After installing the package in a target project, initialize local orchestrator files before the first run:
+
+```bash
+task-loop-orchestrator init
+task-loop-orchestrator run "Smoke task" --max-iterations 1
+task-loop-orchestrator checkpoint --github gh-cli --json
+```
+
 For a fuller smoke test, initialize a temporary Git repository before running the loop so repo evidence commands have a local repository to inspect:
 
 ```bash
 tmpdir="$(mktemp -d)"
 npm install --prefix "$tmpdir" /tmp/task-loop-orchestrator-0.1.0.tgz
 git -C "$tmpdir" init
+"$tmpdir/node_modules/.bin/task-loop-orchestrator" init --json
 "$tmpdir/node_modules/.bin/task-loop-orchestrator" run "Smoke task" --max-iterations 1
 ```
+
+`init [--force] [--json]` prepares a project for local orchestrator state:
+
+- creates `orchestrator.config.json` from the default config when it does not exist
+- creates `.gitignore` when missing
+- appends `.orchestrator/` to `.gitignore` when needed
+- preserves existing file contents and ordering
+- skips an existing `orchestrator.config.json` unless `--force` is provided
+
+Use `--json` to see structured `created`, `updated`, and `skipped` statuses for each file.
 
 ## Loop Model
 
