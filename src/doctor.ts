@@ -7,12 +7,20 @@ import { GitHubCliProvider, runCommand, type CommandRunner, type GitHubProvider 
 
 export type DoctorStatus = "pass" | "warn" | "fail";
 
+export interface DoctorCommandSuggestion {
+  label: string;
+  command: string[];
+  reason: string;
+  destructive: boolean;
+}
+
 export interface DoctorCheck {
   id: string;
   status: DoctorStatus;
   summary: string;
   details?: unknown;
   recommendedAction?: string;
+  suggestions?: DoctorCommandSuggestion[];
 }
 
 export interface DoctorReport {
@@ -49,7 +57,14 @@ export async function runDoctor(rootDir: string = process.cwd(), options: Doctor
       status: "pass",
       summary: "GitHub diagnostics disabled.",
       details: { mode: "none" },
-      recommendedAction: "Run doctor with --github gh-cli to check read-only GitHub access."
+      recommendedAction: "Run doctor with --github gh-cli to check read-only GitHub access.",
+      suggestions: [
+        commandSuggestion(
+          "Check GitHub read access",
+          ["task-loop-orchestrator", "doctor", "--github", "gh-cli"],
+          "Re-run doctor with read-only GitHub diagnostics enabled."
+        )
+      ]
     });
   }
 
@@ -100,7 +115,8 @@ async function checkGitRepository(rootDir: string, commandRunner: CommandRunner)
     details: {
       stderr: result.stderr.trim() || undefined
     },
-    recommendedAction: "Run doctor from a Git repository, or initialize one with git init."
+    recommendedAction: "Run doctor from a Git repository, or initialize one with git init.",
+    suggestions: [commandSuggestion("Initialize Git repository", ["git", "init"], "Create a local Git repository.")]
   };
 }
 
@@ -129,7 +145,8 @@ async function checkConfig(rootDir: string): Promise<DoctorCheck> {
         status: "warn",
         summary: "orchestrator.config.json is missing.",
         details: { path },
-        recommendedAction: "Run task-loop-orchestrator init."
+        recommendedAction: "Run task-loop-orchestrator init.",
+        suggestions: [initSuggestion("Create orchestrator config and ignore local state.")]
       };
     }
 
@@ -138,7 +155,15 @@ async function checkConfig(rootDir: string): Promise<DoctorCheck> {
       status: "fail",
       summary: "orchestrator.config.json could not be loaded.",
       details: { path, error: errorMessage(error) },
-      recommendedAction: "Fix orchestrator.config.json or regenerate it with task-loop-orchestrator init --force."
+      recommendedAction: "Fix orchestrator.config.json or regenerate it with task-loop-orchestrator init --force.",
+      suggestions: [
+        commandSuggestion(
+          "Regenerate orchestrator config",
+          ["task-loop-orchestrator", "init", "--force"],
+          "Overwrite the invalid config with the default orchestrator config.",
+          true
+        )
+      ]
     };
   }
 }
@@ -161,7 +186,8 @@ async function checkGitignore(rootDir: string): Promise<DoctorCheck> {
       status: "warn",
       summary: ".gitignore does not ignore .orchestrator/.",
       details: { path },
-      recommendedAction: "Run task-loop-orchestrator init to append .orchestrator/."
+      recommendedAction: "Run task-loop-orchestrator init to append .orchestrator/.",
+      suggestions: [initSuggestion("Append .orchestrator/ to .gitignore without rewriting existing entries.")]
     };
   } catch (error) {
     if (isMissingFileError(error)) {
@@ -170,7 +196,8 @@ async function checkGitignore(rootDir: string): Promise<DoctorCheck> {
         status: "warn",
         summary: ".gitignore is missing.",
         details: { path },
-        recommendedAction: "Run task-loop-orchestrator init."
+        recommendedAction: "Run task-loop-orchestrator init.",
+        suggestions: [initSuggestion("Create .gitignore and add .orchestrator/.")]
       };
     }
 
@@ -249,7 +276,8 @@ async function checkGitHub(github: GitHubProvider): Promise<DoctorCheck[]> {
             id: "github_repository",
             status: "warn",
             summary: "GitHub repository could not be resolved.",
-            recommendedAction: "Check gh installation/authentication with gh auth status."
+            recommendedAction: "Check gh installation/authentication with gh auth status.",
+            suggestions: [ghAuthStatusSuggestion()]
           }
     );
   } catch (error) {
@@ -258,7 +286,8 @@ async function checkGitHub(github: GitHubProvider): Promise<DoctorCheck[]> {
       status: "warn",
       summary: "GitHub repository check failed.",
       details: { error: errorMessage(error) },
-      recommendedAction: "Check gh installation/authentication with gh auth status."
+      recommendedAction: "Check gh installation/authentication with gh auth status.",
+      suggestions: [ghAuthStatusSuggestion()]
     });
   }
 
@@ -270,7 +299,18 @@ async function checkGitHub(github: GitHubProvider): Promise<DoctorCheck[]> {
       status,
       summary: summary.summary,
       details: summary,
-      recommendedAction: status === "warn" ? "Confirm gh authentication and repository check availability." : undefined
+      recommendedAction: status === "warn" ? "Confirm gh authentication and repository check availability." : undefined,
+      suggestions:
+        status === "warn"
+          ? [
+              ghAuthStatusSuggestion(),
+              commandSuggestion(
+                "Re-run GitHub doctor",
+                ["task-loop-orchestrator", "doctor", "--github", "gh-cli"],
+                "Re-check read-only GitHub diagnostics after authentication or check availability changes."
+              )
+            ]
+          : undefined
     });
   } catch (error) {
     checks.push({
@@ -278,7 +318,15 @@ async function checkGitHub(github: GitHubProvider): Promise<DoctorCheck[]> {
       status: "warn",
       summary: "GitHub check status could not be read.",
       details: { error: errorMessage(error) },
-      recommendedAction: "Confirm gh authentication and repository check availability."
+      recommendedAction: "Confirm gh authentication and repository check availability.",
+      suggestions: [
+        ghAuthStatusSuggestion(),
+        commandSuggestion(
+          "Re-run GitHub doctor",
+          ["task-loop-orchestrator", "doctor", "--github", "gh-cli"],
+          "Re-check read-only GitHub diagnostics after authentication or check availability changes."
+        )
+      ]
     });
   }
 
@@ -310,4 +358,26 @@ function isMissingFileError(error: unknown): boolean {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function initSuggestion(reason: string): DoctorCommandSuggestion {
+  return commandSuggestion("Initialize orchestrator project", ["task-loop-orchestrator", "init"], reason);
+}
+
+function ghAuthStatusSuggestion(): DoctorCommandSuggestion {
+  return commandSuggestion("Check GitHub CLI auth", ["gh", "auth", "status"], "Inspect local gh authentication state.");
+}
+
+function commandSuggestion(
+  label: string,
+  command: string[],
+  reason: string,
+  destructive = false
+): DoctorCommandSuggestion {
+  return {
+    label,
+    command,
+    reason,
+    destructive
+  };
 }

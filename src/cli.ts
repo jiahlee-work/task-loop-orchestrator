@@ -116,6 +116,9 @@ function printDoctorReport(report: DoctorReport): void {
     if (check.recommendedAction) {
       console.log(`  Next: ${check.recommendedAction}`);
     }
+    for (const suggestion of check.suggestions ?? []) {
+      console.log(`  Suggestion: ${suggestion.command.join(" ")}`);
+    }
   }
 }
 

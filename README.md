@@ -111,6 +111,8 @@ Use `--json` to see structured `created`, `updated`, and `skipped` statuses for 
 
 With `--github gh-cli`, doctor also attempts read-only GitHub repository and check-status diagnostics through `gh`. Missing `gh`, failed auth, missing checks, or insufficient repository access are reported as graceful warnings with recommended actions; doctor does not create or modify GitHub resources.
 
+Doctor JSON includes structured `suggestions` on checks when there is a useful follow-up command. Each suggestion has a label, command array, reason, and `destructive` flag so automation or UI layers can present the action safely. Suggestions are candidates only; doctor never executes them.
+
 ## Loop Model
 
 The Root Orchestrator owns context and graph mutation. Planner, Executor, and Reviewer providers return reports and context deltas only.

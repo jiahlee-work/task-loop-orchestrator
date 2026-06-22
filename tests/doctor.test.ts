@@ -23,11 +23,27 @@ describe("doctor", () => {
     expect(report.status).toBe("warn");
     expect(check(report.checks, "git_repository")).toMatchObject({
       status: "warn",
-      recommendedAction: "Run doctor from a Git repository, or initialize one with git init."
+      recommendedAction: "Run doctor from a Git repository, or initialize one with git init.",
+      suggestions: [
+        {
+          label: "Initialize Git repository",
+          command: ["git", "init"],
+          reason: "Create a local Git repository.",
+          destructive: false
+        }
+      ]
     });
     expect(check(report.checks, "config")).toMatchObject({
       status: "warn",
-      recommendedAction: "Run task-loop-orchestrator init."
+      recommendedAction: "Run task-loop-orchestrator init.",
+      suggestions: [
+        {
+          label: "Initialize orchestrator project",
+          command: ["task-loop-orchestrator", "init"],
+          reason: "Create orchestrator config and ignore local state.",
+          destructive: false
+        }
+      ]
     });
   });
 
@@ -42,6 +58,9 @@ describe("doctor", () => {
     expect(check(report.checks, "config").status).toBe("pass");
     expect(check(report.checks, "gitignore").status).toBe("pass");
     expect(check(report.checks, "store_path").status).toBe("pass");
+    expect(check(report.checks, "git_repository").suggestions).toBeUndefined();
+    expect(check(report.checks, "config").suggestions).toBeUndefined();
+    expect(check(report.checks, "gitignore").suggestions).toBeUndefined();
   });
 
   it("checks Node.js version without depending on the current process version", () => {
@@ -94,7 +113,15 @@ describe("doctor", () => {
     expect(check(report.checks, "github_repository")).toMatchObject({ status: "warn" });
     expect(check(report.checks, "github_checks")).toMatchObject({
       status: "warn",
-      recommendedAction: "Confirm gh authentication and repository check availability."
+      recommendedAction: "Confirm gh authentication and repository check availability.",
+      suggestions: expect.arrayContaining([
+        {
+          label: "Check GitHub CLI auth",
+          command: ["gh", "auth", "status"],
+          reason: "Inspect local gh authentication state.",
+          destructive: false
+        }
+      ])
     });
   });
 
