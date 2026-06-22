@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
 import { appendEvent } from "./audit.js";
 import { createPullRequestApproval, preparePullRequestExecution } from "./approval.js";
 import {
@@ -86,6 +87,8 @@ function githubFlag(value: string | undefined): GitHubProviderMode {
 
 function printUsage(): void {
   console.log(`Usage:
+  task-loop-orchestrator --help
+  task-loop-orchestrator --version
   task-loop-orchestrator init [--force] [--json]
   task-loop-orchestrator doctor [--github none|gh-cli] [--json]
   task-loop-orchestrator run <title> [--description text] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]
@@ -96,6 +99,21 @@ function printUsage(): void {
   task-loop-orchestrator approve-pr [runId] --approved-by name [--reason text] [--json]
   task-loop-orchestrator pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]
   task-loop-orchestrator checks [ref] [--json]`);
+}
+
+function packageVersion(): string {
+  const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+    version?: unknown;
+  };
+  if (typeof packageJson.version !== "string" || !packageJson.version.trim()) {
+    throw new Error("Unable to read package version.");
+  }
+
+  return packageJson.version;
+}
+
+function printVersion(): void {
+  console.log(`task-loop-orchestrator ${packageVersion()}`);
 }
 
 function printJson(command: CliJsonCommand, payload: object): void {
@@ -489,6 +507,11 @@ async function main(): Promise<void> {
 
   if (!args.command || args.command === "--help" || args.command === "-h") {
     printUsage();
+    return;
+  }
+
+  if (args.command === "--version" || args.command === "-v") {
+    printVersion();
     return;
   }
 

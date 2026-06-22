@@ -25,6 +25,7 @@ corepack enable
 pnpm install --frozen-lockfile
 pnpm run build
 node dist/cli.js --help
+node dist/cli.js --version
 ```
 
 Run a local loop:
@@ -80,6 +81,7 @@ Install the packed tarball into a temporary project and run the installed comman
 tmpdir="$(mktemp -d)"
 npm install --prefix "$tmpdir" /tmp/task-loop-orchestrator-0.1.0.tgz
 "$tmpdir/node_modules/.bin/task-loop-orchestrator" --help
+"$tmpdir/node_modules/.bin/task-loop-orchestrator" --version
 ```
 
 After installing the package in a target project, initialize local orchestrator files before the first run:

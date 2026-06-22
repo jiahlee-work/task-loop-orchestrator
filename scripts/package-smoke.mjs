@@ -4,7 +4,7 @@
 // Failures are wrapped with step labels plus command/cwd/output excerpts; this
 // script never creates branches, pushes, PRs, merges, releases, or publishes.
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,6 +18,7 @@ async function main() {
   const packDir = join(tempRoot, "pack");
   const installDir = join(tempRoot, "install");
   const projectDir = join(tempRoot, "project");
+  const packageVersion = await readPackageVersion();
   let tarballPath = "";
   let bin = "";
   let loopReport;
@@ -39,6 +40,19 @@ async function main() {
       const help = await run(bin, ["--help"], { cwd: projectDir });
       assertIncludes(help.stdout, "task-loop-orchestrator init", "help output should include init usage");
       assertIncludes(help.stdout, "task-loop-orchestrator doctor", "help output should include doctor usage");
+      assertIncludes(help.stdout, "task-loop-orchestrator --version", "help output should include version usage");
+    });
+
+    await runStep("version", async () => {
+      const version = await run(bin, ["--version"], { cwd: projectDir });
+      assertEqual(
+        version.stdout.trim(),
+        `task-loop-orchestrator ${packageVersion}`,
+        "installed binary --version should match package.json"
+      );
+
+      const shortVersion = await run(bin, ["-v"], { cwd: projectDir });
+      assertEqual(shortVersion.stdout.trim(), version.stdout.trim(), "installed binary -v should match --version");
     });
 
     await runStep("pre-init doctor", async () => {
@@ -120,7 +134,8 @@ async function main() {
 
     console.log("Package smoke passed:");
     console.log(`- tarball: ${tarballPath}`);
-    console.log("- help output includes init usage");
+    console.log("- help output includes init and version usage");
+    console.log("- installed binary version matches package.json");
     console.log("- doctor reports pre-init warnings and post-init readiness");
     console.log("- init creates config and .gitignore");
     console.log("- init is idempotent on second run");
@@ -141,6 +156,15 @@ async function findTarball(packDir) {
   }
 
   return join(packDir, tarballs[0]);
+}
+
+async function readPackageVersion() {
+  const packageJson = JSON.parse(await readFile(join(repoRoot, "package.json"), "utf8"));
+  if (typeof packageJson.version !== "string" || !packageJson.version.trim()) {
+    throw new Error("package.json must include a version string.");
+  }
+
+  return packageJson.version;
 }
 
 async function runStep(label, fn) {

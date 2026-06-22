@@ -31,6 +31,16 @@ describe("package metadata", () => {
     expect(cliSource.startsWith("#!/usr/bin/env node\n")).toBe(true);
   });
 
+  it("documents and implements CLI version output", async () => {
+    const cliSource = await readFile(join(root, "src", "cli.ts"), "utf8");
+    const readme = await readFile(join(root, "README.md"), "utf8");
+
+    expect(cliSource).toContain("task-loop-orchestrator --version");
+    expect(cliSource).toContain('args.command === "--version" || args.command === "-v"');
+    expect(readme).toContain("node dist/cli.js --version");
+    expect(readme).toContain('"$tmpdir/node_modules/.bin/task-loop-orchestrator" --version');
+  });
+
   it("documents package smoke coverage and diagnostics", async () => {
     const readme = await readFile(join(root, "README.md"), "utf8");
 
