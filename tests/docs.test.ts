@@ -279,6 +279,72 @@ describe("documentation role boundaries", () => {
   });
 });
 
+describe("command json documentation boundaries", () => {
+  it("keeps command reference linked to the dedicated JSON output contract", async () => {
+    const commands = await readCommands();
+    const jsonOutput = await readJsonOutput();
+
+    expectContainsAll(commands, [
+      "[json-output.md](json-output.md)",
+      "Commands that produce JSON include the common CLI JSON metadata described in [json-output.md](json-output.md).",
+      "JSON: supported with `--json`",
+      "JSON: not supported"
+    ]);
+    expect(commands).not.toContain('"schemaVersion": 1');
+    expectContainsAll(jsonOutput, [
+      "# CLI JSON Output",
+      "shared metadata envelope",
+      "command-specific payload fields",
+      "schemaVersion",
+      "command",
+      "createdAt",
+      "Compatibility Policy",
+      "Command-specific payload fields remain at the top level",
+      "../schemas/cli-json.schema.json"
+    ]);
+  });
+
+  it("keeps JSON output docs and schema enum covering every JSON command", async () => {
+    const jsonOutput = await readJsonOutput();
+    const schema = await readCliJsonSchema();
+
+    expect(schema.required).toEqual(["schemaVersion", "command", "createdAt"]);
+    expect(schema.properties.schemaVersion.const).toBe(1);
+    expect(schema.properties.command.enum.sort()).toEqual([...cliJsonCommands].sort());
+
+    for (const command of cliJsonCommands) {
+      expect(jsonOutput, `docs/json-output.md should mention ${command}`).toContain(command);
+    }
+    expectContainsAll(jsonOutput, [
+      "command-specific schema branch",
+      "init",
+      "doctor",
+      "run",
+      "resume",
+      "status",
+      "checkpoint",
+      "checks",
+      "pr-plan",
+      "pr-exec",
+      "approve-pr"
+    ]);
+  });
+
+  it("keeps schema artifact and sample smoke links visible from JSON docs", async () => {
+    const jsonOutput = await readJsonOutput();
+    const schema = await readCliJsonSchema();
+
+    expect(schema.$id).toContain("schemas/cli-json.schema.json");
+    expectContainsAll(jsonOutput, [
+      "[`../schemas/cli-json.schema.json`](../schemas/cli-json.schema.json)",
+      "[`../tests/json-schema-samples.test.ts`](../tests/json-schema-samples.test.ts)",
+      "common envelope",
+      "command enum",
+      "required top-level fields"
+    ]);
+  });
+});
+
 describe("command reference documentation", () => {
   it("documents every implemented CLI command", async () => {
     const commands = await readCommands();
@@ -463,6 +529,22 @@ async function readChangelog() {
 
 async function readCommands() {
   return readFile(join(root, "docs", "commands.md"), "utf8");
+}
+
+async function readJsonOutput() {
+  return readFile(join(root, "docs", "json-output.md"), "utf8");
+}
+
+async function readCliJsonSchema() {
+  return JSON.parse(await readFile(join(root, "schemas", "cli-json.schema.json"), "utf8")) as {
+    $id: string;
+    required: string[];
+    properties: {
+      schemaVersion: { const: number };
+      command: { enum: string[] };
+      createdAt: { type: string; format: string };
+    };
+  };
 }
 
 function expectContainsAll(value: string, expectedFragments: string[]) {
