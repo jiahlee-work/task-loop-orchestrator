@@ -8,6 +8,7 @@ This document describes the model that should exist before `task-loop-orchestrat
 
 - `pr-plan` produces decision-ready command candidates only.
 - `approve-pr` stores approval records under `.orchestrator/approvals/`.
+- Execution intents can be persisted under `.orchestrator/execution-intents/` for future audited write execution.
 - `pr-exec` is dry-run/preflight oriented.
 - `pr-exec --execute` requires approval data, checks stale approvals, and still returns a blocked report before branch, commit, push, or `gh pr create`.
 - `executedCommands` remains empty in the current implementation.

@@ -1,16 +1,19 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ApprovalRecord, IntegrationCheckpointReport, LoopRun } from "./domain.js";
+import type { ApprovalRecord, ExecutionIntent, IntegrationCheckpointReport, LoopRun } from "./domain.js";
+import { parseExecutionIntent } from "./execution-intents.js";
 
 export class FileRunStore {
   private readonly runsDir: string;
   private readonly checkpointsDir: string;
   private readonly approvalsDir: string;
+  private readonly executionIntentsDir: string;
 
   constructor(private readonly rootDir: string = process.cwd()) {
     this.runsDir = join(this.rootDir, ".orchestrator", "runs");
     this.checkpointsDir = join(this.rootDir, ".orchestrator", "checkpoints");
     this.approvalsDir = join(this.rootDir, ".orchestrator", "approvals");
+    this.executionIntentsDir = join(this.rootDir, ".orchestrator", "execution-intents");
   }
 
   async save(run: LoopRun): Promise<void> {
@@ -108,12 +111,41 @@ export class FileRunStore {
     return approvals.find((approval) => approval.runId === runId);
   }
 
+  async saveExecutionIntent(intent: ExecutionIntent): Promise<void> {
+    await mkdir(this.executionIntentsDir, { recursive: true });
+    await writeFile(this.executionIntentFilePath(intent.id), `${JSON.stringify(intent, null, 2)}\n`, "utf8");
+  }
+
+  async loadExecutionIntent(intentId: string): Promise<ExecutionIntent> {
+    const content = await readFile(this.executionIntentFilePath(intentId), "utf8");
+    return parseExecutionIntent(JSON.parse(content));
+  }
+
+  async listExecutionIntents(): Promise<ExecutionIntent[]> {
+    await mkdir(this.executionIntentsDir, { recursive: true });
+    const entries = await readdir(this.executionIntentsDir);
+    const intents = await Promise.all(
+      entries
+        .filter((entry) => entry.endsWith(".json"))
+        .map(async (entry) => {
+          const content = await readFile(join(this.executionIntentsDir, entry), "utf8");
+          return parseExecutionIntent(JSON.parse(content));
+        })
+    );
+
+    return intents.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  }
+
   pathForCheckpoint(checkpointId: string): string {
     return this.checkpointFilePath(checkpointId);
   }
 
   pathForApproval(approvalId: string): string {
     return this.approvalFilePath(approvalId);
+  }
+
+  pathForExecutionIntent(intentId: string): string {
+    return this.executionIntentFilePath(intentId);
   }
 
   pathForRun(runId: string): string {
@@ -130,6 +162,10 @@ export class FileRunStore {
 
   private approvalFilePath(approvalId: string): string {
     return join(this.approvalsDir, `${approvalId}.json`);
+  }
+
+  private executionIntentFilePath(intentId: string): string {
+    return join(this.executionIntentsDir, `${intentId}.json`);
   }
 }
 

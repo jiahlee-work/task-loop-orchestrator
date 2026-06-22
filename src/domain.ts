@@ -257,6 +257,8 @@ export type PullRequestExecutionMode = "dry-run" | "execute";
 
 export type PullRequestExecutionStatus = "dry_run" | "ready" | "blocked";
 
+export type ExecutionIntentStatus = "created" | "blocked" | "expired";
+
 export interface ApprovalPlanSnapshot {
   planTitle: string;
   baseBranch: string;
@@ -290,6 +292,34 @@ export interface PullRequestExecutionReport {
   executedCommands: string[][];
   message: string;
   createdAt: string;
+}
+
+export interface ExecutionIntentCommandCandidate {
+  action: PullRequestCommandCandidate["action"];
+  command: string[];
+  reason: string;
+  decisionReady: true;
+}
+
+export interface ExecutionIntent {
+  id: string;
+  runId: string;
+  planId: string;
+  planFingerprint: string;
+  checkpointId?: string;
+  approvalId: string;
+  actor: string;
+  reason?: string;
+  createdAt: string;
+  expiresAt: string;
+  targetRef: string;
+  baseBranch: string;
+  sourceBranch: string;
+  permissionMode: PermissionMode;
+  policyVersion: string;
+  commandCandidates: ExecutionIntentCommandCandidate[];
+  status: ExecutionIntentStatus;
+  blockedReasons: string[];
 }
 
 export type ProposedSubtask = Omit<Subtask, "status" | "createdAt" | "updatedAt"> &
