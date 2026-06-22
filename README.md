@@ -82,76 +82,17 @@ Approval records are stored as JSON files under `.orchestrator/approvals/<approv
 
 ## Local Package Install
 
-The package is prepared for local installation through its `bin` entry, but it is not published to npm yet. `npm pack` runs the `prepack` script, which rebuilds `dist` before creating the tarball. The build also marks `dist/cli.js` executable for local tarball installs. The package artifact contract is intentionally small: `dist`, `schemas`, and `orchestrator.config.example.json` are the maintained shipped files.
+The package can be installed from a local tarball through its `bin` entry, but it is not published to npm yet. The shipped file allowlist is intentionally small: `dist`, `schemas`, and `orchestrator.config.example.json`.
 
-See [docs/quickstart.md](docs/quickstart.md) for the local tarball install flow and first project commands.
+- Install and first-run steps: [docs/quickstart.md](docs/quickstart.md)
+- Release candidate checks: [docs/release-checklist.md](docs/release-checklist.md)
+- Release notes draft: [CHANGELOG.md](CHANGELOG.md)
 
-Release preparation notes live in [CHANGELOG.md](CHANGELOG.md) and [docs/release-checklist.md](docs/release-checklist.md). They are checklists only; they do not authorize npm publish, tags, GitHub releases, or write-side GitHub actions.
+For the local pre-release verification bundle, run `pnpm run release:check`; it includes typecheck, tests, build, package artifact dry-run review, lint, installed binary package smoke, version output, and read-only check refresh.
 
-For the local pre-release verification bundle, run `pnpm run release:check`; it includes the package artifact dry-run review.
+For only the dry-run package file listing review, run `pnpm run package:artifacts`. For only the installed binary smoke, run `pnpm run package:smoke`. The package smoke packs the current checkout, installs the tarball into a temporary project, and verifies the core `--json` flows for `init`, `doctor`, `run`, `resume`, `status`, `checkpoint`, `pr-plan`, `pr-exec`, `approve-pr`, and `checks`.
 
-For only the dry-run package file listing review, run `pnpm run package:artifacts`.
-
-Run the repeatable package smoke before publishing or handing off an installable tarball:
-
-```bash
-pnpm run package:smoke
-```
-
-The smoke script packs the current checkout, installs the tarball into a temporary project, and runs the installed `task-loop-orchestrator` binary. It verifies the core `--json` flows for `init`, `doctor`, `run`, `resume`, `status`, `checkpoint`, `pr-plan`, `pr-exec`, `approve-pr`, and `checks`, while keeping all writes inside the temporary project.
-
-If it fails, the error includes the package smoke step label, command, cwd, exit code, and short stdout/stderr excerpts. It never creates GitHub PRs, merges, pushes, releases, or publishes to npm.
-
-```bash
-pnpm run build
-npm pack --dry-run
-npm pack --pack-destination /tmp
-```
-
-Install the packed tarball into a temporary project and run the installed command:
-
-```bash
-tmpdir="$(mktemp -d)"
-npm install --prefix "$tmpdir" /tmp/task-loop-orchestrator-0.1.0.tgz
-"$tmpdir/node_modules/.bin/task-loop-orchestrator" --help
-"$tmpdir/node_modules/.bin/task-loop-orchestrator" --version
-```
-
-After installing the package in a target project, initialize local orchestrator files before the first run:
-
-```bash
-task-loop-orchestrator doctor
-task-loop-orchestrator init
-task-loop-orchestrator doctor --github gh-cli
-task-loop-orchestrator run "Smoke task" --max-iterations 1 --json
-task-loop-orchestrator checkpoint --github gh-cli --json
-```
-
-For a fuller smoke test, initialize a temporary Git repository before running the loop so repo evidence commands have a local repository to inspect:
-
-```bash
-tmpdir="$(mktemp -d)"
-npm install --prefix "$tmpdir" /tmp/task-loop-orchestrator-0.1.0.tgz
-git -C "$tmpdir" init
-"$tmpdir/node_modules/.bin/task-loop-orchestrator" init --json
-"$tmpdir/node_modules/.bin/task-loop-orchestrator" run "Smoke task" --max-iterations 1
-```
-
-`init [--force] [--json]` prepares a project for local orchestrator state:
-
-- creates `orchestrator.config.json` from the default config when it does not exist
-- creates `.gitignore` when missing
-- appends `.orchestrator/` to `.gitignore` when needed
-- preserves existing file contents and ordering
-- skips an existing `orchestrator.config.json` unless `--force` is provided
-
-Use `--json` to see structured `created`, `updated`, and `skipped` statuses for each file.
-
-`doctor [--github none|gh-cli] [--json]` diagnoses the current project without writing files. Before `init`, it can point out missing config or `.gitignore` entries and recommend `task-loop-orchestrator init`. After `init`, it checks Node 24+, Git repository status, config loadability, `.orchestrator/` ignore coverage, and non-destructive store path accessibility.
-
-With `--github gh-cli`, doctor also attempts read-only GitHub repository and check-status diagnostics through `gh`. Missing `gh`, failed auth, missing checks, or insufficient repository access are reported as graceful warnings with recommended actions; doctor does not create or modify GitHub resources.
-
-Doctor JSON includes structured `suggestions` on checks when there is a useful follow-up command. Each suggestion has a label, command array, reason, and `destructive` flag so automation or UI layers can present the action safely. Suggestions are candidates only; doctor never executes them.
+These release and package verification commands never create GitHub PRs, merge, push, create releases, create tags, or publish to npm.
 
 ## Loop Model
 

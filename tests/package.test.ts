@@ -51,25 +51,27 @@ describe("package metadata", () => {
   it("documents and implements CLI version output", async () => {
     const cliSource = await readFile(join(root, "src", "cli.ts"), "utf8");
     const readme = await readFile(join(root, "README.md"), "utf8");
+    const quickstart = await readFile(join(root, "docs", "quickstart.md"), "utf8");
 
     expect(cliSource).toContain("task-loop-orchestrator --version");
     expect(cliSource).toContain('args.command === "--version" || args.command === "-v"');
     expect(readme).toContain("node dist/cli.js --version");
-    expect(readme).toContain('"$tmpdir/node_modules/.bin/task-loop-orchestrator" --version');
+    expect(quickstart).toContain('"$tmpdir/node_modules/.bin/task-loop-orchestrator" --version');
   });
 
   it("documents package smoke coverage and diagnostics", async () => {
     const readme = await readFile(join(root, "README.md"), "utf8");
     const releaseCheck = await readFile(join(root, "scripts", "release-check.mjs"), "utf8");
 
+    expect(readme).toContain("[docs/quickstart.md](docs/quickstart.md)");
+    expect(readme).toContain("[docs/release-checklist.md](docs/release-checklist.md)");
     expect(readme).toContain("installs the tarball into a temporary project");
     expect(readme).toContain("pnpm run release:check");
-    expect(readme).toContain("includes the package artifact dry-run review");
+    expect(readme).toContain("package artifact dry-run review");
     expect(readme).toContain("pnpm run package:artifacts");
     expect(readme).toContain("`dist`, `schemas`, and `orchestrator.config.example.json`");
     expect(readme).toContain("`checkpoint`, `pr-plan`, `pr-exec`, `approve-pr`, and `checks`");
-    expect(readme).toContain("step label, command, cwd, exit code");
-    expect(readme).toContain("never creates GitHub PRs, merges, pushes, releases, or publishes to npm");
+    expect(readme).toContain("never create GitHub PRs, merge, push, create releases, create tags, or publish to npm");
     expect(releaseCheck.indexOf('"package:artifacts"')).toBeGreaterThan(releaseCheck.indexOf('"build"'));
     expect(releaseCheck.indexOf('"package:artifacts"')).toBeLessThan(releaseCheck.indexOf('"package:smoke"'));
   });
