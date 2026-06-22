@@ -6,7 +6,7 @@ This is a pre-release checklist only. Do not publish to npm, create a GitHub rel
 
 - Confirm Node.js 24+ is active.
 - Run `pnpm install --frozen-lockfile`.
-- Run `pnpm run release:check` for the local pre-release verification bundle.
+- Run `pnpm run release:check` for the local pre-release verification bundle, including package artifact dry-run review.
 - Run `pnpm run typecheck`.
 - Run `pnpm test`.
 - Run `pnpm run build`.
@@ -20,7 +20,7 @@ This is a pre-release checklist only. Do not publish to npm, create a GitHub rel
 - Confirm `package.json` name and version are correct.
 - Confirm `package.json` `bin.task-loop-orchestrator` points to `dist/cli.js`.
 - Confirm the package `files` allowlist is limited to `dist`, `schemas`, and `orchestrator.config.example.json`.
-- Run `pnpm run package:artifacts` for the local `npm pack --dry-run --json` artifact listing review.
+- Run `pnpm run package:artifacts` directly when you want to review the local `npm pack --dry-run --json` artifact listing without the full release check.
 - Install the packed tarball into a temporary project and run `task-loop-orchestrator --help` and `task-loop-orchestrator --version`.
 
 ## Manual Safety Review

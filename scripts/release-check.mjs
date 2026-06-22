@@ -13,6 +13,7 @@ const steps = [
   { label: "typecheck", command: "pnpm", args: ["run", "typecheck"] },
   { label: "test", command: "pnpm", args: ["test"] },
   { label: "build", command: "pnpm", args: ["run", "build"] },
+  { label: "package artifacts", command: "pnpm", args: ["run", "package:artifacts"] },
   { label: "lint", command: "pnpm", args: ["run", "lint"] },
   { label: "package smoke", command: "pnpm", args: ["run", "package:smoke"] },
   { label: "version", command: "node", args: ["dist/cli.js", "--version"] },

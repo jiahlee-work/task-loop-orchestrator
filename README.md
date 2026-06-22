@@ -61,9 +61,9 @@ The package is prepared for local installation through its `bin` entry, but it i
 
 Release preparation notes live in [CHANGELOG.md](CHANGELOG.md) and [docs/release-checklist.md](docs/release-checklist.md). They are checklists only; they do not authorize npm publish, tags, GitHub releases, or write-side GitHub actions.
 
-For the local pre-release verification bundle, run `pnpm run release:check`.
+For the local pre-release verification bundle, run `pnpm run release:check`; it includes the package artifact dry-run review.
 
-For the dry-run package file listing review, run `pnpm run package:artifacts`.
+For only the dry-run package file listing review, run `pnpm run package:artifacts`.
 
 Run the repeatable package smoke before publishing or handing off an installable tarball:
 
