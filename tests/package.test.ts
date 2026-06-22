@@ -24,6 +24,7 @@ describe("package metadata", () => {
     expect(packageJson.scripts?.prepack).toBe("pnpm run build");
     expect(packageJson.scripts?.postbuild).toContain("chmodSync");
     expect(packageJson.scripts?.["package:smoke"]).toBe("node scripts/package-smoke.mjs");
+    expect(packageJson.scripts?.["release:check"]).toBe("node scripts/release-check.mjs");
   });
 
   it("guards the npm pack artifact allowlist", async () => {
@@ -60,6 +61,7 @@ describe("package metadata", () => {
     const readme = await readFile(join(root, "README.md"), "utf8");
 
     expect(readme).toContain("installs the tarball into a temporary project");
+    expect(readme).toContain("pnpm run release:check");
     expect(readme).toContain("`dist`, `schemas`, and `orchestrator.config.example.json`");
     expect(readme).toContain("`checkpoint`, `pr-plan`, `pr-exec`, `approve-pr`, and `checks`");
     expect(readme).toContain("step label, command, cwd, exit code");

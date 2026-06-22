@@ -6,6 +6,7 @@ This is a pre-release checklist only. Do not publish to npm, create a GitHub rel
 
 - Confirm Node.js 24+ is active.
 - Run `pnpm install --frozen-lockfile`.
+- Run `pnpm run release:check` for the local pre-release verification bundle.
 - Run `pnpm run typecheck`.
 - Run `pnpm test`.
 - Run `pnpm run build`.
@@ -31,6 +32,7 @@ This is a pre-release checklist only. Do not publish to npm, create a GitHub rel
 
 ## Explicitly Out Of Scope
 
+- `pnpm run release:check` is verification only and must not publish, tag, create releases, or perform write-side GitHub actions.
 - Do not run `npm publish`.
 - Do not create a GitHub release.
 - Do not create or push a release tag.

@@ -12,6 +12,7 @@
     "postbuild": "node -e \"const fs = require('node:fs'); if (fs.existsSync('dist/cli.js')) fs.chmodSync('dist/cli.js', 0o755);\"",
     "prepack": "pnpm run build",
     "package:smoke": "node scripts/package-smoke.mjs",
+    "release:check": "node scripts/release-check.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.test.json",
     "lint": "pnpm run typecheck",
     "test": "vitest run"
