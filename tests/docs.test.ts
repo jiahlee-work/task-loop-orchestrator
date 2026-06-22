@@ -224,35 +224,42 @@ describe("command reference documentation", () => {
   it("documents every implemented CLI command", async () => {
     const commands = await readCommands();
     const cliSource = await readFile(join(root, "src", "cli.ts"), "utf8");
+    const usageSignatures = extractCliUsageSignatures(cliSource);
+    const commandHeadings = extractCommandReferenceHeadings(commands);
 
-    expectContainsAll(cliSource, [
-      "task-loop-orchestrator --help",
-      "task-loop-orchestrator --version",
-      "task-loop-orchestrator init",
-      "task-loop-orchestrator doctor",
-      "task-loop-orchestrator run",
-      "task-loop-orchestrator status",
-      "task-loop-orchestrator resume",
-      "task-loop-orchestrator checkpoint",
-      "task-loop-orchestrator pr-plan",
-      "task-loop-orchestrator approve-pr",
-      "task-loop-orchestrator pr-exec",
-      "task-loop-orchestrator checks"
+    expect(usageSignatures).toEqual([
+      "--help",
+      "--version",
+      "init [--force] [--json]",
+      "doctor [--github none|gh-cli] [--json]",
+      "run <title> [--description text] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]",
+      "status [runId] [--json] [--raw]",
+      "resume <runId> [--max-iterations n] [--json]",
+      "checkpoint [runId] [--github none|gh-cli] [--json]",
+      "pr-plan [runId] [--json]",
+      "approve-pr [runId] --approved-by name [--reason text] [--json]",
+      "pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]",
+      "checks [ref] [--json]"
     ]);
-    expectContainsAll(commands, [
-      "### `--help`, `-h`",
-      "### `--version`, `-v`",
-      "### `init [--force] [--json]`",
-      "### `doctor [--github none|gh-cli] [--json]`",
-      "### `run <title> [options] [--json]`",
-      "### `resume <runId> [--max-iterations n] [--json]`",
-      "### `status [runId] [--json] [--raw]`",
-      "### `checkpoint [runId] [--github none|gh-cli] [--json]`",
-      "### `checks [ref] [--json]`",
-      "### `pr-plan [runId] [--json]`",
-      "### `approve-pr [runId] --approved-by name [--reason text] [--json]`",
-      "### `pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]`"
+    expect(commandHeadings).toEqual([
+      "--help",
+      "--version",
+      "init",
+      "doctor",
+      "run",
+      "resume",
+      "status",
+      "checkpoint",
+      "checks",
+      "pr-plan",
+      "approve-pr",
+      "pr-exec"
     ]);
+
+    const documentedCommands = new Set(commandHeadings);
+    for (const signature of usageSignatures) {
+      expect(documentedCommands.has(commandNameFromSignature(signature))).toBe(true);
+    }
   });
 
   it("documents JSON support and write-side boundaries", async () => {
@@ -302,4 +309,24 @@ function expectContainsAll(value: string, expectedFragments: string[]) {
   for (const fragment of expectedFragments) {
     expect(value).toContain(fragment);
   }
+}
+
+function extractCliUsageSignatures(cliSource: string) {
+  const usageMatch = cliSource.match(/console\.log\(`Usage:\n(?<usage>[\s\S]*?)`\);/);
+  expect(usageMatch?.groups?.usage).toBeDefined();
+
+  return usageMatch!.groups!.usage.split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("task-loop-orchestrator "))
+    .map((line) => line.replace(/^task-loop-orchestrator\s+/, ""));
+}
+
+function extractCommandReferenceHeadings(commandsDoc: string) {
+  return [...commandsDoc.matchAll(/^### `([^`]+)`/gm)]
+    .map((match) => commandNameFromSignature(match[1]))
+    .filter((heading) => heading !== undefined);
+}
+
+function commandNameFromSignature(signature: string) {
+  return signature.split(/\s+/)[0].replace(/,$/, "");
 }
