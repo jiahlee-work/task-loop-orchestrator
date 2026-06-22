@@ -2,15 +2,8 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { GitHubCheckSummary, LoopRun } from "../src/domain.js";
-import { createPullRequestApproval, preparePullRequestExecution } from "../src/approval.js";
-import { createCliJsonReport, cliJsonSchemaVersion } from "../src/cli-json.js";
-import { runDoctor } from "../src/doctor.js";
-import { initProject } from "../src/init.js";
-import { createIntegrationCheckpoint } from "../src/integration.js";
-import { createPullRequestPlan } from "../src/pr-plan.js";
-import { MockRepoProvider } from "../src/providers.js";
-import { createRunCliReport } from "../src/run-report.js";
+import { cliJsonCommands, cliJsonSchemaVersion } from "../src/cli-json.js";
+import { buildCliJsonSamples, type JsonObject } from "./fixtures/cli-json-samples.js";
 
 const root = process.cwd();
 const tempDirs: string[] = [];
@@ -24,32 +17,13 @@ describe("CLI JSON schema sample smoke", () => {
     const schema = await readSchema();
     const initRoot = await tempRoot("task-loop-schema-init-");
     const doctorRoot = await tempRoot("task-loop-schema-doctor-");
-    const run = loopRun();
-    const repo = new MockRepoProvider({ status: "", diff: "" });
-    const checkpoint = await createIntegrationCheckpoint({ run, repo });
-    const prPlan = await createPullRequestPlan({ run, repo, checkpoint });
-    const prExec = preparePullRequestExecution({ plan: prPlan });
-    const approval = createPullRequestApproval(prPlan, {
-      approvedBy: "schema-smoke",
-      reason: "Schema sample approval."
+    const samples = await buildCliJsonSamples({
+      initRoot,
+      doctorRoot,
+      createdAt: "2026-06-22T00:00:00.000Z"
     });
 
-    const samples: JsonObject[] = [
-      toJsonObject(createCliJsonReport("doctor", await runDoctor(doctorRoot), "2026-06-22T00:00:00.000Z")),
-      toJsonObject(createCliJsonReport("init", await initProject(initRoot), "2026-06-22T00:00:00.000Z")),
-      toJsonObject(createCliJsonReport(
-        "run",
-        createRunCliReport(run, {
-          pathForRun: (runId) => join(run.context.runId, ".orchestrator", "runs", `${runId}.json`)
-        }),
-        "2026-06-22T00:00:00.000Z"
-      )),
-      toJsonObject(createCliJsonReport("checks", checksSummary(), "2026-06-22T00:00:00.000Z")),
-      toJsonObject(createCliJsonReport("checkpoint", checkpoint, "2026-06-22T00:00:00.000Z")),
-      toJsonObject(createCliJsonReport("pr-plan", prPlan, "2026-06-22T00:00:00.000Z")),
-      toJsonObject(createCliJsonReport("pr-exec", prExec, "2026-06-22T00:00:00.000Z")),
-      toJsonObject(createCliJsonReport("approve-pr", approval, "2026-06-22T00:00:00.000Z"))
-    ];
+    expect(samples.map((sample) => sample.command).sort()).toEqual([...cliJsonCommands].sort());
 
     for (const sample of samples) {
       expectSampleMatchesSchemaRequiredFields(schema, sample);
@@ -129,63 +103,6 @@ function requiredFields(schema: JsonObject, definition: JsonObject, seenRefs = n
   return Array.isArray(definition.required) ? definition.required.filter((field): field is string => typeof field === "string") : [];
 }
 
-function checksSummary(): GitHubCheckSummary {
-  return {
-    status: "success",
-    summary: "GitHub checks success (1 check).",
-    ref: "HEAD",
-    source: "github",
-    details: [
-      {
-        name: "verify",
-        status: "success",
-        summary: "success"
-      }
-    ]
-  };
-}
-
-function loopRun(): LoopRun {
-  return {
-    id: "run-schema-smoke",
-    spec: {
-      id: "task-schema-smoke",
-      title: "Schema smoke",
-      acceptanceCriteria: ["Run report sample matches schema."],
-      permissionMode: "write"
-    },
-    context: {
-      runId: "run-schema-smoke",
-      task: {
-        id: "task-schema-smoke",
-        title: "Schema smoke",
-        acceptanceCriteria: ["Run report sample matches schema."],
-        permissionMode: "write"
-      },
-      items: []
-    },
-    graph: {
-      subtasks: [
-        {
-          id: "subtask-schema-smoke",
-          title: "Complete schema smoke",
-          dependsOn: [],
-          status: "completed",
-          createdAt: "2026-06-22T00:00:00.000Z",
-          updatedAt: "2026-06-22T00:00:00.000Z"
-        }
-      ],
-      conflicts: []
-    },
-    events: [],
-    status: "completed",
-    iterations: 1,
-    permissionMode: "write",
-    createdAt: "2026-06-22T00:00:00.000Z",
-    updatedAt: "2026-06-22T00:00:00.000Z"
-  };
-}
-
 function asRecord(value: unknown): JsonObject | undefined {
   return isRecord(value) ? value : undefined;
 }
@@ -193,9 +110,3 @@ function asRecord(value: unknown): JsonObject | undefined {
 function isRecord(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null;
 }
-
-function toJsonObject(value: object): JsonObject {
-  return value as unknown as JsonObject;
-}
-
-type JsonObject = Record<string, unknown>;

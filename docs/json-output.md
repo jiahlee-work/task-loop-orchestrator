@@ -130,3 +130,5 @@ Commands that need an existing run return an enveloped not-found response when `
 ## JSON Schema
 
 The machine-readable schema artifact is available at [`../schemas/cli-json.schema.json`](../schemas/cli-json.schema.json). The schema validates the common envelope and command enum while allowing command-specific payload fields to remain flexible.
+
+Representative JSON outputs are also covered by the lightweight sample smoke in [`../tests/json-schema-samples.test.ts`](../tests/json-schema-samples.test.ts). Those samples are built from test-only fixtures and checked against the schema envelope, command enum, command-specific branch, and required top-level fields without introducing a full JSON Schema validator.
