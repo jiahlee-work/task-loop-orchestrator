@@ -1,10 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ExecutorMode, PermissionMode, ReviewerMode } from "./domain.js";
+import type { ExecutorMode, GitHubProviderMode, PermissionMode, ReviewerMode } from "./domain.js";
 
 export interface OrchestratorConfig {
   executor: ExecutorMode;
   reviewer: ReviewerMode;
+  github: GitHubProviderMode;
   permissionMode: PermissionMode;
   worktree: {
     enabled: boolean;
@@ -15,6 +16,7 @@ export interface OrchestratorConfig {
 export const defaultOrchestratorConfig: OrchestratorConfig = {
   executor: "mock",
   reviewer: "mock",
+  github: "none",
   permissionMode: "write",
   worktree: {
     enabled: false
@@ -40,6 +42,7 @@ export function normalizeConfig(input: Partial<OrchestratorConfig>): Orchestrato
   return {
     executor: normalizeExecutorMode(input.executor),
     reviewer: normalizeReviewerMode(input.reviewer),
+    github: normalizeGitHubProviderMode(input.github),
     permissionMode: normalizePermissionMode(input.permissionMode),
     worktree: {
       enabled: typeof input.worktree?.enabled === "boolean" ? input.worktree.enabled : defaultOrchestratorConfig.worktree.enabled
@@ -65,6 +68,14 @@ export function normalizeReviewerMode(value: unknown): ReviewerMode {
   }
 
   return defaultOrchestratorConfig.reviewer;
+}
+
+export function normalizeGitHubProviderMode(value: unknown): GitHubProviderMode {
+  if (value === "none" || value === "gh-cli") {
+    return value;
+  }
+
+  return defaultOrchestratorConfig.github;
 }
 
 export function normalizePermissionMode(value: unknown): PermissionMode {

@@ -4,9 +4,13 @@ export type ExecutorMode = "mock" | "codex-cli-dry-run" | "codex-cli";
 
 export type ReviewerMode = "mock" | "local-evidence";
 
+export type GitHubProviderMode = "none" | "gh-cli";
+
 export type ReviewVerdict = "accept" | "request_changes" | "reschedule" | "owner_decision";
 
 export type IntegrationCheckpointStatus = "clean" | "needs_attention" | "blocked";
+
+export type GitHubCheckStatus = "success" | "pending" | "failure" | "error" | "not_found" | "unknown";
 
 export type ReviewEvidenceKind =
   | "executor_summary"
@@ -174,6 +178,35 @@ export interface IntegrationCheckpointMaintainerActionCandidate {
   decisionReady: true;
 }
 
+export interface GitHubRepositoryInfo {
+  name: string;
+  owner: string;
+  url: string;
+  defaultBranch: string;
+}
+
+export interface GitHubPullRequestSummary {
+  number: number;
+  title: string;
+  state: string;
+  headRefName: string;
+  baseRefName: string;
+  url: string;
+  isDraft: boolean;
+}
+
+export interface GitHubCheckSummary {
+  status: GitHubCheckStatus;
+  summary: string;
+  ref?: string;
+  source: "github";
+  details?: Array<{
+    name: string;
+    status: GitHubCheckStatus;
+    summary?: string;
+  }>;
+}
+
 export interface IntegrationCheckpointReport {
   id: string;
   runId: string;
@@ -182,8 +215,11 @@ export interface IntegrationCheckpointReport {
   repoStatus: string;
   diffStat: string;
   ciCheck: {
-    status: "not_run";
+    status: GitHubCheckStatus | "not_run";
     summary: string;
+    ref?: string;
+    source: "placeholder" | "github";
+    details?: GitHubCheckSummary["details"];
   };
   conflictRisks: string[];
   recommendedNextAction: string;

@@ -1,12 +1,18 @@
 #!/usr/bin/env node
 import { appendEvent } from "./audit.js";
-import { loadOrchestratorConfig, normalizeExecutorMode, normalizePermissionMode, normalizeReviewerMode } from "./config.js";
-import type { ExecutorMode, PermissionMode, ReviewerMode } from "./domain.js";
+import {
+  loadOrchestratorConfig,
+  normalizeExecutorMode,
+  normalizeGitHubProviderMode,
+  normalizePermissionMode,
+  normalizeReviewerMode
+} from "./config.js";
+import type { ExecutorMode, GitHubProviderMode, PermissionMode, ReviewerMode } from "./domain.js";
 import { CodexCliExecutor } from "./executors.js";
 import { createIntegrationCheckpoint } from "./integration.js";
 import { RootOrchestrator, createTaskSpec } from "./orchestrator.js";
 import { checkPermission } from "./permission.js";
-import { createGitToolProviders } from "./providers.js";
+import { createGitToolProviders, GitHubCliProvider } from "./providers.js";
 import { LocalEvidenceReviewer } from "./reviewers.js";
 import { createMockRoleProviders, type RoleProviders } from "./roles.js";
 import { FileRunStore } from "./store.js";
@@ -68,12 +74,16 @@ function reviewerFlag(value: string | undefined): ReviewerMode {
   return normalizeReviewerMode(value);
 }
 
+function githubFlag(value: string | undefined): GitHubProviderMode {
+  return normalizeGitHubProviderMode(value);
+}
+
 function printUsage(): void {
   console.log(`Usage:
   task-loop-orchestrator run <title> [--description text] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n]
   task-loop-orchestrator status [runId] [--json]
   task-loop-orchestrator resume <runId> [--max-iterations n]
-  task-loop-orchestrator checkpoint [runId] [--json]`);
+  task-loop-orchestrator checkpoint [runId] [--github none|gh-cli] [--json]`);
 }
 
 async function runCommand(args: ParsedArgs): Promise<void> {
@@ -162,6 +172,7 @@ async function resumeCommand(args: ParsedArgs): Promise<void> {
 
 async function checkpointCommand(args: ParsedArgs): Promise<void> {
   const store = new FileRunStore(process.cwd());
+  const config = await loadOrchestratorConfig(process.cwd());
   const runId = args.positional[0];
   let run = runId ? await store.load(runId) : await store.latest();
 
@@ -175,7 +186,11 @@ async function checkpointCommand(args: ParsedArgs): Promise<void> {
     throw new Error(`Checkpoint requires read_state permission: ${permission.reason}`);
   }
 
-  const tools = createGitToolProviders(process.cwd());
+  const githubMode = stringFlag(args.flags, "github") ? githubFlag(stringFlag(args.flags, "github")) : config.github;
+  const tools = createGitToolProviders(
+    process.cwd(),
+    githubMode === "gh-cli" ? new GitHubCliProvider(process.cwd()) : undefined
+  );
   const report = await createIntegrationCheckpoint({
     run,
     repo: tools.repo,

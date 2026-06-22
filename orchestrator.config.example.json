@@ -1,6 +1,7 @@
 {
   "executor": "mock",
   "reviewer": "mock",
+  "github": "none",
   "permissionMode": "write",
   "worktree": {
     "enabled": false

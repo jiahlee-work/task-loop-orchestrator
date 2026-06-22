@@ -22,6 +22,7 @@ node dist/cli.js status
 node dist/cli.js status --json
 node dist/cli.js checkpoint
 node dist/cli.js checkpoint --json
+node dist/cli.js checkpoint --github gh-cli --json
 ```
 
 Runs are stored as JSON files under `.orchestrator/runs/<runId>.json`.
@@ -53,6 +54,8 @@ External integrations are provider interfaces only at this stage. The default re
 
 The CLI uses a read-focused Git repo provider for discovery. It reads `git status --short` and `git diff --stat` only. Branch and worktree creation are represented as permission-gated dry-run boundaries, not executed.
 
+GitHub status is optional and disabled by default. `--github gh-cli` enables a read-only GitHub CLI provider for checkpoint checks. It uses `gh repo view`, `gh pr list`, and `gh pr checks`; it does not create or modify PRs, issues, releases, merges, or repository state. If `gh` is missing, unauthenticated, or cannot read the repository, checkpoint generation falls back to an `unknown` or `not_found` CI summary instead of failing.
+
 ## Executor Modes
 
 - `mock`: default executor; returns a deterministic mock `RoleReport`.
@@ -69,6 +72,7 @@ Optional config file: `orchestrator.config.json`.
 {
   "executor": "mock",
   "reviewer": "mock",
+  "github": "none",
   "permissionMode": "write",
   "worktree": {
     "enabled": false
@@ -95,7 +99,9 @@ Evidence currently includes executor summary, executor command when present, rep
 
 ## Integration Checkpoints
 
-`checkpoint [runId] [--json]` creates a read-only decision-ready brief for the latest run or a specific run. It reads repo status and diff stat, summarizes graph counts, lists conflict risks, carries owner decision items forward, and recommends the next action.
+`checkpoint [runId] [--github none|gh-cli] [--json]` creates a read-only decision-ready brief for the latest run or a specific run. It reads repo status and diff stat, summarizes graph counts, lists conflict risks, carries owner decision items forward, and recommends the next action.
+
+With `--github gh-cli`, checkpoint `ciCheck` is populated from GitHub checks when available. Without it, `ciCheck` remains a safe `not_run` placeholder.
 
 Checkpoint status:
 

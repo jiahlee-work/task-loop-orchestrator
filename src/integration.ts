@@ -20,7 +20,11 @@ export interface IntegrationCheckpointInput {
 export async function createIntegrationCheckpoint(
   input: IntegrationCheckpointInput
 ): Promise<IntegrationCheckpointReport> {
-  const [repoStatus, diffStat] = await Promise.all([input.repo.getStatus(), input.repo.getDiff()]);
+  const [repoStatus, diffStat, ciCheck] = await Promise.all([
+    input.repo.getStatus(),
+    input.repo.getDiff(),
+    input.github?.getCheckStatus().catch(() => undefined)
+  ]);
   const counts = countSubtasks(input.run.graph.subtasks);
   const ownerDecisionItems = collectOwnerDecisionItems(input.run);
   const conflictRisks = collectConflictRisks(input.run, repoStatus, diffStat);
@@ -39,9 +43,10 @@ export async function createIntegrationCheckpoint(
     counts,
     repoStatus,
     diffStat,
-    ciCheck: {
+    ciCheck: ciCheck ?? {
       status: "not_run",
-      summary: "CI/check integration is not connected; placeholder only."
+      summary: "CI/check integration is not connected; placeholder only.",
+      source: "placeholder"
     },
     conflictRisks,
     recommendedNextAction: recommendNextAction(status, counts, ownerDecisionItems),

@@ -31,6 +31,7 @@ describe("loadOrchestratorConfig", () => {
       JSON.stringify({
         executor: "codex-cli-dry-run",
         reviewer: "local-evidence",
+        github: "gh-cli",
         permissionMode: "maintainer",
         worktree: {
           enabled: true
@@ -43,6 +44,7 @@ describe("loadOrchestratorConfig", () => {
     await expect(loadOrchestratorConfig(root)).resolves.toEqual({
       executor: "codex-cli-dry-run",
       reviewer: "local-evidence",
+      github: "gh-cli",
       permissionMode: "maintainer",
       worktree: {
         enabled: true

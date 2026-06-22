@@ -110,6 +110,40 @@ describe("createIntegrationCheckpoint", () => {
     expect(persistedCheckpoint.id).toBe(report.id);
     expect(persistedRun.events.some((event) => event.kind === "integration_checkpoint_ready")).toBe(true);
   });
+
+  it("reflects GitHub check summary when a GitHub provider is present", async () => {
+    const run = loopRun([subtask("completed")]);
+
+    const report = await createIntegrationCheckpoint({
+      run,
+      repo: new MockRepoProvider({ status: "", diff: "" }),
+      github: {
+        async getRepositoryInfo() {
+          return undefined;
+        },
+        async listPullRequests() {
+          return [];
+        },
+        async getCheckStatus() {
+          return {
+            status: "pending",
+            summary: "GitHub checks pending (1 check).",
+            ref: "main",
+            source: "github",
+            details: [{ name: "test", status: "pending" }]
+          };
+        }
+      }
+    });
+
+    expect(report.ciCheck).toEqual({
+      status: "pending",
+      summary: "GitHub checks pending (1 check).",
+      ref: "main",
+      source: "github",
+      details: [{ name: "test", status: "pending" }]
+    });
+  });
 });
 
 function loopRun(subtasks: Subtask[]): LoopRun {
