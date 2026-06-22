@@ -87,7 +87,8 @@ function printUsage(): void {
   task-loop-orchestrator resume <runId> [--max-iterations n]
   task-loop-orchestrator checkpoint [runId] [--github none|gh-cli] [--json]
   task-loop-orchestrator pr-plan [runId] [--json]
-  task-loop-orchestrator pr-exec [runId] [--execute] [--approved-by name] [--json]
+  task-loop-orchestrator approve-pr [runId] --approved-by name [--reason text] [--json]
+  task-loop-orchestrator pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]
   task-loop-orchestrator checks [ref] [--json]`);
 }
 
@@ -309,7 +310,7 @@ async function prExecCommand(args: ParsedArgs): Promise<void> {
     checkpoint
   });
   const approvedBy = stringFlag(args.flags, "approved-by");
-  const approval = approvedBy ? createPullRequestApproval(plan, { approvedBy, reason: stringFlag(args.flags, "reason") }) : undefined;
+  const approval = await resolveApprovalForPrExec(store, args, plan, approvedBy);
   const report = preparePullRequestExecution({
     plan,
     approval,
@@ -333,6 +334,46 @@ async function prExecCommand(args: ParsedArgs): Promise<void> {
   for (const candidate of report.commandCandidates) {
     console.log(`- ${candidate.action}: ${candidate.command.join(" ")}`);
   }
+}
+
+async function approvePrCommand(args: ParsedArgs): Promise<void> {
+  const store = new FileRunStore(process.cwd());
+  const runId = args.positional[0];
+  const run = runId ? await store.load(runId) : await store.latest();
+
+  if (!run) {
+    console.log("No runs found.");
+    return;
+  }
+
+  const approvedBy = stringFlag(args.flags, "approved-by");
+  if (!approvedBy?.trim()) {
+    throw new Error("approve-pr requires --approved-by.");
+  }
+
+  const checkpoint = await store.latestCheckpoint(run.id);
+  const tools = createGitToolProviders(process.cwd());
+  const plan = await createPullRequestPlan({
+    run,
+    repo: tools.repo,
+    checkpoint
+  });
+  const approval = createPullRequestApproval(plan, {
+    approvedBy,
+    reason: stringFlag(args.flags, "reason")
+  });
+  await store.saveApproval(approval);
+
+  if (args.flags.json === true) {
+    console.log(JSON.stringify(approval, null, 2));
+    return;
+  }
+
+  console.log(`Approval ${approval.id}: ${approval.status}`);
+  console.log(`Run: ${approval.runId}`);
+  console.log(`Plan: ${approval.planId}`);
+  console.log(`Approved by: ${approval.approvedBy}`);
+  console.log(`Saved: ${store.pathForApproval(approval.id)}`);
 }
 
 async function main(): Promise<void> {
@@ -378,7 +419,30 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (args.command === "approve-pr") {
+    await approvePrCommand(args);
+    return;
+  }
+
   throw new Error(`Unknown command: ${args.command}`);
+}
+
+async function resolveApprovalForPrExec(
+  store: FileRunStore,
+  args: ParsedArgs,
+  plan: Awaited<ReturnType<typeof createPullRequestPlan>>,
+  approvedBy: string | undefined
+) {
+  const approvalId = stringFlag(args.flags, "approval");
+  if (approvalId) {
+    return store.loadApproval(approvalId);
+  }
+
+  if (approvedBy) {
+    return createPullRequestApproval(plan, { approvedBy, reason: stringFlag(args.flags, "reason") });
+  }
+
+  return store.latestApprovalForRun(plan.runId);
 }
 
 main().catch((error: unknown) => {

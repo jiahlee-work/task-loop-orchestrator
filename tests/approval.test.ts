@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { PullRequestPlan } from "../src/domain.js";
 import { createPullRequestApproval, preparePullRequestExecution } from "../src/approval.js";
+import { FileRunStore } from "../src/store.js";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 describe("PR execution approval preflight", () => {
   it("defaults to dry-run and never executes command candidates", () => {
@@ -49,6 +53,50 @@ describe("PR execution approval preflight", () => {
     expect(report.blockedReasons).toEqual(
       expect.arrayContaining(["Latest checkpoint is needs_attention.", "Execution mode requires an approval record."])
     );
+  });
+
+  it("persists approvals and loads latest approvals by plan and run", async () => {
+    const root = await mkdtemp(join(tmpdir(), "task-loop-approval-"));
+    const store = new FileRunStore(root);
+    const plan = prPlan();
+    const approval = createPullRequestApproval(plan, {
+      approvedBy: "maintainer",
+      reason: "Approved after reviewing checkpoint."
+    });
+
+    try {
+      await store.saveApproval(approval);
+
+      await expect(store.loadApproval(approval.id)).resolves.toEqual(approval);
+      await expect(store.latestApprovalForPlan(plan.id)).resolves.toEqual(approval);
+      await expect(store.latestApprovalForRun(plan.runId)).resolves.toEqual(approval);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("uses a persisted approved approval but still blocks write execution at the boundary", async () => {
+    const root = await mkdtemp(join(tmpdir(), "task-loop-approval-"));
+    const store = new FileRunStore(root);
+    const plan = prPlan();
+    const approval = createPullRequestApproval(plan, {
+      approvedBy: "maintainer"
+    });
+
+    try {
+      await store.saveApproval(approval);
+      const persisted = await store.loadApproval(approval.id);
+      const report = preparePullRequestExecution({ plan, approval: persisted, mode: "execute" });
+
+      expect(report.status).toBe("blocked");
+      expect(report.approval?.id).toBe(approval.id);
+      expect(report.blockedReasons).toContain(
+        "Write execution is not implemented; branch, commit, push, and PR creation remain blocked at the boundary."
+      );
+      expect(report.executedCommands).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
 

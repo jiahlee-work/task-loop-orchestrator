@@ -1,14 +1,16 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { IntegrationCheckpointReport, LoopRun } from "./domain.js";
+import type { ApprovalRecord, IntegrationCheckpointReport, LoopRun } from "./domain.js";
 
 export class FileRunStore {
   private readonly runsDir: string;
   private readonly checkpointsDir: string;
+  private readonly approvalsDir: string;
 
   constructor(private readonly rootDir: string = process.cwd()) {
     this.runsDir = join(this.rootDir, ".orchestrator", "runs");
     this.checkpointsDir = join(this.rootDir, ".orchestrator", "checkpoints");
+    this.approvalsDir = join(this.rootDir, ".orchestrator", "approvals");
   }
 
   async save(run: LoopRun): Promise<void> {
@@ -71,8 +73,47 @@ export class FileRunStore {
     return runId ? checkpoints.find((checkpoint) => checkpoint.runId === runId) : checkpoints[0];
   }
 
+  async saveApproval(approval: ApprovalRecord): Promise<void> {
+    await mkdir(this.approvalsDir, { recursive: true });
+    await writeFile(this.approvalFilePath(approval.id), `${JSON.stringify(approval, null, 2)}\n`, "utf8");
+  }
+
+  async loadApproval(approvalId: string): Promise<ApprovalRecord> {
+    const content = await readFile(this.approvalFilePath(approvalId), "utf8");
+    return JSON.parse(content) as ApprovalRecord;
+  }
+
+  async listApprovals(): Promise<ApprovalRecord[]> {
+    await mkdir(this.approvalsDir, { recursive: true });
+    const entries = await readdir(this.approvalsDir);
+    const approvals = await Promise.all(
+      entries
+        .filter((entry) => entry.endsWith(".json"))
+        .map(async (entry) => {
+          const content = await readFile(join(this.approvalsDir, entry), "utf8");
+          return JSON.parse(content) as ApprovalRecord;
+        })
+    );
+
+    return approvals.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  }
+
+  async latestApprovalForPlan(planId: string): Promise<ApprovalRecord | undefined> {
+    const approvals = await this.listApprovals();
+    return approvals.find((approval) => approval.planId === planId);
+  }
+
+  async latestApprovalForRun(runId: string): Promise<ApprovalRecord | undefined> {
+    const approvals = await this.listApprovals();
+    return approvals.find((approval) => approval.runId === runId);
+  }
+
   pathForCheckpoint(checkpointId: string): string {
     return this.checkpointFilePath(checkpointId);
+  }
+
+  pathForApproval(approvalId: string): string {
+    return this.approvalFilePath(approvalId);
   }
 
   pathForRun(runId: string): string {
@@ -85,6 +126,10 @@ export class FileRunStore {
 
   private checkpointFilePath(checkpointId: string): string {
     return join(this.checkpointsDir, `${checkpointId}.json`);
+  }
+
+  private approvalFilePath(approvalId: string): string {
+    return join(this.approvalsDir, `${approvalId}.json`);
   }
 }
 

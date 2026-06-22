@@ -30,12 +30,15 @@ node dist/cli.js checkpoint --json
 node dist/cli.js checkpoint --github gh-cli --json
 node dist/cli.js checks HEAD --json
 node dist/cli.js pr-plan --json
+node dist/cli.js approve-pr --approved-by maintainer --reason "Reviewed checkpoint and PR plan" --json
 node dist/cli.js pr-exec --json
+node dist/cli.js pr-exec --execute --approval approval_xxx --json
 node dist/cli.js pr-exec --execute --approved-by maintainer --json
 ```
 
 Runs are stored as JSON files under `.orchestrator/runs/<runId>.json`.
 Checkpoint reports are stored as JSON files under `.orchestrator/checkpoints/<checkpointId>.json`.
+Approval records are stored as JSON files under `.orchestrator/approvals/<approvalId>.json`.
 
 ## Loop Model
 
@@ -134,13 +137,17 @@ The plan includes a source branch hint, base branch, PR title/body, precondition
 
 A non-clean checkpoint or dirty repository is reported in `blockedReasons`; users must resolve those before treating the PR plan as ready for execution.
 
-`pr-exec [runId] [--execute] [--approved-by name] [--json]` creates an approval-aware execution preflight report from the PR plan. The default mode is dry-run and never executes commands. `--execute` requires approval data, but write execution is still blocked at the boundary until a later implementation adds an explicit, audited command runner.
+`approve-pr [runId] --approved-by name [--reason text] [--json]` creates and stores an audit-friendly approval record for the latest PR plan shape.
+
+`pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]` creates an approval-aware execution preflight report from the PR plan. The default mode is dry-run and never executes commands. `--execute` requires approval data, but write execution is still blocked at the boundary until a later implementation adds an explicit, audited command runner. If `--approval` is omitted, `pr-exec` tries the latest stored approval for the run; `--approved-by` can still create an in-memory approval for one-off preflight checks.
 
 Current approval model:
 
 - no `--execute`: returns `dry_run` with command candidates and no executed commands
 - `--execute` without `--approved-by`: returns `blocked`
-- `--execute --approved-by name`: creates an approval record, then still blocks before branch/commit/push/PR creation because write execution is not implemented
+- `approve-pr --approved-by name`: persists an approval under `.orchestrator/approvals`
+- `pr-exec --execute --approval approvalId`: loads the stored approval, then still blocks before branch/commit/push/PR creation because write execution is not implemented
+- `pr-exec --execute --approved-by name`: creates an in-memory approval for preflight, then still blocks before write execution
 
 ## CI
 
