@@ -36,6 +36,13 @@ describe("PR execution approval preflight", () => {
 
     expect(approval.status).toBe("approved");
     expect(approval.scope).toBe("pr_execution");
+    expect(approval.planSnapshot).toEqual({
+      planTitle: "Prepare PR workflow",
+      baseBranch: "main",
+      sourceBranchHint: "orchestrator/run1",
+      blockedReasons: [],
+      commandCandidateActions: ["create_branch", "create_pr"]
+    });
     expect(report.status).toBe("blocked");
     expect(report.approval?.approvedBy).toBe("maintainer");
     expect(report.blockedReasons).toContain(
@@ -70,6 +77,15 @@ describe("PR execution approval preflight", () => {
       await expect(store.loadApproval(approval.id)).resolves.toEqual(approval);
       await expect(store.latestApprovalForPlan(plan.id)).resolves.toEqual(approval);
       await expect(store.latestApprovalForRun(plan.runId)).resolves.toEqual(approval);
+      await expect(store.loadApproval(approval.id)).resolves.toMatchObject({
+        planSnapshot: {
+          planTitle: plan.title,
+          baseBranch: plan.baseBranch,
+          sourceBranchHint: plan.sourceBranchHint,
+          blockedReasons: plan.blockedReasons,
+          commandCandidateActions: ["create_branch", "create_pr"]
+        }
+      });
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -98,13 +114,71 @@ describe("PR execution approval preflight", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it("does not mark approval stale when the current checkpoint matches", () => {
+    const plan = prPlan([], "checkpoint-current");
+    const approval = createPullRequestApproval(plan, {
+      approvedBy: "maintainer"
+    });
+
+    const report = preparePullRequestExecution({ plan, approval, mode: "execute" });
+
+    expect(report.blockedReasons.some((reason) => reason.startsWith("Stale approval:"))).toBe(false);
+    expect(report.blockedReasons).toContain(
+      "Write execution is not implemented; branch, commit, push, and PR creation remain blocked at the boundary."
+    );
+    expect(report.executedCommands).toEqual([]);
+  });
+
+  it("blocks stale approvals when the current checkpoint changed", () => {
+    const approvedPlan = prPlan([], "checkpoint-old");
+    const currentPlan = prPlan([], "checkpoint-current");
+    const approval = createPullRequestApproval(approvedPlan, {
+      approvedBy: "maintainer"
+    });
+
+    const report = preparePullRequestExecution({ plan: currentPlan, approval, mode: "execute" });
+
+    expect(report.status).toBe("blocked");
+    expect(report.blockedReasons).toContain(
+      "Stale approval: approved checkpoint checkpoint-old does not match current checkpoint checkpoint-current."
+    );
+    expect(report.blockedReasons).not.toContain(
+      "Write execution is not implemented; branch, commit, push, and PR creation remain blocked at the boundary."
+    );
+    expect(report.executedCommands).toEqual([]);
+  });
+
+  it("blocks persisted approved approvals when they are stale", async () => {
+    const root = await mkdtemp(join(tmpdir(), "task-loop-approval-"));
+    const store = new FileRunStore(root);
+    const approvedPlan = prPlan([], "checkpoint-old");
+    const currentPlan = prPlan([], "checkpoint-current");
+    const approval = createPullRequestApproval(approvedPlan, {
+      approvedBy: "maintainer"
+    });
+
+    try {
+      await store.saveApproval(approval);
+      const persisted = await store.loadApproval(approval.id);
+      const report = preparePullRequestExecution({ plan: currentPlan, approval: persisted, mode: "execute" });
+
+      expect(report.status).toBe("blocked");
+      expect(report.blockedReasons).toContain(
+        "Stale approval: approved checkpoint checkpoint-old does not match current checkpoint checkpoint-current."
+      );
+      expect(report.executedCommands).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 
-function prPlan(blockedReasons: string[] = []): PullRequestPlan {
+function prPlan(blockedReasons: string[] = [], checkpointId = "checkpoint-1"): PullRequestPlan {
   return {
     id: "prplan-1",
     runId: "run-1",
-    checkpointId: "checkpoint-1",
+    checkpointId,
     sourceBranchHint: "orchestrator/run1",
     baseBranch: "main",
     title: "Prepare PR workflow",

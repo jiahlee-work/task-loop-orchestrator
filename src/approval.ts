@@ -1,6 +1,7 @@
 import type {
   ApprovalRecord,
   ApprovalStatus,
+  ApprovalPlanSnapshot,
   PullRequestExecutionMode,
   PullRequestExecutionReport,
   PullRequestPlan
@@ -27,6 +28,7 @@ export function createPullRequestApproval(plan: PullRequestPlan, input: CreateAp
     planId: plan.id,
     runId: plan.runId,
     checkpointId: plan.checkpointId,
+    planSnapshot: createApprovalPlanSnapshot(plan),
     status,
     approvedBy: input.approvedBy,
     reason: input.reason,
@@ -36,7 +38,7 @@ export function createPullRequestApproval(plan: PullRequestPlan, input: CreateAp
 
 export function preparePullRequestExecution(input: PreparePullRequestExecutionInput): PullRequestExecutionReport {
   const mode = input.mode ?? "dry-run";
-  const approvalBlockedReasons = approvalBlockedReasonsFor(mode, input.approval);
+  const approvalBlockedReasons = approvalBlockedReasonsFor(mode, input.plan, input.approval);
   const executionBlockedReasons =
     mode === "execute" && approvalBlockedReasons.length === 0
       ? ["Write execution is not implemented; branch, commit, push, and PR creation remain blocked at the boundary."]
@@ -59,7 +61,11 @@ export function preparePullRequestExecution(input: PreparePullRequestExecutionIn
   };
 }
 
-function approvalBlockedReasonsFor(mode: PullRequestExecutionMode, approval: ApprovalRecord | undefined): string[] {
+function approvalBlockedReasonsFor(
+  mode: PullRequestExecutionMode,
+  plan: PullRequestPlan,
+  approval: ApprovalRecord | undefined
+): string[] {
   if (mode === "dry-run") {
     return [];
   }
@@ -76,7 +82,40 @@ function approvalBlockedReasonsFor(mode: PullRequestExecutionMode, approval: App
     return ["Approved execution requires approvedBy."];
   }
 
+  const staleReasons = staleApprovalReasons(plan, approval);
+  if (staleReasons.length > 0) {
+    return staleReasons;
+  }
+
   return [];
+}
+
+function staleApprovalReasons(plan: PullRequestPlan, approval: ApprovalRecord): string[] {
+  const reasons: string[] = [];
+
+  if (approval.runId !== plan.runId) {
+    reasons.push(`Approval run ${approval.runId} does not match current run ${plan.runId}.`);
+  }
+
+  if (approval.checkpointId !== plan.checkpointId) {
+    reasons.push(
+      `Stale approval: approved checkpoint ${approval.checkpointId ?? "none"} does not match current checkpoint ${
+        plan.checkpointId ?? "none"
+      }.`
+    );
+  }
+
+  return reasons;
+}
+
+function createApprovalPlanSnapshot(plan: PullRequestPlan): ApprovalPlanSnapshot {
+  return {
+    planTitle: plan.title,
+    baseBranch: plan.baseBranch,
+    sourceBranchHint: plan.sourceBranchHint,
+    blockedReasons: [...plan.blockedReasons],
+    commandCandidateActions: plan.commandCandidates.map((candidate) => candidate.action)
+  };
 }
 
 function createMessage(mode: PullRequestExecutionMode, status: PullRequestExecutionReport["status"]): string {

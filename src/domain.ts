@@ -257,12 +257,21 @@ export type PullRequestExecutionMode = "dry-run" | "execute";
 
 export type PullRequestExecutionStatus = "dry_run" | "ready" | "blocked";
 
+export interface ApprovalPlanSnapshot {
+  planTitle: string;
+  baseBranch: string;
+  sourceBranchHint: string;
+  blockedReasons: string[];
+  commandCandidateActions: PullRequestCommandCandidate["action"][];
+}
+
 export interface ApprovalRecord {
   id: string;
   scope: ApprovalScope;
   planId: string;
   runId: string;
   checkpointId?: string;
+  planSnapshot?: ApprovalPlanSnapshot;
   status: ApprovalStatus;
   approvedBy?: string;
   reason?: string;

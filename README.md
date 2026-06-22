@@ -137,16 +137,18 @@ The plan includes a source branch hint, base branch, PR title/body, precondition
 
 A non-clean checkpoint or dirty repository is reported in `blockedReasons`; users must resolve those before treating the PR plan as ready for execution.
 
-`approve-pr [runId] --approved-by name [--reason text] [--json]` creates and stores an audit-friendly approval record for the latest PR plan shape.
+`approve-pr [runId] --approved-by name [--reason text] [--json]` creates and stores an audit-friendly approval record for the latest PR plan shape. The record includes the approved run id, checkpoint id, plan id, and a minimal plan snapshot: title, base branch, source branch hint, blocked reasons, and command candidate actions.
 
 `pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]` creates an approval-aware execution preflight report from the PR plan. The default mode is dry-run and never executes commands. `--execute` requires approval data, but write execution is still blocked at the boundary until a later implementation adds an explicit, audited command runner. If `--approval` is omitted, `pr-exec` tries the latest stored approval for the run; `--approved-by` can still create an in-memory approval for one-off preflight checks.
+
+Stored approvals are tied to the checkpoint that was current when approval was recorded. During `pr-exec --execute`, both explicit `--approval approvalId` and latest-approval lookup are checked against the current latest checkpoint for the run. If the checkpoint changed, the approval is treated as stale and execution preflight is blocked before any write command can run. In-memory approvals from `--approved-by` are created from the current plan and are not stale.
 
 Current approval model:
 
 - no `--execute`: returns `dry_run` with command candidates and no executed commands
 - `--execute` without `--approved-by`: returns `blocked`
 - `approve-pr --approved-by name`: persists an approval under `.orchestrator/approvals`
-- `pr-exec --execute --approval approvalId`: loads the stored approval, then still blocks before branch/commit/push/PR creation because write execution is not implemented
+- `pr-exec --execute --approval approvalId`: loads the stored approval, blocks stale checkpoint approvals, then still blocks before branch/commit/push/PR creation because write execution is not implemented
 - `pr-exec --execute --approved-by name`: creates an in-memory approval for preflight, then still blocks before write execution
 
 ## CI
