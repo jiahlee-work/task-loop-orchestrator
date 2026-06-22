@@ -347,6 +347,48 @@ describe("command reference documentation", () => {
       "create GitHub releases"
     ]);
   });
+
+  it("keeps command examples aligned with CLI and smoke flows", async () => {
+    const commands = await readCommands();
+    const sections = extractCommandReferenceSections(commands);
+    const examples = extractCommandReferenceExamples(commands);
+    const jsonSupportByCommand = extractCommandReferenceJsonSupport(commands);
+    const smokeScript = await readFile(join(root, "scripts", "package-smoke.mjs"), "utf8");
+
+    for (const command of extractCommandReferenceHeadings(commands)) {
+      expectSectionContains(sections, command, ["Example:", "```bash"]);
+      const commandExamples = examples.get(command) ?? [];
+      expect(commandExamples.length, `Missing example command for ${command}`).toBeGreaterThan(0);
+      for (const example of commandExamples) {
+        expect(example.startsWith("task-loop-orchestrator "), `Example should start with binary name: ${example}`).toBe(true);
+      }
+    }
+
+    const jsonCapableExamples = [...jsonSupportByCommand.entries()]
+      .filter(([, jsonLine]) => jsonLine.includes("supported with `--json`"))
+      .map(([command]) => examples.get(command)?.join("\n") ?? "");
+    for (const exampleText of jsonCapableExamples) {
+      expect(exampleText).toContain("--json");
+    }
+    expect(examples.get("--help")?.join("\n")).not.toContain("--json");
+    expect(examples.get("--version")?.join("\n")).not.toContain("--json");
+
+    for (const command of ["init", "doctor", "run", "resume", "status", "checkpoint", "pr-plan", "pr-exec", "approve-pr", "checks"]) {
+      expect(examples.has(command), `Missing command reference example for ${command}`).toBe(true);
+    }
+    expectContainsAll(smokeScript, [
+      '"init", "--json"',
+      '"doctor", "--json"',
+      '"run", "Smoke task", "--max-iterations", "1", "--json"',
+      '"resume", loopReport.runId, "--max-iterations", "1", "--json"',
+      '"status", "--json"',
+      '"checkpoint", loopReport.runId, "--json"',
+      '"pr-plan", loopReport.runId, "--json"',
+      '"pr-exec", loopReport.runId, "--json"',
+      '"approve-pr", loopReport.runId, "--approved-by", "package-smoke", "--json"',
+      '"checks", "HEAD", "--json"'
+    ]);
+  });
 });
 
 async function readQuickstart() {
@@ -412,6 +454,24 @@ function extractCommandReferenceJsonSupport(commandsDoc: string) {
   }
 
   return jsonSupportByCommand;
+}
+
+function extractCommandReferenceExamples(commandsDoc: string) {
+  const examples = new Map<string, string[]>();
+  const sections = extractCommandReferenceSections(commandsDoc);
+
+  for (const [command, section] of sections) {
+    const exampleBlock = section.match(/Example:\n\n```bash\n(?<commands>[\s\S]*?)\n```/);
+    expect(exampleBlock?.groups?.commands, `Missing bash example block for ${command}`).toBeDefined();
+    examples.set(
+      command,
+      exampleBlock!.groups!.commands.split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+    );
+  }
+
+  return examples;
 }
 
 function expectSectionContains(sections: Map<string, string>, command: string, expectedFragments: string[]) {
