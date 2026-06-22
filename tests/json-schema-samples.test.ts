@@ -3,10 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { LoopRun } from "../src/domain.js";
+import { createPullRequestApproval, preparePullRequestExecution } from "../src/approval.js";
 import { createCliJsonReport, cliJsonSchemaVersion } from "../src/cli-json.js";
-import { initProject } from "../src/init.js";
-import { createRunCliReport } from "../src/run-report.js";
 import { runDoctor } from "../src/doctor.js";
+import { initProject } from "../src/init.js";
+import { createIntegrationCheckpoint } from "../src/integration.js";
+import { createPullRequestPlan } from "../src/pr-plan.js";
+import { MockRepoProvider } from "../src/providers.js";
+import { createRunCliReport } from "../src/run-report.js";
 
 const root = process.cwd();
 const tempDirs: string[] = [];
@@ -21,6 +25,14 @@ describe("CLI JSON schema sample smoke", () => {
     const initRoot = await tempRoot("task-loop-schema-init-");
     const doctorRoot = await tempRoot("task-loop-schema-doctor-");
     const run = loopRun();
+    const repo = new MockRepoProvider({ status: "", diff: "" });
+    const checkpoint = await createIntegrationCheckpoint({ run, repo });
+    const prPlan = await createPullRequestPlan({ run, repo, checkpoint });
+    const prExec = preparePullRequestExecution({ plan: prPlan });
+    const approval = createPullRequestApproval(prPlan, {
+      approvedBy: "schema-smoke",
+      reason: "Schema sample approval."
+    });
 
     const samples: JsonObject[] = [
       toJsonObject(createCliJsonReport("doctor", await runDoctor(doctorRoot), "2026-06-22T00:00:00.000Z")),
@@ -31,7 +43,11 @@ describe("CLI JSON schema sample smoke", () => {
           pathForRun: (runId) => join(run.context.runId, ".orchestrator", "runs", `${runId}.json`)
         }),
         "2026-06-22T00:00:00.000Z"
-      ))
+      )),
+      toJsonObject(createCliJsonReport("checkpoint", checkpoint, "2026-06-22T00:00:00.000Z")),
+      toJsonObject(createCliJsonReport("pr-plan", prPlan, "2026-06-22T00:00:00.000Z")),
+      toJsonObject(createCliJsonReport("pr-exec", prExec, "2026-06-22T00:00:00.000Z")),
+      toJsonObject(createCliJsonReport("approve-pr", approval, "2026-06-22T00:00:00.000Z"))
     ];
 
     for (const sample of samples) {
@@ -63,7 +79,7 @@ function expectSampleMatchesSchemaRequiredFields(schema: JsonObject, sample: Jso
 
   for (const ref of branchRefs) {
     const definition = resolveDefinitionRef(schema, ref);
-    for (const field of requiredFields(definition)) {
+    for (const field of requiredFields(schema, definition)) {
       expect(sample, `${String(command)} sample should include ${field}`).toHaveProperty(field);
     }
   }
@@ -99,7 +115,16 @@ function resolveDefinitionRef(schema: JsonObject, ref: string): JsonObject {
   return definition;
 }
 
-function requiredFields(definition: JsonObject): string[] {
+function requiredFields(schema: JsonObject, definition: JsonObject, seenRefs = new Set<string>()): string[] {
+  if (typeof definition.$ref === "string") {
+    if (seenRefs.has(definition.$ref)) {
+      return [];
+    }
+
+    seenRefs.add(definition.$ref);
+    return requiredFields(schema, resolveDefinitionRef(schema, definition.$ref), seenRefs);
+  }
+
   return Array.isArray(definition.required) ? definition.required.filter((field): field is string => typeof field === "string") : [];
 }
 
