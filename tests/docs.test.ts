@@ -129,12 +129,62 @@ describe("release checklist documentation", () => {
   });
 });
 
+describe("changelog documentation", () => {
+  it("keeps the 0.1.0 unreleased feature summary intact", async () => {
+    const changelog = await readChangelog();
+
+    expectContainsAll(changelog, [
+      "## 0.1.0 - Unreleased",
+      "### Added",
+      "Root orchestrator loop",
+      "`run`, `resume`, and `status`",
+      "File-backed run, checkpoint, and approval storage",
+      "`.orchestrator/`",
+      "`init`, `doctor`, and `--version`",
+      "`checkpoint` and `checks`",
+      "`pr-plan`, `approve-pr`, and dry-run `pr-exec`",
+      "Stable CLI JSON envelope",
+      "schema metadata",
+      "sample smoke fixtures",
+      "drift tests",
+      "Installable package contract",
+      "Node 24 requirement",
+      "`npm pack` artifact allowlist",
+      "installed binary package smoke"
+    ]);
+  });
+
+  it("keeps the 0.1.0 non-goals explicit", async () => {
+    const changelog = await readChangelog();
+
+    expectContainsAll(changelog, [
+      "### Not Included",
+      "npm publish",
+      "GitHub release",
+      "tag creation",
+      "PR creation",
+      "PR mutation",
+      "merge",
+      "release",
+      "issue transition",
+      "branch creation",
+      "commit",
+      "push",
+      "Jira/GitHub network write integrations"
+    ]);
+  });
+});
+
 async function readQuickstart() {
   return readFile(join(root, "docs", "quickstart.md"), "utf8");
 }
 
 async function readReleaseChecklist() {
   return readFile(join(root, "docs", "release-checklist.md"), "utf8");
+}
+
+async function readChangelog() {
+  return readFile(join(root, "CHANGELOG.md"), "utf8");
 }
 
 function expectContainsAll(value: string, expectedFragments: string[]) {
