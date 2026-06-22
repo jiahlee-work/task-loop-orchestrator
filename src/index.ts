@@ -7,6 +7,7 @@ export * from "./graph.js";
 export * from "./integration.js";
 export * from "./orchestrator.js";
 export * from "./permission.js";
+export * from "./pr-plan.js";
 export * from "./providers.js";
 export * from "./reviewers.js";
 export * from "./roles.js";

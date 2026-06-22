@@ -228,6 +228,27 @@ export interface IntegrationCheckpointReport {
   createdAt: string;
 }
 
+export interface PullRequestCommandCandidate {
+  action: Extract<ActionType, "create_branch" | "commit" | "push" | "create_pr">;
+  command: string[];
+  reason: string;
+  decisionReady: true;
+}
+
+export interface PullRequestPlan {
+  id: string;
+  runId: string;
+  checkpointId?: string;
+  sourceBranchHint: string;
+  baseBranch: string;
+  title: string;
+  body: string;
+  preconditions: string[];
+  blockedReasons: string[];
+  commandCandidates: PullRequestCommandCandidate[];
+  createdAt: string;
+}
+
 export type ProposedSubtask = Omit<Subtask, "status" | "createdAt" | "updatedAt"> &
   Partial<Pick<Subtask, "createdAt" | "updatedAt">>;
 

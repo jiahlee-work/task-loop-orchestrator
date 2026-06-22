@@ -51,6 +51,26 @@ export class FileRunStore {
     return JSON.parse(content) as IntegrationCheckpointReport;
   }
 
+  async listCheckpoints(): Promise<IntegrationCheckpointReport[]> {
+    await mkdir(this.checkpointsDir, { recursive: true });
+    const entries = await readdir(this.checkpointsDir);
+    const checkpoints = await Promise.all(
+      entries
+        .filter((entry) => entry.endsWith(".json"))
+        .map(async (entry) => {
+          const content = await readFile(join(this.checkpointsDir, entry), "utf8");
+          return JSON.parse(content) as IntegrationCheckpointReport;
+        })
+    );
+
+    return checkpoints.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  }
+
+  async latestCheckpoint(runId?: string): Promise<IntegrationCheckpointReport | undefined> {
+    const checkpoints = await this.listCheckpoints();
+    return runId ? checkpoints.find((checkpoint) => checkpoint.runId === runId) : checkpoints[0];
+  }
+
   pathForCheckpoint(checkpointId: string): string {
     return this.checkpointFilePath(checkpointId);
   }

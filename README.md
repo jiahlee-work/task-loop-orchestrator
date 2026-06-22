@@ -2,6 +2,11 @@
 
 MVP scaffold for an AI role-split closed-loop task orchestrator.
 
+## Requirements
+
+- Node.js 24 or newer
+- pnpm 11.5.2 via Corepack or a compatible local install
+
 ## Commands
 
 ```bash
@@ -23,6 +28,8 @@ node dist/cli.js status --json
 node dist/cli.js checkpoint
 node dist/cli.js checkpoint --json
 node dist/cli.js checkpoint --github gh-cli --json
+node dist/cli.js checks HEAD --json
+node dist/cli.js pr-plan --json
 ```
 
 Runs are stored as JSON files under `.orchestrator/runs/<runId>.json`.
@@ -57,6 +64,8 @@ The CLI uses a read-focused Git repo provider for discovery. It reads `git statu
 GitHub status is optional and disabled by default. `--github gh-cli` enables a read-only GitHub CLI provider for checkpoint checks. It uses `gh repo view`, `gh pr list`, and `gh pr checks`; it does not create or modify PRs, issues, releases, merges, or repository state. If `gh` is missing, unauthenticated, or cannot read the repository, checkpoint generation falls back to an `unknown` or `not_found` CI summary instead of failing.
 
 When PR checks are not available, the GitHub CLI provider falls back to read-only `gh api repos/{owner}/{repo}/commits/{ref}/check-runs` so branch or commit check-runs can still populate checkpoint `ciCheck`. `gh auth status` is useful for local setup, but failed auth remains a graceful checkpoint fallback.
+
+`checks [ref] [--json]` is a read-only shortcut for refreshing GitHub check status without creating a new checkpoint. The default ref is `HEAD`. Queued or in-progress GitHub Actions check-runs are reported as `pending`; missing checks or auth failures still return a JSON summary with exit code 0.
 
 ## Executor Modes
 
@@ -105,6 +114,8 @@ Evidence currently includes executor summary, executor command when present, rep
 
 With `--github gh-cli`, checkpoint `ciCheck` is populated from GitHub checks when available. Without it, `ciCheck` remains a safe `not_run` placeholder.
 
+After pushing to `main`, use `node dist/cli.js checks HEAD --json` for a quick CI refresh, or rerun `node dist/cli.js checkpoint --github gh-cli --json` when you want a new decision-ready checkpoint brief.
+
 Checkpoint status:
 
 - `clean`: all subtasks are complete and repo evidence has no attention markers.
@@ -113,6 +124,14 @@ Checkpoint status:
 
 Maintainer actions such as `create_pr`, `merge_pr`, and `release` are emitted only as decision-ready candidates. Checkpoint generation never creates branches, worktrees, commits, pushes, PRs, merges, releases, Jira transitions, or GitHub/Jira API calls.
 
+## PR Plans
+
+`pr-plan [runId] [--json]` creates a decision-ready PR preparation report for the latest run or a specific run. It uses the latest checkpoint for that run when available and reads local repo status/diff before suggesting any commands.
+
+The plan includes a source branch hint, base branch, PR title/body, preconditions, blocked reasons, and command candidates for branch creation, commit, push, and PR creation. These commands are dry-run candidates only. The orchestrator does not create branches, commit, push, or call `gh pr create`.
+
+A non-clean checkpoint or dirty repository is reported in `blockedReasons`; users must resolve those before treating the PR plan as ready for execution.
+
 ## CI
 
-GitHub Actions CI is defined in `.github/workflows/ci.yml` and runs on pull requests and pushes to `main`. It uses Node 20 with Corepack/pnpm cache, installs with `pnpm install --frozen-lockfile`, then runs typecheck, tests, and build.
+GitHub Actions CI is defined in `.github/workflows/ci.yml` and runs on pull requests and pushes to `main`. It uses Node 24 with Corepack/pnpm cache, installs with `pnpm install --frozen-lockfile`, then runs typecheck, tests, and build.

@@ -10,7 +10,7 @@ describe("GitHub Actions CI workflow", () => {
     expect(workflow).toContain("branches:");
     expect(workflow).toContain("- main");
     expect(workflow).toContain("actions/setup-node@v4");
-    expect(workflow).toContain("node-version: 20");
+    expect(workflow).toContain("node-version: 24");
     expect(workflow).toContain("cache: pnpm");
     expect(workflow).toContain("corepack enable");
     expect(workflow).toContain("pnpm install --frozen-lockfile");

@@ -12,6 +12,7 @@ import { CodexCliExecutor } from "./executors.js";
 import { createIntegrationCheckpoint } from "./integration.js";
 import { RootOrchestrator, createTaskSpec } from "./orchestrator.js";
 import { checkPermission } from "./permission.js";
+import { createPullRequestPlan } from "./pr-plan.js";
 import { createGitToolProviders, GitHubCliProvider } from "./providers.js";
 import { LocalEvidenceReviewer } from "./reviewers.js";
 import { createMockRoleProviders, type RoleProviders } from "./roles.js";
@@ -83,7 +84,9 @@ function printUsage(): void {
   task-loop-orchestrator run <title> [--description text] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n]
   task-loop-orchestrator status [runId] [--json]
   task-loop-orchestrator resume <runId> [--max-iterations n]
-  task-loop-orchestrator checkpoint [runId] [--github none|gh-cli] [--json]`);
+  task-loop-orchestrator checkpoint [runId] [--github none|gh-cli] [--json]
+  task-loop-orchestrator pr-plan [runId] [--json]
+  task-loop-orchestrator checks [ref] [--json]`);
 }
 
 async function runCommand(args: ParsedArgs): Promise<void> {
@@ -224,6 +227,68 @@ async function checkpointCommand(args: ParsedArgs): Promise<void> {
   console.log(`Saved: ${store.pathForCheckpoint(report.id)}`);
 }
 
+async function checksCommand(args: ParsedArgs): Promise<void> {
+  const ref = args.positional[0] ?? "HEAD";
+  const provider = new GitHubCliProvider(process.cwd());
+  const summary = await provider.getCheckStatus(ref);
+
+  if (args.flags.json === true) {
+    console.log(JSON.stringify(summary, null, 2));
+    return;
+  }
+
+  console.log(`Checks ${summary.ref ?? ref}: ${summary.status}`);
+  console.log(summary.summary);
+  if (summary.details && summary.details.length > 0) {
+    console.log("Details:");
+    for (const detail of summary.details) {
+      console.log(`- ${detail.name}: ${detail.status}${detail.summary ? ` (${detail.summary})` : ""}`);
+    }
+  }
+}
+
+async function prPlanCommand(args: ParsedArgs): Promise<void> {
+  const store = new FileRunStore(process.cwd());
+  const runId = args.positional[0];
+  const run = runId ? await store.load(runId) : await store.latest();
+
+  if (!run) {
+    console.log("No runs found.");
+    return;
+  }
+
+  const checkpoint = await store.latestCheckpoint(run.id);
+  const tools = createGitToolProviders(process.cwd());
+  const plan = await createPullRequestPlan({
+    run,
+    repo: tools.repo,
+    checkpoint
+  });
+
+  if (args.flags.json === true) {
+    console.log(JSON.stringify(plan, null, 2));
+    return;
+  }
+
+  console.log(`PR plan ${plan.id}`);
+  console.log(`Run: ${plan.runId}`);
+  console.log(`Checkpoint: ${plan.checkpointId ?? "none"}`);
+  console.log(`Branch hint: ${plan.sourceBranchHint}`);
+  console.log(`Base branch: ${plan.baseBranch}`);
+  if (plan.blockedReasons.length > 0) {
+    console.log("Blocked reasons:");
+    for (const reason of plan.blockedReasons) {
+      console.log(`- ${reason}`);
+    }
+  } else {
+    console.log("Blocked reasons: none");
+  }
+  console.log("Command candidates:");
+  for (const candidate of plan.commandCandidates) {
+    console.log(`- ${candidate.action}: ${candidate.command.join(" ")}`);
+  }
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
@@ -249,6 +314,16 @@ async function main(): Promise<void> {
 
   if (args.command === "checkpoint") {
     await checkpointCommand(args);
+    return;
+  }
+
+  if (args.command === "checks") {
+    await checksCommand(args);
+    return;
+  }
+
+  if (args.command === "pr-plan") {
+    await prPlanCommand(args);
     return;
   }
 
