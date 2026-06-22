@@ -221,6 +221,64 @@ describe("release readiness documentation", () => {
   });
 });
 
+describe("documentation role boundaries", () => {
+  it("keeps README as a link hub with minimal setup and first-run commands", async () => {
+    const readme = await readFile(join(root, "README.md"), "utf8");
+
+    expectContainsAll(readme, [
+      "[docs/quickstart.md](docs/quickstart.md)",
+      "[docs/commands.md](docs/commands.md)",
+      "[docs/release-checklist.md](docs/release-checklist.md)",
+      "[CHANGELOG.md](CHANGELOG.md)",
+      "corepack enable",
+      "pnpm install --frozen-lockfile",
+      "pnpm run build",
+      "node dist/cli.js --help",
+      "node dist/cli.js --version",
+      "npx task-loop-orchestrator init",
+      'npx task-loop-orchestrator run "Quickstart smoke" --max-iterations 1 --json',
+      "npx task-loop-orchestrator status --json",
+      "npx task-loop-orchestrator checks HEAD --json"
+    ]);
+    expect(readme).not.toContain("mktemp -d");
+    expect(readme).not.toContain("npm install --prefix");
+    expect(readme).not.toContain("task-loop-orchestrator-0.1.0.tgz");
+  });
+
+  it("keeps detailed install, command, release, and changelog roles in dedicated docs", async () => {
+    const quickstart = await readQuickstart();
+    const commands = await readCommands();
+    const checklist = await readReleaseChecklist();
+    const changelog = await readChangelog();
+
+    expectContainsAll(quickstart, [
+      "npm pack --pack-destination /tmp",
+      "npm install /tmp/task-loop-orchestrator-0.1.0.tgz",
+      "mktemp -d",
+      "npm install --prefix"
+    ]);
+    expectContainsAll(commands, [
+      "# CLI Command Reference",
+      "Purpose:",
+      "Example:",
+      "JSON:",
+      "Behavior:"
+    ]);
+    expectContainsAll(checklist, [
+      "# 0.1.0 Release Checklist",
+      "## Local Verification",
+      "pnpm run release:check",
+      "## Package Artifact Review",
+      "## Explicitly Out Of Scope"
+    ]);
+    expectContainsAll(changelog, [
+      "## 0.1.0 - Unreleased",
+      "### Added",
+      "### Not Included"
+    ]);
+  });
+});
+
 describe("command reference documentation", () => {
   it("documents every implemented CLI command", async () => {
     const commands = await readCommands();
