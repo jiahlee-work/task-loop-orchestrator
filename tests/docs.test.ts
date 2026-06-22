@@ -72,8 +72,69 @@ describe("quickstart documentation", () => {
   });
 });
 
+describe("release checklist documentation", () => {
+  it("documents local verification commands and release check coverage", async () => {
+    const checklist = await readReleaseChecklist();
+    const releaseCheck = await readFile(join(root, "scripts", "release-check.mjs"), "utf8");
+    const packageJson = JSON.parse(await readFile(join(root, "package.json"), "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+
+    expect(packageJson.scripts?.["release:check"]).toBeDefined();
+    expectContainsAll(checklist, [
+      "pnpm install --frozen-lockfile",
+      "pnpm run release:check",
+      "pnpm run typecheck",
+      "pnpm test",
+      "pnpm run build",
+      "pnpm run lint",
+      "pnpm run package:smoke",
+      "node dist/cli.js --version",
+      "node dist/cli.js checks HEAD --json"
+    ]);
+    expectContainsAll(releaseCheck, [
+      '"typecheck"',
+      '"test"',
+      '"build"',
+      '"package artifacts"',
+      '"lint"',
+      '"package smoke"',
+      '"version"',
+      '"checks"'
+    ]);
+  });
+
+  it("documents package artifact review and safety boundaries", async () => {
+    const checklist = await readReleaseChecklist();
+
+    expectContainsAll(checklist, [
+      "package.json",
+      "name and version",
+      "bin.task-loop-orchestrator",
+      "dist/cli.js",
+      "files",
+      "dist",
+      "schemas",
+      "orchestrator.config.example.json",
+      "pnpm run package:artifacts",
+      "npm pack --dry-run --json",
+      "GitHub Actions `verify`",
+      "npm publish",
+      "GitHub release",
+      "git tag",
+      "release tag",
+      "GitHub PRs or issues",
+      "write-side GitHub actions"
+    ]);
+  });
+});
+
 async function readQuickstart() {
   return readFile(join(root, "docs", "quickstart.md"), "utf8");
+}
+
+async function readReleaseChecklist() {
+  return readFile(join(root, "docs", "release-checklist.md"), "utf8");
 }
 
 function expectContainsAll(value: string, expectedFragments: string[]) {
