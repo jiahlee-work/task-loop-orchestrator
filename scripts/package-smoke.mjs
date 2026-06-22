@@ -14,82 +14,105 @@ async function main() {
   const packDir = join(tempRoot, "pack");
   const installDir = join(tempRoot, "install");
   const projectDir = join(tempRoot, "project");
+  let tarballPath = "";
+  let bin = "";
+  let loopReport;
 
   try {
-    await mkdir(packDir);
-    await mkdir(projectDir);
-    await run("npm", ["pack", "--pack-destination", packDir], { cwd: repoRoot });
-    const tarballPath = await findTarball(packDir);
-    await run("npm", ["install", "--prefix", installDir, tarballPath], { cwd: repoRoot });
+    await runStep("pack and install", async () => {
+      await mkdir(packDir);
+      await mkdir(projectDir);
+      await run("npm", ["pack", "--pack-destination", packDir], { cwd: repoRoot });
+      tarballPath = await findTarball(packDir);
+      await run("npm", ["install", "--prefix", installDir, tarballPath], { cwd: repoRoot });
 
-    const bin = process.platform === "win32"
-      ? join(installDir, "node_modules", ".bin", "task-loop-orchestrator.cmd")
-      : join(installDir, "node_modules", ".bin", "task-loop-orchestrator");
-
-    const help = await run(bin, ["--help"], { cwd: projectDir });
-    assertIncludes(help.stdout, "task-loop-orchestrator init", "help output should include init usage");
-    assertIncludes(help.stdout, "task-loop-orchestrator doctor", "help output should include doctor usage");
-
-    const preInitDoctor = await run(bin, ["doctor", "--json"], { cwd: projectDir });
-    assertDoctorReport(parseJson(preInitDoctor), "warn", "doctor before init should warn");
-
-    await run("git", ["init"], { cwd: projectDir });
-    const firstInit = await run(bin, ["init", "--json"], { cwd: projectDir });
-    assertInitReport(parseJson(firstInit), {
-      configStatus: "created",
-      gitignoreStatus: "created",
-      label: "first init"
+      bin = process.platform === "win32"
+        ? join(installDir, "node_modules", ".bin", "task-loop-orchestrator.cmd")
+        : join(installDir, "node_modules", ".bin", "task-loop-orchestrator");
     });
 
-    const secondInit = await run(bin, ["init", "--json"], { cwd: projectDir });
-    assertInitReport(parseJson(secondInit), {
-      configStatus: "skipped",
-      gitignoreStatus: "skipped",
-      label: "second init"
+    await runStep("help", async () => {
+      const help = await run(bin, ["--help"], { cwd: projectDir });
+      assertIncludes(help.stdout, "task-loop-orchestrator init", "help output should include init usage");
+      assertIncludes(help.stdout, "task-loop-orchestrator doctor", "help output should include doctor usage");
     });
 
-    const postInitDoctor = await run(bin, ["doctor", "--json"], { cwd: projectDir });
-    assertDoctorReport(parseJson(postInitDoctor), "pass", "doctor after init should pass");
-
-    const loop = await run(bin, ["run", "Smoke task", "--max-iterations", "1", "--json"], { cwd: projectDir });
-    const loopReport = parseJson(loop);
-    assertRunReport(loopReport, "run", {
-      status: "completed",
-      completedCount: 1,
-      runIdIncludes: "run_"
+    await runStep("pre-init doctor", async () => {
+      const preInitDoctor = await run(bin, ["doctor", "--json"], { cwd: projectDir });
+      assertDoctorReport(parseJson(preInitDoctor), "warn", "doctor before init should warn");
     });
 
-    const resume = await run(bin, ["resume", loopReport.runId, "--max-iterations", "1", "--json"], { cwd: projectDir });
-    assertRunReport(parseJson(resume), "resume", { runId: loopReport.runId });
+    await runStep("init idempotency", async () => {
+      await run("git", ["init"], { cwd: projectDir });
+      const firstInit = await run(bin, ["init", "--json"], { cwd: projectDir });
+      assertInitReport(parseJson(firstInit), {
+        configStatus: "created",
+        gitignoreStatus: "created",
+        label: "first init"
+      });
 
-    const statusJson = await run(bin, ["status", "--json"], { cwd: projectDir });
-    assertRunReport(parseJson(statusJson), "status", { runId: loopReport.runId, completedCount: 1 });
-
-    const explicitStatusJson = await run(bin, ["status", loopReport.runId, "--json"], { cwd: projectDir });
-    assertRunReport(parseJson(explicitStatusJson), "status", { runId: loopReport.runId });
-
-    const rawStatusJson = await run(bin, ["status", loopReport.runId, "--json", "--raw"], { cwd: projectDir });
-    assertRawStatusReport(parseJson(rawStatusJson), loopReport.runId);
-
-    const checkpoint = await run(bin, ["checkpoint", loopReport.runId, "--json"], { cwd: projectDir });
-    assertCheckpointReport(parseJson(checkpoint), loopReport.runId);
-
-    const prPlan = await run(bin, ["pr-plan", loopReport.runId, "--json"], { cwd: projectDir });
-    assertPrPlanReport(parseJson(prPlan), loopReport.runId);
-
-    const prExec = await run(bin, ["pr-exec", loopReport.runId, "--json"], { cwd: projectDir });
-    assertPrExecReport(parseJson(prExec), loopReport.runId);
-
-    const approval = await run(bin, ["approve-pr", loopReport.runId, "--approved-by", "package-smoke", "--json"], {
-      cwd: projectDir
+      const secondInit = await run(bin, ["init", "--json"], { cwd: projectDir });
+      assertInitReport(parseJson(secondInit), {
+        configStatus: "skipped",
+        gitignoreStatus: "skipped",
+        label: "second init"
+      });
     });
-    assertApprovalReport(parseJson(approval), loopReport.runId);
 
-    const checks = await run(bin, ["checks", "HEAD", "--json"], { cwd: projectDir });
-    assertChecksReport(parseJson(checks));
+    await runStep("post-init doctor", async () => {
+      const postInitDoctor = await run(bin, ["doctor", "--json"], { cwd: projectDir });
+      assertDoctorReport(parseJson(postInitDoctor), "pass", "doctor after init should pass");
+    });
 
-    const status = await run(bin, ["status"], { cwd: projectDir });
-    assertIncludes(status.stdout, "Smoke task", "plain status output should show the smoke task");
+    await runStep("run/resume/status json", async () => {
+      const loop = await run(bin, ["run", "Smoke task", "--max-iterations", "1", "--json"], { cwd: projectDir });
+      loopReport = parseJson(loop);
+      assertRunReport(loopReport, "run", {
+        status: "completed",
+        completedCount: 1,
+        runIdIncludes: "run_"
+      });
+
+      const resume = await run(bin, ["resume", loopReport.runId, "--max-iterations", "1", "--json"], {
+        cwd: projectDir
+      });
+      assertRunReport(parseJson(resume), "resume", { runId: loopReport.runId });
+
+      const statusJson = await run(bin, ["status", "--json"], { cwd: projectDir });
+      assertRunReport(parseJson(statusJson), "status", { runId: loopReport.runId, completedCount: 1 });
+
+      const explicitStatusJson = await run(bin, ["status", loopReport.runId, "--json"], { cwd: projectDir });
+      assertRunReport(parseJson(explicitStatusJson), "status", { runId: loopReport.runId });
+
+      const rawStatusJson = await run(bin, ["status", loopReport.runId, "--json", "--raw"], { cwd: projectDir });
+      assertRawStatusReport(parseJson(rawStatusJson), loopReport.runId);
+    });
+
+    await runStep("checkpoint/pr-plan/pr-exec/approve-pr json", async () => {
+      const checkpoint = await run(bin, ["checkpoint", loopReport.runId, "--json"], { cwd: projectDir });
+      assertCheckpointReport(parseJson(checkpoint), loopReport.runId);
+
+      const prPlan = await run(bin, ["pr-plan", loopReport.runId, "--json"], { cwd: projectDir });
+      assertPrPlanReport(parseJson(prPlan), loopReport.runId);
+
+      const prExec = await run(bin, ["pr-exec", loopReport.runId, "--json"], { cwd: projectDir });
+      assertPrExecReport(parseJson(prExec), loopReport.runId);
+
+      const approval = await run(bin, ["approve-pr", loopReport.runId, "--approved-by", "package-smoke", "--json"], {
+        cwd: projectDir
+      });
+      assertApprovalReport(parseJson(approval), loopReport.runId);
+    });
+
+    await runStep("checks json", async () => {
+      const checks = await run(bin, ["checks", "HEAD", "--json"], { cwd: projectDir });
+      assertChecksReport(parseJson(checks));
+    });
+
+    await runStep("plain status", async () => {
+      const status = await run(bin, ["status"], { cwd: projectDir });
+      assertIncludes(status.stdout, "Smoke task", "plain status output should show the smoke task");
+    });
 
     console.log("Package smoke passed:");
     console.log(`- tarball: ${tarballPath}`);
@@ -114,6 +137,15 @@ async function findTarball(packDir) {
   }
 
   return join(packDir, tarballs[0]);
+}
+
+async function runStep(label, fn) {
+  try {
+    return await fn();
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Package smoke step failed: ${label}\n${detail}`);
+  }
 }
 
 async function run(command, args, options) {
