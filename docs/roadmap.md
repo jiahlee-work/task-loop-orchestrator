@@ -15,6 +15,7 @@ This is a candidate backlog for work after the `0.1.0 - Unreleased` candidate. I
 
 - Why: PR execution currently stops at decision-ready preflight. A real write runner needs stronger approval state, command replay protection, and explicit operator intent.
 - Safety boundary: branch creation, commit, push, `gh pr create`, merge, release, and Jira transitions must remain blocked until an audited command runner and tests exist.
+- Design draft: [`design/write-execution-model.md`](design/write-execution-model.md).
 - First useful slice: persist execution intents and require an approval id plus a fresh checkpoint before any command runner can be considered.
 
 ### P0: Codex CLI Executor Hardening

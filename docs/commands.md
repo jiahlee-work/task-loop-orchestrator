@@ -190,4 +190,4 @@ task-loop-orchestrator pr-exec --execute --approval approval_xxx --json
 
 JSON: supported with `--json`.
 
-Behavior: dry-run by default. `--execute` requires approval data, checks stale approvals, and still blocks before write-side execution in the current implementation. `executedCommands` remains empty; branch creation, commit, push, and `gh pr create` are not run.
+Behavior: dry-run by default. `--execute` requires approval data, checks stale approvals, and still blocks before write-side execution in the current implementation. `executedCommands` remains empty; branch creation, commit, push, and `gh pr create` are not run. The future write execution design draft is documented in [design/write-execution-model.md](design/write-execution-model.md).

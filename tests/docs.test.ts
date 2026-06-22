@@ -267,6 +267,7 @@ describe("release readiness documentation", () => {
       "not a committed schedule",
       "not a release promise",
       "Approval-Gated Write Execution Model",
+      "[`design/write-execution-model.md`](design/write-execution-model.md)",
       "Codex CLI Executor Hardening",
       "Reviewer And Evidence Expansion",
       "Multi-Run Context And Graph UX",
@@ -276,6 +277,44 @@ describe("release readiness documentation", () => {
       "Packaging And Publish Workflow",
       "Safety boundary",
       "no `npm publish`, git tag, or GitHub release without explicit human approval"
+    ]);
+  });
+
+  it("keeps the write execution model as a disabled design draft", async () => {
+    const commands = await readCommands();
+    const roadmap = await readRoadmap();
+    const design = await readWriteExecutionModel();
+
+    expect(roadmap).toContain("[`design/write-execution-model.md`](design/write-execution-model.md)");
+    expect(commands).toContain("[design/write-execution-model.md](design/write-execution-model.md)");
+    expectContainsAll(design, [
+      "# Approval-Gated Write Execution Model",
+      "Status: design draft, not enabled.",
+      "does not enable write execution",
+      "current CLI must continue to block before write-side command execution",
+      "`pr-exec --execute` requires approval data",
+      "`executedCommands` remains empty",
+      "Stale approval",
+      "Plan drift",
+      "Command injection",
+      "Dirty worktree",
+      "approval id",
+      "approved plan fingerprint",
+      "checkpoint id",
+      "expiresAt",
+      "explicit `--execute`",
+      "approval is not stale",
+      "approval is not expired",
+      "permission gate allows the specific action",
+      "one bounded command at a time",
+      "no shell interpolation",
+      "stdout/stderr summaries",
+      "Audit logs must avoid recording secrets",
+      "Persist execution intents without running commands",
+      "npm publish",
+      "git tag creation",
+      "GitHub release creation",
+      "arbitrary shell command execution"
     ]);
   });
 });
@@ -335,6 +374,7 @@ describe("documentation role boundaries", () => {
     ]);
     expectContainsAll(await readRoadmap(), [
       "# Post-0.1.0 Roadmap",
+      "design/write-execution-model.md",
       "## Candidate Backlog",
       "## Documentation And Test Maintenance"
     ]);
@@ -646,6 +686,10 @@ async function readReleaseReadiness() {
 
 async function readRoadmap() {
   return readFile(join(root, "docs", "roadmap.md"), "utf8");
+}
+
+async function readWriteExecutionModel() {
+  return readFile(join(root, "docs", "design", "write-execution-model.md"), "utf8");
 }
 
 async function readChangelog() {
