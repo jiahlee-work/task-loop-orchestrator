@@ -1,0 +1,27 @@
+{
+  "name": "task-loop-orchestrator",
+  "version": "0.1.0",
+  "description": "AI role-split closed-loop task orchestrator MVP.",
+  "type": "module",
+  "packageManager": "pnpm@11.5.2",
+  "bin": {
+    "task-loop-orchestrator": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json",
+    "lint": "pnpm run typecheck",
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist"
+  ],
+  "devDependencies": {
+    "@types/node": "^24.0.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

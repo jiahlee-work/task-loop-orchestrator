@@ -1,0 +1,9 @@
+{
+  "executor": "mock",
+  "reviewer": "mock",
+  "permissionMode": "write",
+  "worktree": {
+    "enabled": false
+  },
+  "maxIterations": 10
+}
