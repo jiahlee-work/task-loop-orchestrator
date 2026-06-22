@@ -175,6 +175,50 @@ describe("changelog documentation", () => {
   });
 });
 
+describe("release readiness documentation", () => {
+  it("keeps README linked to the release preparation document set", async () => {
+    const readme = await readFile(join(root, "README.md"), "utf8");
+
+    expectContainsAll(readme, [
+      "[docs/quickstart.md](docs/quickstart.md)",
+      "[docs/release-checklist.md](docs/release-checklist.md)",
+      "[CHANGELOG.md](CHANGELOG.md)",
+      "pnpm run release:check",
+      "pnpm run package:artifacts",
+      "pnpm run package:smoke"
+    ]);
+  });
+
+  it("keeps release commands and package artifact metadata connected", async () => {
+    const quickstart = await readQuickstart();
+    const checklist = await readReleaseChecklist();
+    const packageJson = JSON.parse(await readFile(join(root, "package.json"), "utf8")) as {
+      files?: string[];
+      scripts?: Record<string, string>;
+    };
+
+    expect(packageJson.scripts?.["release:check"]).toBeDefined();
+    expect(packageJson.scripts?.["package:artifacts"]).toBeDefined();
+    expect(packageJson.scripts?.["package:smoke"]).toBeDefined();
+    expect(packageJson.scripts?.prepack).toBeDefined();
+    expect(packageJson.files?.sort()).toEqual(["dist", "orchestrator.config.example.json", "schemas"]);
+    expectContainsAll(quickstart, ["pnpm run release:check", "pnpm run package:artifacts"]);
+    expectContainsAll(checklist, ["pnpm run release:check", "pnpm run package:artifacts"]);
+  });
+
+  it("keeps safety boundaries visible across release readiness docs", async () => {
+    const readme = await readFile(join(root, "README.md"), "utf8");
+    const quickstart = await readQuickstart();
+    const checklist = await readReleaseChecklist();
+    const changelog = await readChangelog();
+
+    expectContainsAll(readme, ["never create GitHub PRs", "publish to npm"]);
+    expectContainsAll(quickstart, ["does not publish", "create releases", "push", "create PRs", "merge"]);
+    expectContainsAll(checklist, ["Do not run `npm publish`", "Do not create a GitHub release", "Do not create or push a release tag"]);
+    expectContainsAll(changelog, ["npm publish", "GitHub release", "tag creation", "GitHub write actions"]);
+  });
+});
+
 async function readQuickstart() {
   return readFile(join(root, "docs", "quickstart.md"), "utf8");
 }
