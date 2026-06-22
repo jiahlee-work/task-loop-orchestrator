@@ -2,6 +2,8 @@
 
 This is a pre-release checklist only. Do not publish to npm, create a GitHub release, or create a git tag from this checklist.
 
+For a concise human review summary before any separately approved release action, see [release-readiness.md](release-readiness.md).
+
 ## Local Verification
 
 - Confirm Node.js 24+ is active.

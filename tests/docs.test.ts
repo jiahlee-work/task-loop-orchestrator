@@ -184,6 +184,7 @@ describe("release readiness documentation", () => {
       "[docs/quickstart.md](docs/quickstart.md)",
       "[docs/commands.md](docs/commands.md)",
       "[docs/release-checklist.md](docs/release-checklist.md)",
+      "[docs/release-readiness.md](docs/release-readiness.md)",
       "[CHANGELOG.md](CHANGELOG.md)",
       "pnpm run release:check",
       "pnpm run package:artifacts",
@@ -219,6 +220,37 @@ describe("release readiness documentation", () => {
     expectContainsAll(checklist, ["Do not run `npm publish`", "Do not create a GitHub release", "Do not create or push a release tag"]);
     expectContainsAll(changelog, ["npm publish", "GitHub release", "tag creation", "GitHub write actions"]);
   });
+
+  it("keeps the release readiness summary linked and scoped as a manual review document", async () => {
+    const readme = await readFile(join(root, "README.md"), "utf8");
+    const checklist = await readReleaseChecklist();
+    const readiness = await readReleaseReadiness();
+
+    expect(readme).toContain("[docs/release-readiness.md](docs/release-readiness.md)");
+    expect(checklist).toContain("[release-readiness.md](release-readiness.md)");
+    expectContainsAll(readiness, [
+      "# 0.1.0 Release Readiness Summary",
+      "`0.1.0 - Unreleased`",
+      "[`../CHANGELOG.md`](../CHANGELOG.md)",
+      "[`quickstart.md`](quickstart.md)",
+      "[`commands.md`](commands.md)",
+      "[`release-checklist.md`](release-checklist.md)",
+      "[`json-output.md`](json-output.md)",
+      "[`../schemas/cli-json.schema.json`](../schemas/cli-json.schema.json)",
+      "pnpm run release:check",
+      "pnpm run package:artifacts",
+      "pnpm run package:smoke",
+      "npm publish",
+      "GitHub release creation",
+      "git tag creation",
+      "GitHub PR creation",
+      "branch creation",
+      "commit",
+      "push",
+      "external write-side integration",
+      "not a release procedure"
+    ]);
+  });
 });
 
 describe("documentation role boundaries", () => {
@@ -229,6 +261,7 @@ describe("documentation role boundaries", () => {
       "[docs/quickstart.md](docs/quickstart.md)",
       "[docs/commands.md](docs/commands.md)",
       "[docs/release-checklist.md](docs/release-checklist.md)",
+      "[docs/release-readiness.md](docs/release-readiness.md)",
       "[CHANGELOG.md](CHANGELOG.md)",
       "corepack enable",
       "pnpm install --frozen-lockfile",
@@ -266,6 +299,7 @@ describe("documentation role boundaries", () => {
     ]);
     expectContainsAll(checklist, [
       "# 0.1.0 Release Checklist",
+      "release-readiness.md",
       "## Local Verification",
       "pnpm run release:check",
       "## Package Artifact Review",
@@ -571,6 +605,10 @@ async function readQuickstart() {
 
 async function readReleaseChecklist() {
   return readFile(join(root, "docs", "release-checklist.md"), "utf8");
+}
+
+async function readReleaseReadiness() {
+  return readFile(join(root, "docs", "release-readiness.md"), "utf8");
 }
 
 async function readChangelog() {
