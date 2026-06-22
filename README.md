@@ -16,6 +16,31 @@ pnpm run typecheck
 pnpm run lint
 ```
 
+## Quickstart
+
+For local clone and tarball installation flows, see [docs/quickstart.md](docs/quickstart.md).
+
+Minimal local checkout flow:
+
+```bash
+corepack enable
+pnpm install --frozen-lockfile
+pnpm run build
+node dist/cli.js --help
+node dist/cli.js --version
+```
+
+After installing the CLI in a target Git project, use `npx` for a project-local install or omit it when the binary is already on your `PATH`:
+
+```bash
+npx task-loop-orchestrator init
+npx task-loop-orchestrator run "Quickstart smoke" --max-iterations 1 --json
+npx task-loop-orchestrator status --json
+npx task-loop-orchestrator checks HEAD --json
+```
+
+`checks HEAD --json` requires a GitHub remote and readable check-runs to report live CI status; otherwise it returns a graceful JSON fallback.
+
 ## Local Development
 
 This project requires Node.js 24 or newer. Use pnpm through Corepack or a compatible pnpm 11.x install.
@@ -58,6 +83,8 @@ Approval records are stored as JSON files under `.orchestrator/approvals/<approv
 ## Local Package Install
 
 The package is prepared for local installation through its `bin` entry, but it is not published to npm yet. `npm pack` runs the `prepack` script, which rebuilds `dist` before creating the tarball. The build also marks `dist/cli.js` executable for local tarball installs. The package artifact contract is intentionally small: `dist`, `schemas`, and `orchestrator.config.example.json` are the maintained shipped files.
+
+See [docs/quickstart.md](docs/quickstart.md) for the local tarball install flow and first project commands.
 
 Release preparation notes live in [CHANGELOG.md](CHANGELOG.md) and [docs/release-checklist.md](docs/release-checklist.md). They are checklists only; they do not authorize npm publish, tags, GitHub releases, or write-side GitHub actions.
 
