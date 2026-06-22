@@ -117,22 +117,65 @@ async function findTarball(packDir) {
 }
 
 async function run(command, args, options) {
+  const commandText = formatCommand(command, args);
   try {
-    return await execFileAsync(command, args, {
+    const result = await execFileAsync(command, args, {
       cwd: options.cwd,
       maxBuffer: 1024 * 1024 * 10
     });
+    return {
+      ...result,
+      commandText,
+      cwd: options.cwd
+    };
   } catch (error) {
     const stdout = typeof error?.stdout === "string" ? error.stdout : "";
     const stderr = typeof error?.stderr === "string" ? error.stderr : "";
+    const exitCode = typeof error?.code === "number" || typeof error?.code === "string" ? String(error.code) : "unknown";
     throw new Error(
-      [`Command failed: ${command} ${args.join(" ")}`, stdout.trim(), stderr.trim()].filter(Boolean).join("\n")
+      [
+        `Command failed: ${commandText}`,
+        `cwd: ${options.cwd}`,
+        `exit code: ${exitCode}`,
+        formatOutput("stdout", stdout),
+        formatOutput("stderr", stderr)
+      ].filter(Boolean).join("\n")
     );
   }
 }
 
 function parseJson(result) {
-  return JSON.parse(result.stdout);
+  try {
+    return JSON.parse(result.stdout);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      [
+        `Failed to parse JSON output from: ${result.commandText}`,
+        `cwd: ${result.cwd}`,
+        `parse error: ${detail}`,
+        formatOutput("stdout", result.stdout),
+        formatOutput("stderr", result.stderr)
+      ].filter(Boolean).join("\n")
+    );
+  }
+}
+
+function formatCommand(command, args) {
+  return [command, ...args].map((part) => (/\s/.test(part) ? JSON.stringify(part) : part)).join(" ");
+}
+
+function formatOutput(label, value) {
+  const trimmed = value.trim();
+  return trimmed ? `${label}:\n${truncate(trimmed)}` : "";
+}
+
+function truncate(value, maxLength = 2000) {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return `${value.slice(0, maxLength)}\n... truncated ${value.length - maxLength} chars`;
 }
 
 function assertDoctorReport(report, expectedStatus, message) {
