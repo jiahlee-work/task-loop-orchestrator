@@ -55,6 +55,14 @@ Approval records are stored as JSON files under `.orchestrator/approvals/<approv
 
 The package is prepared for local installation through its `bin` entry, but it is not published to npm yet. `npm pack` runs the `prepack` script, which rebuilds `dist` before creating the tarball. The build also marks `dist/cli.js` executable for local tarball installs.
 
+Run the repeatable package smoke before publishing or handing off an installable tarball:
+
+```bash
+pnpm run package:smoke
+```
+
+The smoke script packs the current checkout, installs the tarball into a temporary project, initializes that project, verifies `init` idempotency, and runs the installed `task-loop-orchestrator` binary through `run` and `status`.
+
 ```bash
 pnpm run build
 npm pack --dry-run
