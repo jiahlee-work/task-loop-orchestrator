@@ -2,7 +2,17 @@ import { nowIso } from "./ids.js";
 
 export const cliJsonSchemaVersion = 1;
 
-export type CliJsonCommand = "init" | "doctor" | "run" | "resume" | "status";
+export type CliJsonCommand =
+  | "init"
+  | "doctor"
+  | "run"
+  | "resume"
+  | "status"
+  | "checkpoint"
+  | "checks"
+  | "pr-plan"
+  | "pr-exec"
+  | "approve-pr";
 
 export type CliJsonReport<T extends object> = T & {
   schemaVersion: typeof cliJsonSchemaVersion;
@@ -19,6 +29,10 @@ export function createCliJsonReport<T extends object>(
     ...payload,
     schemaVersion: cliJsonSchemaVersion,
     command,
-    createdAt
+    createdAt: payloadHasCreatedAt(payload) ? (payload as { createdAt: string }).createdAt : createdAt
   };
+}
+
+function payloadHasCreatedAt(payload: object): payload is { createdAt: string } {
+  return "createdAt" in payload && typeof (payload as { createdAt?: unknown }).createdAt === "string";
 }

@@ -84,6 +84,33 @@ async function main() {
     assertEnvelope(rawStatusReport, "status");
     assertEqual(rawStatusReport.id, loopReport.runId, "raw status JSON should preserve the LoopRun shape");
 
+    const checkpoint = await run(bin, ["checkpoint", loopReport.runId, "--json"], { cwd: projectDir });
+    const checkpointReport = JSON.parse(checkpoint.stdout);
+    assertEnvelope(checkpointReport, "checkpoint");
+    assertEqual(checkpointReport.runId, loopReport.runId, "checkpoint JSON should preserve run id");
+
+    const prPlan = await run(bin, ["pr-plan", loopReport.runId, "--json"], { cwd: projectDir });
+    const prPlanReport = JSON.parse(prPlan.stdout);
+    assertEnvelope(prPlanReport, "pr-plan");
+    assertEqual(prPlanReport.runId, loopReport.runId, "pr-plan JSON should preserve run id");
+
+    const prExec = await run(bin, ["pr-exec", loopReport.runId, "--json"], { cwd: projectDir });
+    const prExecReport = JSON.parse(prExec.stdout);
+    assertEnvelope(prExecReport, "pr-exec");
+    assertEqual(prExecReport.runId, loopReport.runId, "pr-exec JSON should preserve run id");
+
+    const approval = await run(bin, ["approve-pr", loopReport.runId, "--approved-by", "package-smoke", "--json"], {
+      cwd: projectDir
+    });
+    const approvalReport = JSON.parse(approval.stdout);
+    assertEnvelope(approvalReport, "approve-pr");
+    assertEqual(approvalReport.runId, loopReport.runId, "approve-pr JSON should preserve run id");
+
+    const checks = await run(bin, ["checks", "HEAD", "--json"], { cwd: projectDir });
+    const checksReport = JSON.parse(checks.stdout);
+    assertEnvelope(checksReport, "checks");
+    assertEqual(checksReport.source, "github", "checks JSON should preserve provider source");
+
     const status = await run(bin, ["status"], { cwd: projectDir });
     assertIncludes(status.stdout, "Smoke task", "plain status output should show the smoke task");
 
@@ -93,7 +120,7 @@ async function main() {
     console.log("- doctor reports pre-init warnings and post-init readiness");
     console.log("- init creates config and .gitignore");
     console.log("- init is idempotent on second run");
-    console.log("- init/doctor/run/resume/status JSON include schema metadata");
+    console.log("- all JSON smoke commands include schema metadata");
     console.log("- run/resume/status JSON and plain status work through the installed binary");
   } finally {
     await rm(tempRoot, { recursive: true, force: true });

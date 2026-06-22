@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createCliJsonReport } from "../src/cli-json.js";
+import { createCliJsonReport, type CliJsonCommand } from "../src/cli-json.js";
 
 describe("CLI JSON envelope", () => {
   it("adds schema metadata without moving existing payload fields", () => {
@@ -16,9 +16,41 @@ describe("CLI JSON envelope", () => {
     expect(report).toEqual({
       schemaVersion: 1,
       command: "run",
-      createdAt: "2026-06-22T00:00:00.000Z",
+      createdAt: "payload-created-at",
       runId: "run-1",
       status: "completed"
     });
+  });
+
+  it("adds createdAt metadata when the payload does not already have it", () => {
+    expect(createCliJsonReport("checks", { status: "success" }, "2026-06-22T00:00:00.000Z")).toEqual({
+      schemaVersion: 1,
+      command: "checks",
+      createdAt: "2026-06-22T00:00:00.000Z",
+      status: "success"
+    });
+  });
+
+  it("supports every JSON-capable CLI command name", () => {
+    const commands: CliJsonCommand[] = [
+      "init",
+      "doctor",
+      "run",
+      "resume",
+      "status",
+      "checkpoint",
+      "checks",
+      "pr-plan",
+      "pr-exec",
+      "approve-pr"
+    ];
+
+    for (const command of commands) {
+      expect(createCliJsonReport(command, {}, "2026-06-22T00:00:00.000Z")).toMatchObject({
+        schemaVersion: 1,
+        command,
+        createdAt: "2026-06-22T00:00:00.000Z"
+      });
+    }
   });
 });

@@ -259,6 +259,14 @@ async function checkpointCommand(args: ParsedArgs): Promise<void> {
   let run = runId ? await store.load(runId) : await store.latest();
 
   if (!run) {
+    if (args.flags.json === true) {
+      printJson("checkpoint", {
+        status: "not_found",
+        run: null
+      });
+      return;
+    }
+
     console.log("No runs found.");
     return;
   }
@@ -293,7 +301,7 @@ async function checkpointCommand(args: ParsedArgs): Promise<void> {
   await store.save(run);
 
   if (args.flags.json === true) {
-    console.log(JSON.stringify(report, null, 2));
+    printJson("checkpoint", report);
     return;
   }
 
@@ -312,7 +320,7 @@ async function checksCommand(args: ParsedArgs): Promise<void> {
   const summary = await provider.getCheckStatus(ref);
 
   if (args.flags.json === true) {
-    console.log(JSON.stringify(summary, null, 2));
+    printJson("checks", summary);
     return;
   }
 
@@ -332,6 +340,14 @@ async function prPlanCommand(args: ParsedArgs): Promise<void> {
   const run = runId ? await store.load(runId) : await store.latest();
 
   if (!run) {
+    if (args.flags.json === true) {
+      printJson("pr-plan", {
+        status: "not_found",
+        run: null
+      });
+      return;
+    }
+
     console.log("No runs found.");
     return;
   }
@@ -345,7 +361,7 @@ async function prPlanCommand(args: ParsedArgs): Promise<void> {
   });
 
   if (args.flags.json === true) {
-    console.log(JSON.stringify(plan, null, 2));
+    printJson("pr-plan", plan);
     return;
   }
 
@@ -374,6 +390,14 @@ async function prExecCommand(args: ParsedArgs): Promise<void> {
   const run = runId ? await store.load(runId) : await store.latest();
 
   if (!run) {
+    if (args.flags.json === true) {
+      printJson("pr-exec", {
+        status: "not_found",
+        run: null
+      });
+      return;
+    }
+
     console.log("No runs found.");
     return;
   }
@@ -394,7 +418,7 @@ async function prExecCommand(args: ParsedArgs): Promise<void> {
   });
 
   if (args.flags.json === true) {
-    console.log(JSON.stringify(report, null, 2));
+    printJson("pr-exec", report);
     return;
   }
 
@@ -418,6 +442,14 @@ async function approvePrCommand(args: ParsedArgs): Promise<void> {
   const run = runId ? await store.load(runId) : await store.latest();
 
   if (!run) {
+    if (args.flags.json === true) {
+      printJson("approve-pr", {
+        status: "not_found",
+        run: null
+      });
+      return;
+    }
+
     console.log("No runs found.");
     return;
   }
@@ -441,7 +473,7 @@ async function approvePrCommand(args: ParsedArgs): Promise<void> {
   await store.saveApproval(approval);
 
   if (args.flags.json === true) {
-    console.log(JSON.stringify(approval, null, 2));
+    printJson("approve-pr", approval);
     return;
   }
 

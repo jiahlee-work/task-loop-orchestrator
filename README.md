@@ -132,7 +132,7 @@ Checkpoint generation records `integration_checkpoint_ready` on the run after a 
 
 ## JSON Output
 
-Selected automation-oriented JSON commands include lightweight schema metadata while preserving existing top-level payload fields:
+JSON commands include lightweight schema metadata while preserving existing top-level payload fields:
 
 ```json
 {
@@ -142,7 +142,7 @@ Selected automation-oriented JSON commands include lightweight schema metadata w
 }
 ```
 
-The metadata is currently applied to `init --json`, `doctor --json`, `run --json`, `resume --json`, and `status --json` including `status --json --raw` and not-found status responses. `checkpoint`, `pr-plan`, `pr-exec`, and `checks` JSON output still use their command-specific payloads and will be aligned in a later rollout.
+The metadata is applied to every current `--json` command: `init`, `doctor`, `run`, `resume`, `status`, `checkpoint`, `checks`, `pr-plan`, `pr-exec`, and `approve-pr`. Command-specific payload fields remain at the top level for compatibility.
 
 ## Permission Modes
 
