@@ -62,6 +62,12 @@ The schema fixes the summary fields automation commonly reads: `runId`, `status`
 
 `status --json --raw` is intentionally excluded from the stricter run report payload branch because it returns the stored raw `LoopRun` object rather than the stable summary report.
 
+## Checks Schema
+
+`checks [ref] --json` has a command-specific schema branch for CI automation. Consumers can rely on `status`, `summary`, and `source`, plus optional `ref` and `details`.
+
+Each `details[]` item fixes `name` and `status`, with optional `summary`. Queued or in-progress checks are reported as `pending`; missing checks, missing auth, or provider uncertainty remain non-crashing JSON responses such as `not_found` or `unknown`.
+
 ## Not Found Responses
 
 Commands that need an existing run return an enveloped not-found response when `--json` is used and no run is available:

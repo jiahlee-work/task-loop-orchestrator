@@ -34,6 +34,30 @@ describe("CLI JSON schema artifact", () => {
     );
   });
 
+  it("defines a focused checks payload schema", async () => {
+    const schema = await readSchema();
+    const checksPayload = schema.$defs?.checksPayload;
+    const checkDetail = schema.$defs?.checkDetail;
+
+    expect(schema.$defs?.githubCheckStatus).toEqual({
+      type: "string",
+      enum: ["success", "pending", "failure", "error", "not_found", "unknown"]
+    });
+    expect(checksPayload?.required).toEqual(expect.arrayContaining(["status", "summary", "source"]));
+    expect(checksPayload?.properties?.status).toEqual({ $ref: "#/$defs/githubCheckStatus" });
+    expect(checksPayload?.properties?.source).toEqual({ const: "github" });
+    expect(checksPayload?.properties?.details).toEqual({
+      type: "array",
+      items: {
+        $ref: "#/$defs/checkDetail"
+      }
+    });
+    expect(checksPayload?.additionalProperties).toBe(true);
+    expect(checkDetail?.required).toEqual(expect.arrayContaining(["name", "status"]));
+    expect(checkDetail?.properties?.status).toEqual({ $ref: "#/$defs/githubCheckStatus" });
+    expect(checkDetail?.additionalProperties).toBe(true);
+  });
+
   it("applies the run report branch to run, resume, and default status reports", async () => {
     const schema = await readSchema();
 
@@ -69,6 +93,28 @@ describe("CLI JSON schema artifact", () => {
     );
   });
 
+  it("applies the checks branch to checks responses", async () => {
+    const schema = await readSchema();
+
+    expect(schema.allOf).toEqual(
+      expect.arrayContaining([
+        {
+          if: {
+            properties: {
+              command: {
+                const: "checks"
+              }
+            },
+            required: ["command"]
+          },
+          then: {
+            $ref: "#/$defs/checksPayload"
+          }
+        }
+      ])
+    );
+  });
+
   it("documents and links the schema artifact", async () => {
     const readme = await readFile(join(root, "README.md"), "utf8");
     const docs = await readFile(join(root, "docs", "json-output.md"), "utf8");
@@ -77,6 +123,7 @@ describe("CLI JSON schema artifact", () => {
     expect(readme).toContain("schemas/cli-json.schema.json");
     expect(docs).toContain("schemaVersion");
     expect(docs).toContain("Run Report Schema");
+    expect(docs).toContain("Checks Schema");
     expect(docs).toContain("status --json --raw");
     expect(docs).toContain("../schemas/cli-json.schema.json");
   });
@@ -92,6 +139,20 @@ async function readSchema(): Promise<{
   };
   $defs?: {
     runReportPayload?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
+    };
+    githubCheckStatus?: {
+      type?: string;
+      enum?: string[];
+    };
+    checksPayload?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
+    };
+    checkDetail?: {
       required?: string[];
       properties?: Record<string, unknown>;
       additionalProperties?: boolean;
@@ -113,6 +174,20 @@ async function readSchema(): Promise<{
     };
     $defs?: {
       runReportPayload?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
+      githubCheckStatus?: {
+        type?: string;
+        enum?: string[];
+      };
+      checksPayload?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
+      checkDetail?: {
         required?: string[];
         properties?: Record<string, unknown>;
         additionalProperties?: boolean;

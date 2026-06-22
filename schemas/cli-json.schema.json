@@ -41,6 +41,51 @@
       "type": "string",
       "enum": ["read", "write", "maintainer"]
     },
+    "githubCheckStatus": {
+      "type": "string",
+      "enum": ["success", "pending", "failure", "error", "not_found", "unknown"]
+    },
+    "checkDetail": {
+      "type": "object",
+      "required": ["name", "status"],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/githubCheckStatus"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "checksPayload": {
+      "type": "object",
+      "required": ["status", "summary", "source"],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/githubCheckStatus"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "ref": {
+          "type": "string"
+        },
+        "source": {
+          "const": "github"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/checkDetail"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
     "subtaskCounts": {
       "type": "object",
       "required": ["pending", "active", "completed", "blocked", "failed", "total"],
@@ -152,6 +197,19 @@
       },
       "then": {
         "$ref": "#/$defs/runReportPayload"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "checks"
+          }
+        },
+        "required": ["command"]
+      },
+      "then": {
+        "$ref": "#/$defs/checksPayload"
       }
     }
   ],
