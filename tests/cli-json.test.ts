@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createCliJsonReport, type CliJsonCommand } from "../src/cli-json.js";
+import { cliJsonCommands, createCliJsonReport } from "../src/cli-json.js";
 
 describe("CLI JSON envelope", () => {
   it("adds schema metadata without moving existing payload fields", () => {
@@ -32,20 +32,7 @@ describe("CLI JSON envelope", () => {
   });
 
   it("supports every JSON-capable CLI command name", () => {
-    const commands: CliJsonCommand[] = [
-      "init",
-      "doctor",
-      "run",
-      "resume",
-      "status",
-      "checkpoint",
-      "checks",
-      "pr-plan",
-      "pr-exec",
-      "approve-pr"
-    ];
-
-    for (const command of commands) {
+    for (const command of cliJsonCommands) {
       expect(createCliJsonReport(command, {}, "2026-06-22T00:00:00.000Z")).toMatchObject({
         schemaVersion: 1,
         command,

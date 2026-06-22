@@ -1,0 +1,69 @@
+# CLI JSON Output
+
+`task-loop-orchestrator` JSON output is designed for automation and UI consumers. Every current `--json` command uses a shared metadata envelope while keeping command-specific payload fields at the top level.
+
+## Envelope
+
+All JSON responses include:
+
+- `schemaVersion`: currently `1`.
+- `command`: the CLI command that produced the response.
+- `createdAt`: an ISO 8601 timestamp. If a legacy payload already had a top-level `createdAt`, that payload value is preserved.
+
+Example:
+
+```json
+{
+  "schemaVersion": 1,
+  "command": "run",
+  "createdAt": "2026-06-22T00:00:00.000Z",
+  "runId": "run-20260622-example",
+  "status": "completed"
+}
+```
+
+## Compatibility Policy
+
+Command-specific payload fields remain at the top level for compatibility. Consumers should read the common metadata fields first and then parse the command-specific fields they need.
+
+New payload fields may be added in minor releases. Existing payload fields should not be removed or moved without a schema version change.
+
+## Commands
+
+The envelope applies to every current JSON-capable command:
+
+- `init --json`
+- `doctor --json`
+- `run <title> --json`
+- `resume <runId> --json`
+- `status [runId] --json`
+- `status [runId] --json --raw`
+- `checkpoint [runId] --json`
+- `checks [ref] --json`
+- `pr-plan [runId] --json`
+- `pr-exec [runId] --json`
+- `approve-pr [runId] --approved-by <name> --json`
+
+## Raw Status
+
+`status --json` returns the stable run report shape used by `run --json` and `resume --json`.
+
+`status --json --raw` returns the stored raw `LoopRun` shape with the same metadata fields added at the top level.
+
+## Not Found Responses
+
+Commands that need an existing run return an enveloped not-found response when `--json` is used and no run is available:
+
+```json
+{
+  "schemaVersion": 1,
+  "command": "pr-plan",
+  "createdAt": "2026-06-22T00:00:00.000Z",
+  "status": "not_found",
+  "run": null
+}
+```
+
+## JSON Schema
+
+The machine-readable schema artifact is available at [`../schemas/cli-json.schema.json`](../schemas/cli-json.schema.json). The schema validates the common envelope and command enum while allowing command-specific payload fields to remain flexible.

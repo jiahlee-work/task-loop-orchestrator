@@ -2,17 +2,20 @@ import { nowIso } from "./ids.js";
 
 export const cliJsonSchemaVersion = 1;
 
-export type CliJsonCommand =
-  | "init"
-  | "doctor"
-  | "run"
-  | "resume"
-  | "status"
-  | "checkpoint"
-  | "checks"
-  | "pr-plan"
-  | "pr-exec"
-  | "approve-pr";
+export const cliJsonCommands = [
+  "init",
+  "doctor",
+  "run",
+  "resume",
+  "status",
+  "checkpoint",
+  "checks",
+  "pr-plan",
+  "pr-exec",
+  "approve-pr"
+] as const;
+
+export type CliJsonCommand = (typeof cliJsonCommands)[number];
 
 export type CliJsonReport<T extends object> = T & {
   schemaVersion: typeof cliJsonSchemaVersion;

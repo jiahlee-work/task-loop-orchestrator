@@ -144,6 +144,8 @@ JSON commands include lightweight schema metadata while preserving existing top-
 
 The metadata is applied to every current `--json` command: `init`, `doctor`, `run`, `resume`, `status`, `checkpoint`, `checks`, `pr-plan`, `pr-exec`, and `approve-pr`. Command-specific payload fields remain at the top level for compatibility.
 
+See [docs/json-output.md](docs/json-output.md) for the full CLI JSON contract. A machine-readable schema for the common envelope is available at [schemas/cli-json.schema.json](schemas/cli-json.schema.json).
+
 ## Permission Modes
 
 - `read`: permits `read_state` only.

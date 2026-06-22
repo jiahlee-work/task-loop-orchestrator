@@ -19,7 +19,7 @@ describe("package metadata", () => {
     });
     expect(packageJson.engines?.node).toBe(">=24");
     expect(packageJson.packageManager).toMatch(/^pnpm@/);
-    expect(packageJson.files).toEqual(expect.arrayContaining(["dist", "orchestrator.config.example.json"]));
+    expect(packageJson.files).toEqual(expect.arrayContaining(["dist", "schemas", "orchestrator.config.example.json"]));
     expect(packageJson.scripts?.prepack).toBe("pnpm run build");
     expect(packageJson.scripts?.postbuild).toContain("chmodSync");
     expect(packageJson.scripts?.["package:smoke"]).toBe("node scripts/package-smoke.mjs");

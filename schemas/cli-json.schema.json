@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jiahlee-work/task-loop-orchestrator/schemas/cli-json.schema.json",
+  "title": "task-loop-orchestrator CLI JSON response",
+  "description": "Common metadata envelope for task-loop-orchestrator CLI --json responses. Command-specific payload fields are allowed at the top level for compatibility.",
+  "type": "object",
+  "required": ["schemaVersion", "command", "createdAt"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1,
+      "description": "CLI JSON schema version."
+    },
+    "command": {
+      "type": "string",
+      "enum": [
+        "init",
+        "doctor",
+        "run",
+        "resume",
+        "status",
+        "checkpoint",
+        "checks",
+        "pr-plan",
+        "pr-exec",
+        "approve-pr"
+      ],
+      "description": "CLI command that produced the response."
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp for the JSON response. Legacy payload timestamps may be preserved."
+    }
+  },
+  "additionalProperties": true
+}
