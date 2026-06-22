@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { appendEvent } from "./audit.js";
+import { createPullRequestApproval, preparePullRequestExecution } from "./approval.js";
 import {
   loadOrchestratorConfig,
   normalizeExecutorMode,
@@ -86,6 +87,7 @@ function printUsage(): void {
   task-loop-orchestrator resume <runId> [--max-iterations n]
   task-loop-orchestrator checkpoint [runId] [--github none|gh-cli] [--json]
   task-loop-orchestrator pr-plan [runId] [--json]
+  task-loop-orchestrator pr-exec [runId] [--execute] [--approved-by name] [--json]
   task-loop-orchestrator checks [ref] [--json]`);
 }
 
@@ -289,6 +291,50 @@ async function prPlanCommand(args: ParsedArgs): Promise<void> {
   }
 }
 
+async function prExecCommand(args: ParsedArgs): Promise<void> {
+  const store = new FileRunStore(process.cwd());
+  const runId = args.positional[0];
+  const run = runId ? await store.load(runId) : await store.latest();
+
+  if (!run) {
+    console.log("No runs found.");
+    return;
+  }
+
+  const checkpoint = await store.latestCheckpoint(run.id);
+  const tools = createGitToolProviders(process.cwd());
+  const plan = await createPullRequestPlan({
+    run,
+    repo: tools.repo,
+    checkpoint
+  });
+  const approvedBy = stringFlag(args.flags, "approved-by");
+  const approval = approvedBy ? createPullRequestApproval(plan, { approvedBy, reason: stringFlag(args.flags, "reason") }) : undefined;
+  const report = preparePullRequestExecution({
+    plan,
+    approval,
+    mode: args.flags.execute === true ? "execute" : "dry-run"
+  });
+
+  if (args.flags.json === true) {
+    console.log(JSON.stringify(report, null, 2));
+    return;
+  }
+
+  console.log(`PR execution preflight ${report.id}: ${report.status}`);
+  console.log(report.message);
+  if (report.blockedReasons.length > 0) {
+    console.log("Blocked reasons:");
+    for (const reason of report.blockedReasons) {
+      console.log(`- ${reason}`);
+    }
+  }
+  console.log("Command candidates:");
+  for (const candidate of report.commandCandidates) {
+    console.log(`- ${candidate.action}: ${candidate.command.join(" ")}`);
+  }
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
@@ -324,6 +370,11 @@ async function main(): Promise<void> {
 
   if (args.command === "pr-plan") {
     await prPlanCommand(args);
+    return;
+  }
+
+  if (args.command === "pr-exec") {
+    await prExecCommand(args);
     return;
   }
 

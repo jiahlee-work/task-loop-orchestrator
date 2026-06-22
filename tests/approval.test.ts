@@ -1,0 +1,82 @@
+import { describe, expect, it } from "vitest";
+import type { PullRequestPlan } from "../src/domain.js";
+import { createPullRequestApproval, preparePullRequestExecution } from "../src/approval.js";
+
+describe("PR execution approval preflight", () => {
+  it("defaults to dry-run and never executes command candidates", () => {
+    const report = preparePullRequestExecution({ plan: prPlan() });
+
+    expect(report.mode).toBe("dry-run");
+    expect(report.status).toBe("dry_run");
+    expect(report.executedCommands).toEqual([]);
+    expect(report.commandCandidates).toHaveLength(2);
+    expect(report.message).toContain("Dry-run only");
+  });
+
+  it("blocks execute mode without approval", () => {
+    const report = preparePullRequestExecution({ plan: prPlan(), mode: "execute" });
+
+    expect(report.status).toBe("blocked");
+    expect(report.blockedReasons).toContain("Execution mode requires an approval record.");
+    expect(report.executedCommands).toEqual([]);
+  });
+
+  it("creates approval records but still blocks write execution at the boundary", () => {
+    const plan = prPlan();
+    const approval = createPullRequestApproval(plan, {
+      approvedBy: "maintainer",
+      reason: "Reviewed checkpoint and PR plan."
+    });
+
+    const report = preparePullRequestExecution({ plan, approval, mode: "execute" });
+
+    expect(approval.status).toBe("approved");
+    expect(approval.scope).toBe("pr_execution");
+    expect(report.status).toBe("blocked");
+    expect(report.approval?.approvedBy).toBe("maintainer");
+    expect(report.blockedReasons).toContain(
+      "Write execution is not implemented; branch, commit, push, and PR creation remain blocked at the boundary."
+    );
+    expect(report.executedCommands).toEqual([]);
+  });
+
+  it("carries PR plan blocked reasons into execution preflight", () => {
+    const report = preparePullRequestExecution({
+      plan: prPlan(["Latest checkpoint is needs_attention."]),
+      mode: "execute"
+    });
+
+    expect(report.blockedReasons).toEqual(
+      expect.arrayContaining(["Latest checkpoint is needs_attention.", "Execution mode requires an approval record."])
+    );
+  });
+});
+
+function prPlan(blockedReasons: string[] = []): PullRequestPlan {
+  return {
+    id: "prplan-1",
+    runId: "run-1",
+    checkpointId: "checkpoint-1",
+    sourceBranchHint: "orchestrator/run1",
+    baseBranch: "main",
+    title: "Prepare PR workflow",
+    body: "PR body",
+    preconditions: ["Review this plan."],
+    blockedReasons,
+    commandCandidates: [
+      {
+        action: "create_branch",
+        command: ["git", "switch", "-c", "orchestrator/run1"],
+        reason: "Create branch.",
+        decisionReady: true
+      },
+      {
+        action: "create_pr",
+        command: ["gh", "pr", "create", "--title", "Prepare PR workflow"],
+        reason: "Create PR.",
+        decisionReady: true
+      }
+    ],
+    createdAt: "2026-06-22T00:00:00.000Z"
+  };
+}

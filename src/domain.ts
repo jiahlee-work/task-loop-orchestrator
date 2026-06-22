@@ -249,6 +249,40 @@ export interface PullRequestPlan {
   createdAt: string;
 }
 
+export type ApprovalScope = "pr_execution";
+
+export type ApprovalStatus = "pending" | "approved" | "rejected";
+
+export type PullRequestExecutionMode = "dry-run" | "execute";
+
+export type PullRequestExecutionStatus = "dry_run" | "ready" | "blocked";
+
+export interface ApprovalRecord {
+  id: string;
+  scope: ApprovalScope;
+  planId: string;
+  runId: string;
+  checkpointId?: string;
+  status: ApprovalStatus;
+  approvedBy?: string;
+  reason?: string;
+  createdAt: string;
+}
+
+export interface PullRequestExecutionReport {
+  id: string;
+  planId: string;
+  runId: string;
+  mode: PullRequestExecutionMode;
+  status: PullRequestExecutionStatus;
+  approval?: ApprovalRecord;
+  blockedReasons: string[];
+  commandCandidates: PullRequestCommandCandidate[];
+  executedCommands: string[][];
+  message: string;
+  createdAt: string;
+}
+
 export type ProposedSubtask = Omit<Subtask, "status" | "createdAt" | "updatedAt"> &
   Partial<Pick<Subtask, "createdAt" | "updatedAt">>;
 

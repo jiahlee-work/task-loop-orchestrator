@@ -30,6 +30,8 @@ node dist/cli.js checkpoint --json
 node dist/cli.js checkpoint --github gh-cli --json
 node dist/cli.js checks HEAD --json
 node dist/cli.js pr-plan --json
+node dist/cli.js pr-exec --json
+node dist/cli.js pr-exec --execute --approved-by maintainer --json
 ```
 
 Runs are stored as JSON files under `.orchestrator/runs/<runId>.json`.
@@ -131,6 +133,14 @@ Maintainer actions such as `create_pr`, `merge_pr`, and `release` are emitted on
 The plan includes a source branch hint, base branch, PR title/body, preconditions, blocked reasons, and command candidates for branch creation, commit, push, and PR creation. These commands are dry-run candidates only. The orchestrator does not create branches, commit, push, or call `gh pr create`.
 
 A non-clean checkpoint or dirty repository is reported in `blockedReasons`; users must resolve those before treating the PR plan as ready for execution.
+
+`pr-exec [runId] [--execute] [--approved-by name] [--json]` creates an approval-aware execution preflight report from the PR plan. The default mode is dry-run and never executes commands. `--execute` requires approval data, but write execution is still blocked at the boundary until a later implementation adds an explicit, audited command runner.
+
+Current approval model:
+
+- no `--execute`: returns `dry_run` with command candidates and no executed commands
+- `--execute` without `--approved-by`: returns `blocked`
+- `--execute --approved-by name`: creates an approval record, then still blocks before branch/commit/push/PR creation because write execution is not implemented
 
 ## CI
 
