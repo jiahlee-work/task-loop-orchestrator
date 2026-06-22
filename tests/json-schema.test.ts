@@ -164,6 +164,57 @@ describe("CLI JSON schema artifact", () => {
     expect(prPlanCommandCandidate?.additionalProperties).toBe(true);
   });
 
+  it("defines a focused PR execution payload schema", async () => {
+    const schema = await readSchema();
+    const prExecPayload = schema.$defs?.prExecPayload;
+    const approvalRecord = schema.$defs?.approvalRecord;
+    const approvalPlanSnapshot = schema.$defs?.approvalPlanSnapshot;
+
+    expect(prExecPayload?.required).toEqual(
+      expect.arrayContaining([
+        "id",
+        "planId",
+        "runId",
+        "mode",
+        "status",
+        "blockedReasons",
+        "commandCandidates",
+        "executedCommands",
+        "message",
+        "createdAt"
+      ])
+    );
+    expect(prExecPayload?.properties?.mode).toEqual({ type: "string", enum: ["dry-run", "execute"] });
+    expect(prExecPayload?.properties?.status).toEqual({ type: "string", enum: ["dry_run", "ready", "blocked"] });
+    expect(prExecPayload?.properties?.approval).toEqual({ $ref: "#/$defs/approvalRecord" });
+    expect(prExecPayload?.properties?.commandCandidates).toEqual({
+      type: "array",
+      items: {
+        $ref: "#/$defs/prPlanCommandCandidate"
+      }
+    });
+    expect(prExecPayload?.properties?.executedCommands).toEqual({
+      type: "array",
+      items: {
+        type: "array",
+        items: {
+          type: "string"
+        }
+      }
+    });
+    expect(prExecPayload?.additionalProperties).toBe(true);
+    expect(approvalRecord?.required).toEqual(
+      expect.arrayContaining(["id", "scope", "planId", "runId", "status", "createdAt"])
+    );
+    expect(approvalRecord?.properties?.scope).toEqual({ const: "pr_execution" });
+    expect(approvalRecord?.properties?.status).toEqual({ type: "string", enum: ["pending", "approved", "rejected"] });
+    expect(approvalRecord?.properties?.planSnapshot).toEqual({ $ref: "#/$defs/approvalPlanSnapshot" });
+    expect(approvalRecord?.additionalProperties).toBe(true);
+    expect(approvalPlanSnapshot?.required).toEqual(
+      expect.arrayContaining(["planTitle", "baseBranch", "sourceBranchHint", "blockedReasons", "commandCandidateActions"])
+    );
+  });
+
   it("applies the run report branch to run, resume, and default status reports", async () => {
     const schema = await readSchema();
 
@@ -265,6 +316,28 @@ describe("CLI JSON schema artifact", () => {
     );
   });
 
+  it("applies the PR execution branch to concrete PR execution responses", async () => {
+    const schema = await readSchema();
+
+    expect(schema.allOf).toEqual(
+      expect.arrayContaining([
+        {
+          if: {
+            properties: {
+              command: {
+                const: "pr-exec"
+              }
+            },
+            required: ["command", "id"]
+          },
+          then: {
+            $ref: "#/$defs/prExecPayload"
+          }
+        }
+      ])
+    );
+  });
+
   it("documents and links the schema artifact", async () => {
     const readme = await readFile(join(root, "README.md"), "utf8");
     const docs = await readFile(join(root, "docs", "json-output.md"), "utf8");
@@ -276,6 +349,7 @@ describe("CLI JSON schema artifact", () => {
     expect(docs).toContain("Checks Schema");
     expect(docs).toContain("Checkpoint Schema");
     expect(docs).toContain("PR Plan Schema");
+    expect(docs).toContain("PR Execution Schema");
     expect(docs).toContain("status --json --raw");
     expect(docs).toContain("../schemas/cli-json.schema.json");
   });
@@ -323,6 +397,19 @@ async function readSchema(): Promise<{
       required?: string[];
       properties?: Record<string, unknown>;
       additionalProperties?: boolean;
+    };
+    prExecPayload?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
+    };
+    approvalRecord?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
+    };
+    approvalPlanSnapshot?: {
+      required?: string[];
     };
     maintainerActionCandidate?: {
       required?: string[];
@@ -389,6 +476,19 @@ async function readSchema(): Promise<{
         required?: string[];
         properties?: Record<string, unknown>;
         additionalProperties?: boolean;
+      };
+      prExecPayload?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
+      approvalRecord?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
+      approvalPlanSnapshot?: {
+        required?: string[];
       };
       maintainerActionCandidate?: {
         required?: string[];

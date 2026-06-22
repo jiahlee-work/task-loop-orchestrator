@@ -80,6 +80,12 @@ The nested `ciCheck` field reuses the check status/detail shape where possible, 
 
 Each `commandCandidates[]` item fixes `action`, `command`, `reason`, and `decisionReady`. These are execution candidates only; `pr-plan` never creates a branch, commit, push, or pull request.
 
+## PR Execution Schema
+
+`pr-exec [runId] --json` has a command-specific schema branch for approval preflight and write-boundary checks. Consumers can rely on `id`, `planId`, `runId`, `mode`, `status`, `blockedReasons`, `commandCandidates`, `executedCommands`, `message`, and `createdAt`, with optional `approval`.
+
+`mode` is `dry-run` or `execute`; `status` is `dry_run`, `ready`, or `blocked`. `executedCommands` is an array of command arrays and remains empty while write execution is intentionally blocked. Approval records expose the minimum audit fields needed to connect the preflight result to a stored approval.
+
 ## Not Found Responses
 
 Commands that need an existing run return an enveloped not-found response when `--json` is used and no run is available:

@@ -168,6 +168,74 @@
       },
       "additionalProperties": true
     },
+    "approvalPlanSnapshot": {
+      "type": "object",
+      "required": ["planTitle", "baseBranch", "sourceBranchHint", "blockedReasons", "commandCandidateActions"],
+      "properties": {
+        "planTitle": {
+          "type": "string"
+        },
+        "baseBranch": {
+          "type": "string"
+        },
+        "sourceBranchHint": {
+          "type": "string"
+        },
+        "blockedReasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "commandCandidateActions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["create_branch", "commit", "push", "create_pr"]
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "approvalRecord": {
+      "type": "object",
+      "required": ["id", "scope", "planId", "runId", "status", "createdAt"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "scope": {
+          "const": "pr_execution"
+        },
+        "planId": {
+          "type": "string"
+        },
+        "runId": {
+          "type": "string"
+        },
+        "checkpointId": {
+          "type": "string"
+        },
+        "planSnapshot": {
+          "$ref": "#/$defs/approvalPlanSnapshot"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "approved", "rejected"]
+        },
+        "approvedBy": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": true
+    },
     "ownerDecisionItem": {
       "type": "object",
       "required": ["source", "reason"],
@@ -181,6 +249,72 @@
         },
         "subtaskId": {
           "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "prExecPayload": {
+      "type": "object",
+      "required": [
+        "id",
+        "planId",
+        "runId",
+        "mode",
+        "status",
+        "blockedReasons",
+        "commandCandidates",
+        "executedCommands",
+        "message",
+        "createdAt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "planId": {
+          "type": "string"
+        },
+        "runId": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["dry-run", "execute"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["dry_run", "ready", "blocked"]
+        },
+        "approval": {
+          "$ref": "#/$defs/approvalRecord"
+        },
+        "blockedReasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "commandCandidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/prPlanCommandCandidate"
+          }
+        },
+        "executedCommands": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "message": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
         }
       },
       "additionalProperties": true
@@ -487,6 +621,19 @@
       },
       "then": {
         "$ref": "#/$defs/prPlanPayload"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "pr-exec"
+          }
+        },
+        "required": ["command", "id"]
+      },
+      "then": {
+        "$ref": "#/$defs/prExecPayload"
       }
     }
   ],
