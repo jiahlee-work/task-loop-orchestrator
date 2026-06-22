@@ -56,6 +56,8 @@ The CLI uses a read-focused Git repo provider for discovery. It reads `git statu
 
 GitHub status is optional and disabled by default. `--github gh-cli` enables a read-only GitHub CLI provider for checkpoint checks. It uses `gh repo view`, `gh pr list`, and `gh pr checks`; it does not create or modify PRs, issues, releases, merges, or repository state. If `gh` is missing, unauthenticated, or cannot read the repository, checkpoint generation falls back to an `unknown` or `not_found` CI summary instead of failing.
 
+When PR checks are not available, the GitHub CLI provider falls back to read-only `gh api repos/{owner}/{repo}/commits/{ref}/check-runs` so branch or commit check-runs can still populate checkpoint `ciCheck`. `gh auth status` is useful for local setup, but failed auth remains a graceful checkpoint fallback.
+
 ## Executor Modes
 
 - `mock`: default executor; returns a deterministic mock `RoleReport`.
@@ -110,3 +112,7 @@ Checkpoint status:
 - `blocked`: blocked/failed subtasks or reviewer `owner_decision` items must be resolved.
 
 Maintainer actions such as `create_pr`, `merge_pr`, and `release` are emitted only as decision-ready candidates. Checkpoint generation never creates branches, worktrees, commits, pushes, PRs, merges, releases, Jira transitions, or GitHub/Jira API calls.
+
+## CI
+
+GitHub Actions CI is defined in `.github/workflows/ci.yml` and runs on pull requests and pushes to `main`. It uses Node 20 with Corepack/pnpm cache, installs with `pnpm install --frozen-lockfile`, then runs typecheck, tests, and build.

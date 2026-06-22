@@ -137,7 +137,7 @@ export class GitHubCliProvider implements GitHubProvider {
   ) {}
 
   async getRepositoryInfo(): Promise<GitHubRepositoryInfo | undefined> {
-    const result = await this.runGh(["repo", "view", "--json", "name,owner,url,defaultBranchRef"]);
+    const result = await this.runGh(["repo", "view", "--json", "name,owner,url,defaultBranchRef,nameWithOwner"]);
     if (result.exitCode !== 0) {
       return undefined;
     }
@@ -147,14 +147,19 @@ export class GitHubCliProvider implements GitHubProvider {
       return undefined;
     }
 
-    const owner = isRecord(parsed.owner) && typeof parsed.owner.login === "string" ? parsed.owner.login : "unknown";
+    const nameWithOwner = typeof parsed.nameWithOwner === "string" ? parsed.nameWithOwner : undefined;
+    const [ownerFromFullName, nameFromFullName] = nameWithOwner?.split("/") ?? [];
+    const owner =
+      isRecord(parsed.owner) && typeof parsed.owner.login === "string"
+        ? parsed.owner.login
+        : ownerFromFullName ?? "unknown";
     const defaultBranch =
       isRecord(parsed.defaultBranchRef) && typeof parsed.defaultBranchRef.name === "string"
         ? parsed.defaultBranchRef.name
         : "unknown";
 
     return {
-      name: typeof parsed.name === "string" ? parsed.name : "unknown",
+      name: typeof parsed.name === "string" ? parsed.name : nameFromFullName ?? "unknown",
       owner,
       url: typeof parsed.url === "string" ? parsed.url : "",
       defaultBranch
@@ -191,17 +196,19 @@ export class GitHubCliProvider implements GitHubProvider {
   async getCheckStatus(ref?: string): Promise<GitHubCheckSummary> {
     const target = ref ?? "HEAD";
     const result = await this.runGh(["pr", "checks", target, "--json", "name,state,bucket,description,workflow"]);
-    if (result.exitCode !== 0) {
-      return {
-        status: classifyGhFailure(result.stderr),
-        summary: result.stderr.trim() || `Unable to read GitHub checks for ${target}.`,
-        ref: target,
-        source: "github"
-      };
-    }
+    if (result.exitCode === 0) {
+      const parsed = parseJson(result.stdout);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return createCheckSummaryFromItems(
+          parsed.filter(isRecord).map((item) => ({
+            name: typeof item.name === "string" ? item.name : typeof item.workflow === "string" ? item.workflow : "unknown",
+            status: normalizeCheckStatus(item.state, item.bucket),
+            summary: typeof item.description === "string" ? item.description : undefined
+          })),
+          target
+        );
+      }
 
-    const parsed = parseJson(result.stdout);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
       return {
         status: "not_found",
         summary: `No GitHub checks found for ${target}.`,
@@ -211,24 +218,58 @@ export class GitHubCliProvider implements GitHubProvider {
       };
     }
 
-    const details = parsed.filter(isRecord).map((item) => ({
-      name: typeof item.name === "string" ? item.name : typeof item.workflow === "string" ? item.workflow : "unknown",
-      status: normalizeCheckStatus(item.state, item.bucket),
-      summary: typeof item.description === "string" ? item.description : undefined
-    }));
-    const status = aggregateCheckStatus(details.map((detail) => detail.status));
-
-    return {
-      status,
-      summary: summarizeCheckStatus(status, details.length),
-      ref: target,
-      source: "github",
-      details
-    };
+    return this.getCommitCheckStatus(target, result.stderr);
   }
 
   private runGh(args: string[]): Promise<CommandResult> {
     return this.runner(this.ghBinary, args, this.rootDir);
+  }
+
+  private async getCommitCheckStatus(ref: string, prChecksError: string): Promise<GitHubCheckSummary> {
+    const repository = await this.getRepositoryInfo();
+    if (!repository || repository.owner === "unknown" || repository.name === "unknown") {
+      return {
+        status: classifyGhFailure(prChecksError),
+        summary: prChecksError.trim() || `Unable to resolve GitHub repository for ${ref}.`,
+        ref,
+        source: "github"
+      };
+    }
+
+    const result = await this.runGh([
+      "api",
+      `repos/${repository.owner}/${repository.name}/commits/${ref}/check-runs`,
+      "--jq",
+      ".check_runs"
+    ]);
+    if (result.exitCode !== 0) {
+      return {
+        status: classifyGhFailure(result.stderr),
+        summary: result.stderr.trim() || `Unable to read GitHub check-runs for ${ref}.`,
+        ref,
+        source: "github"
+      };
+    }
+
+    const parsed = parseJson(result.stdout);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return {
+        status: "not_found",
+        summary: `No GitHub check-runs found for ${ref}.`,
+        ref,
+        source: "github",
+        details: []
+      };
+    }
+
+    return createCheckSummaryFromItems(
+      parsed.filter(isRecord).map((item) => ({
+        name: typeof item.name === "string" ? item.name : "unknown",
+        status: normalizeCheckRunStatus(item.status, item.conclusion),
+        summary: typeof item.conclusion === "string" ? item.conclusion : typeof item.status === "string" ? item.status : undefined
+      })),
+      ref
+    );
   }
 }
 
@@ -352,4 +393,50 @@ function aggregateCheckStatus(statuses: GitHubCheckStatus[]): GitHubCheckStatus 
 
 function summarizeCheckStatus(status: GitHubCheckStatus, count: number): string {
   return `GitHub checks ${status} (${count} check${count === 1 ? "" : "s"}).`;
+}
+
+function normalizeCheckRunStatus(status: unknown, conclusion: unknown): GitHubCheckStatus {
+  const normalizedStatus = typeof status === "string" ? status.toLowerCase() : "";
+  const normalizedConclusion = typeof conclusion === "string" ? conclusion.toLowerCase() : "";
+
+  if (normalizedStatus && normalizedStatus !== "completed") {
+    return "pending";
+  }
+
+  if (normalizedConclusion === "success" || normalizedConclusion === "neutral" || normalizedConclusion === "skipped") {
+    return "success";
+  }
+
+  if (
+    normalizedConclusion === "failure" ||
+    normalizedConclusion === "cancelled" ||
+    normalizedConclusion === "timed_out" ||
+    normalizedConclusion === "action_required"
+  ) {
+    return "failure";
+  }
+
+  if (normalizedConclusion === "startup_failure") {
+    return "error";
+  }
+
+  if (!normalizedConclusion) {
+    return "pending";
+  }
+
+  return "unknown";
+}
+
+function createCheckSummaryFromItems(
+  details: NonNullable<GitHubCheckSummary["details"]>,
+  ref: string
+): GitHubCheckSummary {
+  const status = aggregateCheckStatus(details.map((detail) => detail.status));
+  return {
+    status,
+    summary: summarizeCheckStatus(status, details.length),
+    ref,
+    source: "github",
+    details
+  };
 }

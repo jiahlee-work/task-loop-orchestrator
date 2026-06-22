@@ -94,7 +94,7 @@ describe("GitHubCliProvider", () => {
       }
     ]);
     expect(calls.map((call) => [call.command, ...call.args])).toEqual([
-      ["gh", "repo", "view", "--json", "name,owner,url,defaultBranchRef"],
+      ["gh", "repo", "view", "--json", "name,owner,url,defaultBranchRef,nameWithOwner"],
       ["gh", "pr", "list", "--json", "number,title,state,headRefName,baseRefName,url,isDraft"]
     ]);
   });
@@ -128,6 +128,117 @@ describe("GitHubCliProvider", () => {
 
     await expect(provider.getCheckStatus("main")).resolves.toMatchObject({
       status: "unknown",
+      source: "github"
+    });
+  });
+
+  it("falls back from PR checks to commit check-runs through gh api", async () => {
+    const calls: string[][] = [];
+    const runner: CommandRunner = async (command, args = []) => {
+      calls.push([command, ...args]);
+      if (args[0] === "pr" && args[1] === "checks") {
+        return {
+          exitCode: 1,
+          stdout: "",
+          stderr: "no pull requests found for branch \"main\""
+        };
+      }
+
+      if (args[0] === "repo") {
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({
+            nameWithOwner: "jiahlee-work/task-loop-orchestrator",
+            defaultBranchRef: { name: "main" },
+            url: "https://github.com/jiahlee-work/task-loop-orchestrator"
+          }),
+          stderr: ""
+        };
+      }
+
+      return {
+        exitCode: 0,
+        stdout: JSON.stringify([
+          { name: "CI / typecheck", status: "completed", conclusion: "success" },
+          { name: "CI / test", status: "completed", conclusion: "success" }
+        ]),
+        stderr: ""
+      };
+    };
+    const provider = new GitHubCliProvider("/tmp/repo", runner);
+
+    await expect(provider.getCheckStatus("main")).resolves.toMatchObject({
+      status: "success",
+      summary: "GitHub checks success (2 checks).",
+      details: [
+        { name: "CI / typecheck", status: "success", summary: "success" },
+        { name: "CI / test", status: "success", summary: "success" }
+      ]
+    });
+    expect(calls).toEqual([
+      ["gh", "pr", "checks", "main", "--json", "name,state,bucket,description,workflow"],
+      ["gh", "repo", "view", "--json", "name,owner,url,defaultBranchRef,nameWithOwner"],
+      ["gh", "api", "repos/jiahlee-work/task-loop-orchestrator/commits/main/check-runs", "--jq", ".check_runs"]
+    ]);
+  });
+
+  it("aggregates check-runs with failure and pending precedence", async () => {
+    const runner: CommandRunner = async (_command, args = []) => {
+      if (args[0] === "pr") {
+        return { exitCode: 1, stdout: "", stderr: "no pull requests found" };
+      }
+
+      if (args[0] === "repo") {
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({ name: "repo", owner: { login: "owner" }, defaultBranchRef: { name: "main" } }),
+          stderr: ""
+        };
+      }
+
+      return {
+        exitCode: 0,
+        stdout: JSON.stringify([
+          { name: "CI / build", status: "completed", conclusion: "success" },
+          { name: "CI / test", status: "completed", conclusion: "failure" },
+          { name: "CI / deploy-preview", status: "queued", conclusion: null }
+        ]),
+        stderr: ""
+      };
+    };
+    const provider = new GitHubCliProvider("/tmp/repo", runner);
+
+    await expect(provider.getCheckStatus("main")).resolves.toMatchObject({
+      status: "failure",
+      summary: "GitHub checks failure (3 checks)."
+    });
+  });
+
+  it("degrades gh api auth failure into unknown check status", async () => {
+    const runner: CommandRunner = async (_command, args = []) => {
+      if (args[0] === "pr") {
+        return { exitCode: 1, stdout: "", stderr: "no pull requests found" };
+      }
+
+      if (args[0] === "repo") {
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({ nameWithOwner: "owner/repo", defaultBranchRef: { name: "main" } }),
+          stderr: ""
+        };
+      }
+
+      return {
+        exitCode: 1,
+        stdout: "",
+        stderr: "HTTP 401: Requires authentication"
+      };
+    };
+    const provider = new GitHubCliProvider("/tmp/repo", runner);
+
+    await expect(provider.getCheckStatus("main")).resolves.toMatchObject({
+      status: "unknown",
+      summary: "HTTP 401: Requires authentication",
       source: "github"
     });
   });
