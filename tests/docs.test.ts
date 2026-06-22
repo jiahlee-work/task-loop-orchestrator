@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { cliJsonCommands } from "../src/cli-json.js";
 
 const root = process.cwd();
 
@@ -287,6 +288,22 @@ describe("command reference documentation", () => {
       "create GitHub releases"
     ]);
   });
+
+  it("keeps per-command JSON support labels aligned with CLI JSON commands", async () => {
+    const commands = await readCommands();
+    const jsonSupportByCommand = extractCommandReferenceJsonSupport(commands);
+    const supportedInDocs = [...jsonSupportByCommand.entries()]
+      .filter(([, jsonLine]) => jsonLine.includes("supported with `--json`"))
+      .map(([command]) => command)
+      .sort();
+    const unsupportedInDocs = [...jsonSupportByCommand.entries()]
+      .filter(([, jsonLine]) => jsonLine.includes("not supported"))
+      .map(([command]) => command)
+      .sort();
+
+    expect(supportedInDocs).toEqual([...cliJsonCommands].sort());
+    expect(unsupportedInDocs).toEqual(["--help", "--version"]);
+  });
 });
 
 async function readQuickstart() {
@@ -325,6 +342,23 @@ function extractCommandReferenceHeadings(commandsDoc: string) {
   return [...commandsDoc.matchAll(/^### `([^`]+)`/gm)]
     .map((match) => commandNameFromSignature(match[1]))
     .filter((heading) => heading !== undefined);
+}
+
+function extractCommandReferenceJsonSupport(commandsDoc: string) {
+  const sections = new Map<string, string>();
+  const headingMatches = [...commandsDoc.matchAll(/^### `([^`]+)`/gm)];
+
+  for (let index = 0; index < headingMatches.length; index += 1) {
+    const match = headingMatches[index];
+    const nextMatch = headingMatches[index + 1];
+    const section = commandsDoc.slice(match.index, nextMatch?.index);
+    const jsonLine = section.match(/^JSON: (.+)$/m)?.[1];
+
+    expect(jsonLine, `Missing JSON support line for ${match[1]}`).toBeDefined();
+    sections.set(commandNameFromSignature(match[1]), jsonLine!);
+  }
+
+  return sections;
 }
 
 function commandNameFromSignature(signature: string) {
