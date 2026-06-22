@@ -265,6 +265,34 @@ describe("CLI JSON schema artifact", () => {
     expect(doctorSuggestion?.additionalProperties).toBe(true);
   });
 
+  it("defines a focused init payload schema", async () => {
+    const schema = await readSchema();
+    const initPayload = schema.$defs?.initPayload;
+    const initFileResult = schema.$defs?.initFileResult;
+
+    expect(schema.$defs?.initFileStatus).toEqual({ type: "string", enum: ["created", "updated", "skipped"] });
+    expect(initPayload?.required).toEqual(expect.arrayContaining(["rootDir", "force", "files"]));
+    expect(initPayload?.properties?.force).toEqual({ type: "boolean" });
+    expect(initPayload?.properties?.files).toEqual({
+      type: "object",
+      required: ["config", "gitignore"],
+      properties: {
+        config: {
+          $ref: "#/$defs/initFileResult"
+        },
+        gitignore: {
+          $ref: "#/$defs/initFileResult"
+        }
+      },
+      additionalProperties: true
+    });
+    expect(initPayload?.additionalProperties).toBe(true);
+    expect(initFileResult?.required).toEqual(expect.arrayContaining(["path", "status"]));
+    expect(initFileResult?.properties?.status).toEqual({ $ref: "#/$defs/initFileStatus" });
+    expect(initFileResult?.properties?.reason).toEqual({ type: "string" });
+    expect(initFileResult?.additionalProperties).toBe(true);
+  });
+
   it("applies the run report branch to run, resume, and default status reports", async () => {
     const schema = await readSchema();
 
@@ -432,6 +460,28 @@ describe("CLI JSON schema artifact", () => {
     );
   });
 
+  it("applies the init branch to init responses", async () => {
+    const schema = await readSchema();
+
+    expect(schema.allOf).toEqual(
+      expect.arrayContaining([
+        {
+          if: {
+            properties: {
+              command: {
+                const: "init"
+              }
+            },
+            required: ["command"]
+          },
+          then: {
+            $ref: "#/$defs/initPayload"
+          }
+        }
+      ])
+    );
+  });
+
   it("documents and links the schema artifact", async () => {
     const readme = await readFile(join(root, "README.md"), "utf8");
     const docs = await readFile(join(root, "docs", "json-output.md"), "utf8");
@@ -446,6 +496,7 @@ describe("CLI JSON schema artifact", () => {
     expect(docs).toContain("PR Execution Schema");
     expect(docs).toContain("PR Approval Schema");
     expect(docs).toContain("Doctor Schema");
+    expect(docs).toContain("Init Schema");
     expect(docs).toContain("status --json --raw");
     expect(docs).toContain("../schemas/cli-json.schema.json");
   });
@@ -484,6 +535,20 @@ async function readSchema(): Promise<{
       additionalProperties?: boolean;
     };
     doctorSuggestion?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
+    };
+    initFileStatus?: {
+      type?: string;
+      enum?: string[];
+    };
+    initPayload?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
+    };
+    initFileResult?: {
       required?: string[];
       properties?: Record<string, unknown>;
       additionalProperties?: boolean;
@@ -583,6 +648,20 @@ async function readSchema(): Promise<{
         additionalProperties?: boolean;
       };
       doctorSuggestion?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
+      initFileStatus?: {
+        type?: string;
+        enum?: string[];
+      };
+      initPayload?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
+      initFileResult?: {
         required?: string[];
         properties?: Record<string, unknown>;
         additionalProperties?: boolean;

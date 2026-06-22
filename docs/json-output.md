@@ -98,6 +98,12 @@ The command writes only the approval record under `.orchestrator/approvals/`; it
 
 Each `checks[]` item fixes `id`, `status`, and `summary`, with optional `details`, `recommendedAction`, and structured `suggestions`. Each suggestion fixes `label`, `command`, `reason`, and `destructive` so automation or UI layers can present remediation candidates without doctor executing them.
 
+## Init Schema
+
+`init --json` has a command-specific schema branch for bootstrap file results. Consumers can rely on `rootDir`, `force`, and `files`.
+
+The `files` object currently reports `config` and `gitignore`. Each file result fixes `path` and `status`, with optional `reason`; status is one of `created`, `updated`, or `skipped`. `init` is the explicit bootstrap write command, but it still avoids destructive config overwrite unless `--force` is used.
+
 ## Not Found Responses
 
 Commands that need an existing run return an enveloped not-found response when `--json` is used and no run is available:

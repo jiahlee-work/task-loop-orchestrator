@@ -116,6 +116,52 @@
       },
       "additionalProperties": true
     },
+    "initFileStatus": {
+      "type": "string",
+      "enum": ["created", "updated", "skipped"]
+    },
+    "initFileResult": {
+      "type": "object",
+      "required": ["path", "status"],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/initFileStatus"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "initPayload": {
+      "type": "object",
+      "required": ["rootDir", "force", "files"],
+      "properties": {
+        "rootDir": {
+          "type": "string"
+        },
+        "force": {
+          "type": "boolean"
+        },
+        "files": {
+          "type": "object",
+          "required": ["config", "gitignore"],
+          "properties": {
+            "config": {
+              "$ref": "#/$defs/initFileResult"
+            },
+            "gitignore": {
+              "$ref": "#/$defs/initFileResult"
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
     "githubCheckStatus": {
       "type": "string",
       "enum": ["success", "pending", "failure", "error", "not_found", "unknown"]
@@ -738,6 +784,19 @@
       },
       "then": {
         "$ref": "#/$defs/doctorPayload"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "init"
+          }
+        },
+        "required": ["command"]
+      },
+      "then": {
+        "$ref": "#/$defs/initPayload"
       }
     }
   ],
