@@ -183,7 +183,7 @@ Remaining implementation requirements for future milestones:
 
 ## Plain Output Contract Draft
 
-Status: design draft, not enabled. The current CLI still requires `--json`; this section defines the human-readable contract for a future implementation only.
+Status: formatter helpers implemented; CLI plain output not enabled. The current CLI still requires `--json`; this section defines the human-readable contract for a future CLI implementation.
 
 Plain output is for people reading terminal summaries. Automation, UI integrations, scripts, and schema validation must continue to use `--json` because the JSON envelope is the stable machine-readable contract.
 
@@ -230,13 +230,13 @@ Exit code policy needs an implementation decision before enabling plain output. 
 
 ### Formatter Implementation Plan
 
-Future implementation should add pure formatters that consume existing read-only reports without mutating domain state:
+The first formatter implementation adds pure helpers that consume existing read-only reports without mutating domain state:
 
 - `formatExecutionAuditBundle(bundle)`
 - `formatExecutionAuditList(report)`
 - `formatExecutionAuditError(errorPayload)`
 
-The formatters should reuse `ExecutionAuditBundle`, `ExecutionAuditListReport`, and existing disabled execution markers. They should not parse files, write files, spawn commands, or change approval/intent/trace state.
+The formatters reuse `ExecutionAuditBundle`, `ExecutionAuditListReport`, and existing disabled execution markers. They do not parse files, write files, spawn commands, or change approval/intent/trace state.
 
 Focused tests should verify:
 

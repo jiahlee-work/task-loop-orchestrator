@@ -425,6 +425,20 @@ export interface ExecutionAuditListReport {
   hasExecutionResults: false;
 }
 
+export interface ExecutionAuditErrorReport {
+  status: "not_found" | "error";
+  errorCode: string;
+  message: string;
+  intentId?: string;
+  intent: null;
+  details?: {
+    kind: "execution_intent" | "execution_trace";
+  };
+  executionEnabled: false;
+  writeExecution: "disabled";
+  hasExecutionResults: false;
+}
+
 export type ProposedSubtask = Omit<Subtask, "status" | "createdAt" | "updatedAt"> &
   Partial<Pick<Subtask, "createdAt" | "updatedAt">>;
 

@@ -5,6 +5,7 @@ export * from "./config.js";
 export * from "./context.js";
 export * from "./domain.js";
 export * from "./doctor.js";
+export * from "./execution-audit-format.js";
 export * from "./execution-intents.js";
 export * from "./executors.js";
 export * from "./graph.js";
