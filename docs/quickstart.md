@@ -28,9 +28,11 @@ node dist/cli.js --version
 Run the CLI directly from the checkout:
 
 ```bash
+node dist/cli.js doctor --json
 node dist/cli.js init --json
 node dist/cli.js run "Quickstart smoke" --max-iterations 1 --json
 node dist/cli.js status --json
+node dist/cli.js resume run_xxx --max-iterations 1 --json
 node dist/cli.js checks HEAD --json
 ```
 
@@ -72,6 +74,7 @@ npx task-loop-orchestrator doctor --json
 npx task-loop-orchestrator init --json
 npx task-loop-orchestrator run "Quickstart smoke" --max-iterations 1 --json
 npx task-loop-orchestrator status --json
+npx task-loop-orchestrator resume run_xxx --max-iterations 1 --json
 ```
 
 `init` creates or updates only local bootstrap files:
@@ -96,7 +99,9 @@ npx task-loop-orchestrator checkpoint --github gh-cli --json
 
 The `--github gh-cli` form uses read-only GitHub CLI calls and falls back to an `unknown` or `not_found` check summary when GitHub data is unavailable.
 
-## Read-Only Execution Audit
+## Advanced Read-Only Audit And Dry-Run Surfaces
+
+This section is not required for the first install, `run`, `status`, and `resume` flow.
 
 When a project already has persisted execution intent records under `.orchestrator/execution-intents/`, inspect them without enabling write execution:
 

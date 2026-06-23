@@ -395,7 +395,7 @@ This boundary is not an execution engine. It must not use `child_process`, shell
 15. Complete the read-only `--preflight <path> [--json]` surface after CLI error handling and package smoke are covered.
 16. Enable the audited `write-runner --intent <intentId> [--preflight <path>] --json` dry-run boundary that saves only local trace artifacts when readiness is `ready`.
 17. Add an opt-in execution policy and deterministic simulated executor boundary with `--simulate` and disabled `--execute` reports, without actual shell, git, or GitHub execution.
-18. Add a guarded local command executor only after policy, readiness, and safe result redaction tests exist.
+18. Defer any local verification executor until policy, readiness, redaction, and MVP install flow coverage remain stable.
 19. Add commit execution only after staged-file policy and diff verification exist.
 20. Add push only after remote/ref policy and CI handling are documented and tested.
 21. Add GitHub PR creation only after push policy, approval freshness, and `gh pr create` argument construction are covered.

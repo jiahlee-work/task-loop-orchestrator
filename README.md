@@ -34,19 +34,16 @@ node dist/cli.js --version
 After installing the CLI in a target Git project, use `npx` for a project-local install or omit it when the binary is already on your `PATH`:
 
 ```bash
+npx task-loop-orchestrator doctor --json
 npx task-loop-orchestrator init
 npx task-loop-orchestrator run "Quickstart smoke" --max-iterations 1 --json
 npx task-loop-orchestrator status --json
+npx task-loop-orchestrator resume run_xxx --max-iterations 1 --json
 npx task-loop-orchestrator checks HEAD --json
-npx task-loop-orchestrator execution-audit --all
-npx task-loop-orchestrator execution-audit --all --json
-npx task-loop-orchestrator write-runner --intent intent_xxx --preflight readiness-preflight.json --json
-npx task-loop-orchestrator write-runner --intent intent_xxx --preflight readiness-preflight.json --simulate --json
-npx task-loop-orchestrator write-runner --intent intent_xxx --preflight readiness-preflight.json --execute --json
 ```
 
 `checks HEAD --json` requires a GitHub remote and readable check-runs to report live CI status; otherwise it returns a graceful JSON fallback.
-`execution-audit` is read-only and useful when `.orchestrator/execution-intents/` records exist. Plain output is for humans; use `--json` for automation and scripts. `write-runner` is still a dry-run/simulation boundary: it may save local trace artifacts when readiness is ready, `--simulate` returns symbolic safe executor results, and `--execute` returns an `execute_disabled` report. It does not execute shell, git, or GitHub commands or create branches, commits, pushes, or PRs.
+Advanced read-only audit and dry-run surfaces such as `execution-audit`, `write-readiness`, and `write-runner` are documented in [docs/commands.md](docs/commands.md). They are not required for the first install/run/status/resume flow. `write-runner` remains a dry-run/simulation boundary and does not execute shell, git, or GitHub commands or create branches, commits, pushes, or PRs.
 
 ## Local Development
 
@@ -107,7 +104,7 @@ The package can be installed from a local tarball through its `bin` entry, but i
 
 For the local pre-release verification bundle, run `pnpm run release:check`; it includes typecheck, tests, build, package artifact dry-run review, lint, installed binary package smoke, version output, and read-only check refresh.
 
-For only the dry-run package file listing review, run `pnpm run package:artifacts`. For only the installed binary smoke, run `pnpm run package:smoke`. The package smoke packs the current checkout, installs the tarball into a temporary project, and verifies the core `--json` flows for `init`, `doctor`, `run`, `resume`, `status`, `checkpoint`, `pr-plan`, `pr-exec`, `approve-pr`, `execution-audit`, `write-readiness`, `write-runner`, and `checks`.
+For only the dry-run package file listing review, run `pnpm run package:artifacts`. For only the installed binary smoke, run `pnpm run package:smoke`. The package smoke packs the current checkout, installs the tarball into a temporary project, and verifies the MVP `--json` flows for `init`, `doctor`, `run`, `resume`, and `status`, plus read-only checkpoint/PR preflight/execution-audit flows, readiness/write-runner dry-run regression paths, and CI check refresh diagnostics.
 
 These release and package verification commands never create GitHub PRs, merge, push, create releases, create tags, or publish to npm.
 

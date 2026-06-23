@@ -41,6 +41,7 @@ describe("quickstart documentation", () => {
       "npx task-loop-orchestrator init --json",
       'npx task-loop-orchestrator run "Quickstart smoke" --max-iterations 1 --json',
       "npx task-loop-orchestrator status --json",
+      "npx task-loop-orchestrator resume run_xxx --max-iterations 1 --json",
       "npx task-loop-orchestrator checks HEAD --json",
       "npx task-loop-orchestrator checkpoint --json",
       "npx task-loop-orchestrator checkpoint --github gh-cli --json",
@@ -639,13 +640,15 @@ describe("documentation role boundaries", () => {
       "pnpm run build",
       "node dist/cli.js --help",
       "node dist/cli.js --version",
+      "npx task-loop-orchestrator doctor --json",
       "npx task-loop-orchestrator init",
       'npx task-loop-orchestrator run "Quickstart smoke" --max-iterations 1 --json',
       "npx task-loop-orchestrator status --json",
-      "npx task-loop-orchestrator checks HEAD --json",
-      "npx task-loop-orchestrator execution-audit --all",
-      "npx task-loop-orchestrator execution-audit --all --json"
+      "npx task-loop-orchestrator resume run_xxx --max-iterations 1 --json",
+      "npx task-loop-orchestrator checks HEAD --json"
     ]);
+    expect(readme).not.toContain("npx task-loop-orchestrator write-runner --intent intent_xxx --preflight readiness-preflight.json --simulate --json");
+    expect(readme).not.toContain("npx task-loop-orchestrator execution-audit --all");
     expect(readme).not.toContain("mktemp -d");
     expect(readme).not.toContain("npm install --prefix");
     expect(readme).not.toContain("task-loop-orchestrator-0.1.0.tgz");
