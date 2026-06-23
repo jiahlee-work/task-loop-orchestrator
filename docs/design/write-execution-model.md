@@ -16,6 +16,7 @@ This document describes the model that should exist before `task-loop-orchestrat
 - The audit bundle JSON contract is covered by internal tests before any CLI read surface is enabled.
 - A read-only CLI surface for audit bundle lookup is enabled for `execution-audit --intent <intentId>` and `execution-audit --all` in both plain and JSON modes, as documented in [`execution-audit-cli.md`](execution-audit-cli.md).
 - A pure write execution readiness helper can summarize an audit bundle plus optional future preflight input without enabling CLI/schema output or command execution.
+- A future write readiness CLI/schema surface is drafted below, but no production command or active schema branch is enabled yet.
 - `pr-exec` is dry-run/preflight oriented.
 - `pr-exec --execute` requires approval data, checks stale approvals, and still returns a blocked report before branch, commit, push, or `gh pr create`.
 - `executedCommands` remains empty in the current implementation.
@@ -193,6 +194,89 @@ Tests should cover:
 
 Package smoke should not include readiness until a CLI command exists. The active JSON schema should not be changed until the command-specific payload is implemented.
 
+## Write Readiness CLI And Schema Surface Draft
+
+Status: design draft, not enabled. This section documents the next read-only surface only; it does not add a production CLI command, does not change `schemas/cli-json.schema.json`, and does not unlock write execution.
+
+### Recommended CLI Surface
+
+The recommended first command is:
+
+```bash
+task-loop-orchestrator write-readiness --intent <intentId> [--json]
+```
+
+This is preferred over `execution-audit --intent <intentId> --readiness [--json]` because readiness answers a distinct question from audit review: whether an existing execution intent is ready, blocked, or unknown. A top-level `write-readiness` command keeps the automation contract discoverable, avoids overloading `execution-audit`, and still reuses the audit bundle internally.
+
+The first CLI implementation should be read-only and should load the existing audit bundle for the intent before calling `summarizeWriteExecutionReadiness(bundle)`. It must not run a preflight query yet. Without explicit preflight input, approval freshness, CI, repository state, fingerprint, and remote/ref checks remain `unknown`.
+
+Initial options:
+
+- `--intent <intentId>`: required selector for the persisted execution intent to evaluate.
+- `--json`: optional; use it for automation, UI integrations, scripts, and schema validation.
+
+Deferred options:
+
+- `--all`: defer list output until single-intent readiness is stable.
+- preflight flags such as `--with-repo-state`, `--with-checks`, or `--preflight`: defer until each input source has a read-only policy and test fixture.
+- `--root <path>`: defer unless the broader CLI adopts root override semantics.
+
+Plain output is for a human terminal summary. JSON is the stable automation contract. Both modes must preserve the same read-only safety boundary: no file writes, no external command execution, no GitHub lookup, no branch creation, no commit, no push, no pull request creation or mutation, no merge, no release, no tag, no approval mutation, and no run status transition.
+
+### Future JSON Schema Surface
+
+The active schema is intentionally unchanged in this design milestone. When the command is implemented, the future schema work should add `"write-readiness"` to `CliJsonCommand` and to the schema `command` enum, then add a command-specific branch:
+
+- branch condition: `command: "write-readiness"`
+- branch payload reference: `#/$defs/writeReadinessPayload`
+
+Proposed `$defs`:
+
+- `writeReadinessPayload`
+- `writeReadinessBlocker`
+- `writeReadinessCheck`
+- `writeReadinessInputs`
+- `writeReadinessErrorPayload`
+
+The first `writeReadinessPayload` required fields should match the existing readiness contract fixture:
+
+- `readinessStatus`
+- `ready`
+- `intentId`
+- `runId`
+- `planId`
+- `approvalId`
+- `blockers`
+- `checks`
+- `inputs`
+- `executionEnabled`
+- `writeExecution`
+- `hasExecutionResults`
+
+`checkpointId` should remain optional because older or partial audit data may not have one. `writeReadinessBlocker` should require `category`, `code`, `message`, and `source`. `writeReadinessCheck` should require `category`, `status`, `code`, `message`, and `source`. `writeReadinessInputs` should require `auditBundle` and `preflight`.
+
+Schema tests should compare this future branch against the contract fixture tests in `tests/write-readiness.test.ts` before enabling the command. The schema must remain extensible with `additionalProperties: true` so future preflight evidence can be added without breaking existing consumers.
+
+### Error Policy
+
+The implementation should reuse the execution-audit loading path, but expose readiness-specific usage and lookup codes where the user asked for readiness:
+
+- missing `--intent`: `status: "error"`, `errorCode: "write_readiness_missing_intent"`
+- missing record: `status: "not_found"`, `errorCode: "write_readiness_intent_not_found"`, `intentId`, and `readiness: null`
+- invalid persisted execution intent file: `status: "error"`, `errorCode: "invalid_execution_intent_file"`, with safe `details.kind`
+- invalid persisted execution trace file: `status: "error"`, `errorCode: "invalid_execution_trace_file"`, with safe `details.kind`
+- unsupported future preflight input: `status: "error"`, `errorCode: "write_readiness_preflight_unsupported"`
+
+Error payloads should keep `executionEnabled: false`, `writeExecution: "disabled"`, and `hasExecutionResults: false`. They must not expose raw persisted file contents, stack traces, secrets, raw stdout, raw stderr, exit codes, raw command argv, or execution results.
+
+### Rollout Plan For CLI And Schema
+
+1. Keep this schema/CLI design under docs drift tests while the active schema remains unchanged.
+2. Add the read-only `write-readiness --intent <intentId> --json` path and the command-specific schema branch.
+3. Add plain `write-readiness --intent <intentId>` output using `formatWriteExecutionReadiness(report)`.
+4. Add optional read-only preflight input support only after each preflight source has a fixture and no-write policy.
+5. Treat actual write execution unlock as a separate milestone that must first test approval freshness, clean worktree policy, diff verification, CI policy, and remote/ref policy.
+
 ## Rollout Slices
 
 1. Persist execution intents without running commands.
@@ -206,11 +290,12 @@ Package smoke should not include readiness until a CLI command exists. The activ
 9. Enable `execution-audit` plain output using pure formatters without command execution.
 10. Add a read-only write execution readiness report helper using audit bundle data and explicit future preflight inputs.
 11. Add a read-only write execution readiness plain formatter without command execution.
-12. Add a readiness CLI/schema surface only after the helper and formatter contracts are tested.
-13. Add a single local-only command behind tests and explicit approval, such as branch creation in a temporary fixture repository.
-14. Add commit execution only after staged-file policy and diff verification exist.
-15. Add push only after remote/ref policy and CI handling are documented and tested.
-16. Add GitHub PR creation only after push policy, approval freshness, and `gh pr create` argument construction are covered.
+12. Draft the readiness CLI/schema surface without enabling the production command or active schema branch.
+13. Add a readiness CLI/schema surface only after the helper, formatter, and schema contract are tested.
+14. Add a single local-only command behind tests and explicit approval, such as branch creation in a temporary fixture repository.
+15. Add commit execution only after staged-file policy and diff verification exist.
+16. Add push only after remote/ref policy and CI handling are documented and tested.
+17. Add GitHub PR creation only after push policy, approval freshness, and `gh pr create` argument construction are covered.
 
 ## Hard Non-Goals
 
