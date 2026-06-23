@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -6,13 +6,7 @@ import { createPullRequestApproval } from "../src/approval.js";
 import type { PullRequestPlan, WriteExecutionReadinessPreflightInput } from "../src/domain.js";
 import { createExecutionIntent, summarizeExecutionAuditBundle } from "../src/execution-intents.js";
 import { summarizeWriteExecutionReadiness } from "../src/write-readiness.js";
-import {
-  createWriteRunnerDryRunTraces,
-  createWriteRunnerExecutionPolicy,
-  GuardedLocalVerificationExecutor,
-  isWriteRunnerVerificationAction,
-  summarizeWriteRunnerDryRun
-} from "../src/write-runner.js";
+import { createWriteRunnerDryRunTraces, summarizeWriteRunnerDryRun } from "../src/write-runner.js";
 import { FileRunStore } from "../src/store.js";
 
 describe("audited write runner dry-run boundary", () => {
@@ -223,145 +217,6 @@ describe("audited write runner dry-run boundary", () => {
       })
     });
     expectNoUnsafeRunnerOutput(report);
-  });
-
-  it("executes an allowlisted local verification script through the guarded executor", async () => {
-    const root = await mkdtemp(join(tmpdir(), "task-loop-write-runner-local-"));
-    try {
-      await writeFile(
-        join(root, "package.json"),
-        `${JSON.stringify({ scripts: { typecheck: "node -e \"process.exit(0)\"" } }, null, 2)}\n`
-      );
-      const intent = executionIntent("top-secret-runner-argv");
-      const bundle = summarizeExecutionAuditBundle(intent, []);
-      const readiness = summarizeWriteExecutionReadiness(bundle, passingPreflight());
-      const policy = createWriteRunnerExecutionPolicy(intent, readiness, "execute_local");
-      const localResult = await new GuardedLocalVerificationExecutor({ cwd: root }).execute("typecheck", policy);
-      const report = summarizeWriteRunnerDryRun(intent, readiness, createWriteRunnerDryRunTraces(intent, readiness), {
-        createdAt: "2026-06-22T01:00:00.000Z",
-        mode: "execute_local",
-        localExecutionResults: [localResult]
-      });
-
-      expect(localResult).toMatchObject({
-        action: "typecheck",
-        status: "succeeded",
-        summary: "Verification script completed successfully.",
-        outputCaptured: false,
-        executionEnabled: false,
-        writeExecution: "disabled",
-        hasExecutionResults: false
-      });
-      expect(report).toMatchObject({
-        status: "local_executed",
-        readinessStatus: "ready",
-        ready: true,
-        policy: expect.objectContaining({
-          mode: "execute_local",
-          allowedVerificationActions: expect.arrayContaining(["typecheck", "test", "build", "lint", "package:smoke", "release:check"]),
-          localExecutionEnabled: true,
-          localExecutionScope: "verification_only",
-          actualExecutionEnabled: false,
-          writeExecution: "disabled"
-        }),
-        localExecutionResultCount: 1,
-        localExecutionResults: [expect.objectContaining({ action: "typecheck", status: "succeeded" })],
-        executionEnabled: false,
-        writeExecution: "disabled",
-        hasExecutionResults: false
-      });
-      expectNoUnsafeRunnerOutput(report);
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  it("blocks local verification when readiness is unknown", async () => {
-    const intent = executionIntent("top-secret-runner-argv");
-    const bundle = summarizeExecutionAuditBundle(intent, []);
-    const readiness = summarizeWriteExecutionReadiness(bundle);
-    const policy = createWriteRunnerExecutionPolicy(intent, readiness, "execute_local");
-    const localResult = await new GuardedLocalVerificationExecutor({ cwd: process.cwd() }).execute("typecheck", policy);
-    const report = summarizeWriteRunnerDryRun(intent, readiness, [], {
-      createdAt: "2026-06-22T01:00:00.000Z",
-      mode: "execute_local",
-      localExecutionResults: [localResult]
-    });
-
-    expect(localResult).toMatchObject({
-      action: "typecheck",
-      status: "blocked",
-      summary: "Verification execution was blocked by policy."
-    });
-    expect(report).toMatchObject({
-      status: "blocked",
-      ready: false,
-      policy: expect.objectContaining({
-        mode: "execute_local",
-        localExecutionEnabled: false,
-        localExecutionScope: "disabled"
-      }),
-      localExecutionResultCount: 1,
-      blockedReasons: ["Write readiness is unknown."]
-    });
-    expectNoUnsafeRunnerOutput(report);
-  });
-
-  it("rejects non-allowlisted verification actions before guarded execution", async () => {
-    const intent = executionIntent("top-secret-runner-argv");
-    const readiness = summarizeWriteExecutionReadiness(summarizeExecutionAuditBundle(intent, []), passingPreflight());
-    const policy = {
-      ...createWriteRunnerExecutionPolicy(intent, readiness, "execute_local"),
-      allowedVerificationActions: []
-    };
-    const localResult = await new GuardedLocalVerificationExecutor({ cwd: process.cwd() }).execute("typecheck", policy);
-
-    expect(isWriteRunnerVerificationAction("typecheck")).toBe(true);
-    expect(isWriteRunnerVerificationAction("git-push")).toBe(false);
-    expect(localResult).toMatchObject({
-      action: "typecheck",
-      status: "blocked",
-      summary: "Verification action is not allowlisted.",
-      outputCaptured: false
-    });
-    expectNoUnsafeRunnerOutput(localResult);
-  });
-
-  it("returns safe local verification failure and timeout results without raw process output", async () => {
-    const failureRoot = await mkdtemp(join(tmpdir(), "task-loop-write-runner-fail-"));
-    const timeoutRoot = await mkdtemp(join(tmpdir(), "task-loop-write-runner-timeout-"));
-    try {
-      await writeFile(
-        join(failureRoot, "package.json"),
-        `${JSON.stringify({ scripts: { typecheck: "node -e \"console.error('top-secret-runner-argv'); process.exit(1)\"" } }, null, 2)}\n`
-      );
-      await writeFile(
-        join(timeoutRoot, "package.json"),
-        `${JSON.stringify({ scripts: { typecheck: "node -e \"setTimeout(() => {}, 5000)\"" } }, null, 2)}\n`
-      );
-      const intent = executionIntent("top-secret-runner-argv");
-      const readiness = summarizeWriteExecutionReadiness(summarizeExecutionAuditBundle(intent, []), passingPreflight());
-      const policy = createWriteRunnerExecutionPolicy(intent, readiness, "execute_local");
-      const failed = await new GuardedLocalVerificationExecutor({ cwd: failureRoot }).execute("typecheck", policy);
-      const timedOut = await new GuardedLocalVerificationExecutor({ cwd: timeoutRoot, timeoutMs: 10 }).execute("typecheck", policy);
-
-      expect(failed).toMatchObject({
-        action: "typecheck",
-        status: "failed",
-        summary: "Verification script failed.",
-        outputCaptured: false
-      });
-      expect(timedOut).toMatchObject({
-        action: "typecheck",
-        status: "timed_out",
-        summary: "Verification script timed out.",
-        outputCaptured: false
-      });
-      expectNoUnsafeRunnerOutput({ failed, timedOut });
-    } finally {
-      await rm(failureRoot, { recursive: true, force: true });
-      await rm(timeoutRoot, { recursive: true, force: true });
-    }
   });
 
   it("keeps blocked readiness reasons without exposing raw command arguments", () => {

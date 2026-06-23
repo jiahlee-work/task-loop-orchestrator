@@ -51,10 +51,7 @@ import {
 import {
   createWriteRunnerDryRunTraces,
   createWriteRunnerErrorReport,
-  createWriteRunnerExecutionPolicy,
   formatWriteRunnerError,
-  GuardedLocalVerificationExecutor,
-  isWriteRunnerVerificationAction,
   summarizeWriteRunnerDryRun
 } from "./write-runner.js";
 
@@ -134,7 +131,7 @@ function printUsage(): void {
   task-loop-orchestrator pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]
   task-loop-orchestrator execution-audit (--intent intentId|--all) [--json]
   task-loop-orchestrator write-readiness --intent intentId [--preflight path] [--json]
-  task-loop-orchestrator write-runner --intent intentId [--preflight path] [--simulate|--execute|--execute-local] [--verification typecheck|test|build|lint|package:smoke|release:check] --json
+  task-loop-orchestrator write-runner --intent intentId [--preflight path] [--simulate|--execute] --json
   task-loop-orchestrator checks [ref] [--json]`);
 }
 
@@ -849,9 +846,7 @@ async function writeReadinessCommand(args: ParsedArgs): Promise<void> {
 async function writeRunnerCommand(args: ParsedArgs): Promise<void> {
   const jsonOutput = args.flags.json === true;
   const preflightFlagPresent = Object.hasOwn(args.flags, "preflight");
-  const verificationFlagPresent = Object.hasOwn(args.flags, "verification");
   const preflightPath = stringFlag(args.flags, "preflight");
-  const verificationAction = stringFlag(args.flags, "verification") ?? "typecheck";
 
   if (!jsonOutput) {
     printPlainWriteRunnerError(
@@ -871,22 +866,6 @@ async function writeRunnerCommand(args: ParsedArgs): Promise<void> {
     printWriteRunnerError("write_runner_preflight_missing_path", "write-runner --preflight requires a path.", {
       intentId,
       details: { kind: "preflight" }
-    });
-    return;
-  }
-
-  if (verificationFlagPresent && !stringFlag(args.flags, "verification")?.trim()) {
-    printWriteRunnerError("write_runner_verification_missing_action", "write-runner --verification requires an allowlisted action.", {
-      intentId,
-      details: { kind: "verification" }
-    });
-    return;
-  }
-
-  if (!isWriteRunnerVerificationAction(verificationAction)) {
-    printWriteRunnerError("write_runner_verification_not_allowed", "write-runner verification action is not allowlisted.", {
-      intentId,
-      details: { kind: "verification" }
     });
     return;
   }
@@ -946,35 +925,17 @@ async function writeRunnerCommand(args: ParsedArgs): Promise<void> {
   }
 
   const readiness = summarizeWriteExecutionReadiness(bundle, preflight);
-  const mode =
-    args.flags.execute === true
-      ? "execute_disabled"
-      : args.flags["execute-local"] === true
-        ? "execute_local"
-        : args.flags.simulate === true
-          ? "simulate"
-          : "dry_run";
+  const mode = args.flags.execute === true ? "execute_disabled" : args.flags.simulate === true ? "simulate" : "dry_run";
   const dryRunTraces = mode === "execute_disabled" ? [] : createWriteRunnerDryRunTraces(intent, readiness);
   for (const trace of dryRunTraces) {
     await store.saveExecutionTrace(trace);
   }
 
-  const localExecutionResults =
-    mode === "execute_local"
-      ? [
-          await new GuardedLocalVerificationExecutor({ cwd: process.cwd() }).execute(
-            verificationAction,
-            createWriteRunnerExecutionPolicy(intent, readiness, mode)
-          )
-        ]
-      : [];
-
   printJson(
     "write-runner",
     summarizeWriteRunnerDryRun(intent, readiness, dryRunTraces, {
       localTracePersistence: dryRunTraces.length > 0 ? "saved" : "skipped",
-      mode,
-      localExecutionResults
+      mode
     })
   );
 }

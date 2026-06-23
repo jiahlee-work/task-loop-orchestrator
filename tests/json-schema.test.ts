@@ -508,7 +508,6 @@ describe("CLI JSON schema artifact", () => {
     const writeRunnerExecutionPolicy = schema.$defs?.writeRunnerExecutionPolicy;
     const writeRunnerPlanItem = schema.$defs?.writeRunnerPlanItem;
     const writeRunnerSimulationResult = schema.$defs?.writeRunnerSimulationResult;
-    const writeRunnerLocalExecutionResult = schema.$defs?.writeRunnerLocalExecutionResult;
     const writeRunnerErrorPayload = schema.$defs?.writeRunnerErrorPayload;
     const writeRunnerResponsePayload = schema.$defs?.writeRunnerResponsePayload;
 
@@ -516,15 +515,11 @@ describe("CLI JSON schema artifact", () => {
     expect(branchRefsForCommand(schema, "write-runner")).toEqual(["#/$defs/writeRunnerResponsePayload"]);
     expect(schema.$defs?.writeRunnerStatus).toEqual({
       type: "string",
-      enum: ["planned", "blocked", "simulated", "disabled", "local_executed", "local_failed"]
+      enum: ["planned", "blocked", "simulated", "disabled"]
     });
     expect(schema.$defs?.writeRunnerExecutionMode).toEqual({
       type: "string",
-      enum: ["dry_run", "simulate", "execute_disabled", "execute_local"]
-    });
-    expect(schema.$defs?.writeRunnerVerificationAction).toEqual({
-      type: "string",
-      enum: ["typecheck", "test", "build", "lint", "package:smoke", "release:check"]
+      enum: ["dry_run", "simulate", "execute_disabled"]
     });
     expect(writeRunnerDryRunPayload?.required).toEqual(
       expect.arrayContaining([
@@ -543,8 +538,6 @@ describe("CLI JSON schema artifact", () => {
         "policy",
         "simulationResultCount",
         "simulationResults",
-        "localExecutionResultCount",
-        "localExecutionResults",
         "blockedReasonCount",
         "blockedReasons",
         "createdAt",
@@ -583,16 +576,6 @@ describe("CLI JSON schema artifact", () => {
         $ref: "#/$defs/writeRunnerSimulationResult"
       }
     });
-    expect(writeRunnerDryRunPayload?.properties?.localExecutionResultCount).toEqual({
-      type: "integer",
-      minimum: 0
-    });
-    expect(writeRunnerDryRunPayload?.properties?.localExecutionResults).toEqual({
-      type: "array",
-      items: {
-        $ref: "#/$defs/writeRunnerLocalExecutionResult"
-      }
-    });
     expect(writeRunnerDryRunPayload?.properties?.executionEnabled).toEqual({ const: false });
     expect(writeRunnerDryRunPayload?.properties?.writeExecution).toEqual({ const: "disabled" });
     expect(writeRunnerDryRunPayload?.properties?.hasExecutionResults).toEqual({ const: false });
@@ -609,10 +592,7 @@ describe("CLI JSON schema artifact", () => {
         "requiredReadiness",
         "allowedActions",
         "disallowedActions",
-        "allowedVerificationActions",
         "blockers",
-        "localExecutionEnabled",
-        "localExecutionScope",
         "actualExecutionEnabled",
         "executionEnabled",
         "writeExecution"
@@ -620,17 +600,6 @@ describe("CLI JSON schema artifact", () => {
     );
     expect(writeRunnerExecutionPolicy?.properties?.mode).toEqual({ $ref: "#/$defs/writeRunnerExecutionMode" });
     expect(writeRunnerExecutionPolicy?.properties?.requiredReadiness).toEqual({ const: "ready" });
-    expect(writeRunnerExecutionPolicy?.properties?.allowedVerificationActions).toEqual({
-      type: "array",
-      items: {
-        $ref: "#/$defs/writeRunnerVerificationAction"
-      }
-    });
-    expect(writeRunnerExecutionPolicy?.properties?.localExecutionEnabled).toEqual({ type: "boolean" });
-    expect(writeRunnerExecutionPolicy?.properties?.localExecutionScope).toEqual({
-      type: "string",
-      enum: ["disabled", "verification_only"]
-    });
     expect(writeRunnerExecutionPolicy?.properties?.actualExecutionEnabled).toEqual({ const: false });
     expect(writeRunnerExecutionPolicy?.properties?.executionEnabled).toEqual({ const: false });
     expect(writeRunnerExecutionPolicy?.properties?.writeExecution).toEqual({ const: "disabled" });
@@ -644,29 +613,6 @@ describe("CLI JSON schema artifact", () => {
     expect(writeRunnerSimulationResult?.properties?.executionEnabled).toEqual({ const: false });
     expect(writeRunnerSimulationResult?.properties?.writeExecution).toEqual({ const: "disabled" });
     expect(writeRunnerSimulationResult?.properties?.hasExecutionResults).toEqual({ const: false });
-    expect(writeRunnerLocalExecutionResult?.required).toEqual(
-      expect.arrayContaining([
-        "action",
-        "status",
-        "summary",
-        "durationMs",
-        "outputCaptured",
-        "executionEnabled",
-        "writeExecution",
-        "hasExecutionResults"
-      ])
-    );
-    expect(writeRunnerLocalExecutionResult?.properties?.action).toEqual({ $ref: "#/$defs/writeRunnerVerificationAction" });
-    expect(writeRunnerLocalExecutionResult?.properties?.status).toEqual({
-      type: "string",
-      enum: ["succeeded", "failed", "timed_out", "blocked"]
-    });
-    expect(writeRunnerLocalExecutionResult?.properties?.outputCaptured).toEqual({ const: false });
-    expect(writeRunnerLocalExecutionResult?.properties).not.toHaveProperty("argv");
-    expect(writeRunnerLocalExecutionResult?.properties).not.toHaveProperty("stdout");
-    expect(writeRunnerLocalExecutionResult?.properties).not.toHaveProperty("stderr");
-    expect(writeRunnerLocalExecutionResult?.properties).not.toHaveProperty("exitCode");
-    expect(writeRunnerLocalExecutionResult?.properties).not.toHaveProperty("executedCommands");
     expect(writeRunnerErrorPayload?.required).toEqual(
       expect.arrayContaining(["status", "errorCode", "message", "dryRun", "executionEnabled", "writeExecution", "hasExecutionResults"])
     );
@@ -682,9 +628,7 @@ describe("CLI JSON schema artifact", () => {
         "write_runner_preflight_file_not_found",
         "write_runner_preflight_file_not_readable",
         "write_runner_preflight_invalid_json",
-        "write_runner_preflight_invalid_schema",
-        "write_runner_verification_missing_action",
-        "write_runner_verification_not_allowed"
+        "write_runner_preflight_invalid_schema"
       ]
     });
     expect(writeRunnerErrorPayload?.properties?.dryRun).toEqual({ const: null });
@@ -1323,10 +1267,6 @@ async function readSchema(): Promise<{
       type?: string;
       enum?: string[];
     };
-    writeRunnerVerificationAction?: {
-      type?: string;
-      enum?: string[];
-    };
     writeRunnerExecutionPolicy?: {
       required?: string[];
       properties?: Record<string, unknown>;
@@ -1343,11 +1283,6 @@ async function readSchema(): Promise<{
       additionalProperties?: boolean;
     };
     writeRunnerSimulationResult?: {
-      required?: string[];
-      properties?: Record<string, unknown>;
-      additionalProperties?: boolean;
-    };
-    writeRunnerLocalExecutionResult?: {
       required?: string[];
       properties?: Record<string, unknown>;
       additionalProperties?: boolean;
@@ -1562,10 +1497,6 @@ async function readSchema(): Promise<{
         type?: string;
         enum?: string[];
       };
-      writeRunnerVerificationAction?: {
-        type?: string;
-        enum?: string[];
-      };
       writeRunnerExecutionPolicy?: {
         required?: string[];
         properties?: Record<string, unknown>;
@@ -1582,11 +1513,6 @@ async function readSchema(): Promise<{
         additionalProperties?: boolean;
       };
       writeRunnerSimulationResult?: {
-        required?: string[];
-        properties?: Record<string, unknown>;
-        additionalProperties?: boolean;
-      };
-      writeRunnerLocalExecutionResult?: {
         required?: string[];
         properties?: Record<string, unknown>;
         additionalProperties?: boolean;

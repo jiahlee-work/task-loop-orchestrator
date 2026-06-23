@@ -525,21 +525,16 @@ export interface WriteReadinessErrorReport {
   hasExecutionResults: false;
 }
 
-export type WriteRunnerExecutionMode = "dry_run" | "simulate" | "execute_disabled" | "execute_local";
+export type WriteRunnerExecutionMode = "dry_run" | "simulate" | "execute_disabled";
 
-export type WriteRunnerDryRunStatus = "planned" | "blocked" | "simulated" | "disabled" | "local_executed" | "local_failed";
-
-export type WriteRunnerVerificationAction = "typecheck" | "test" | "build" | "lint" | "package:smoke" | "release:check";
+export type WriteRunnerDryRunStatus = "planned" | "blocked" | "simulated" | "disabled";
 
 export interface WriteRunnerExecutionPolicy {
   mode: WriteRunnerExecutionMode;
   requiredReadiness: "ready";
   allowedActions: PullRequestCommandCandidate["action"][];
   disallowedActions: PullRequestCommandCandidate["action"][];
-  allowedVerificationActions: WriteRunnerVerificationAction[];
   blockers: string[];
-  localExecutionEnabled: boolean;
-  localExecutionScope: "disabled" | "verification_only";
   actualExecutionEnabled: false;
   executionEnabled: false;
   writeExecution: "disabled";
@@ -566,17 +561,6 @@ export interface WriteRunnerSimulationResult {
   hasExecutionResults: false;
 }
 
-export interface WriteRunnerLocalExecutionResult {
-  action: WriteRunnerVerificationAction;
-  status: "succeeded" | "failed" | "timed_out" | "blocked";
-  summary: string;
-  durationMs: number;
-  outputCaptured: false;
-  executionEnabled: false;
-  writeExecution: "disabled";
-  hasExecutionResults: false;
-}
-
 export interface WriteRunnerDryRunReport {
   status: WriteRunnerDryRunStatus;
   intentId: string;
@@ -594,8 +578,6 @@ export interface WriteRunnerDryRunReport {
   policy: WriteRunnerExecutionPolicy;
   simulationResultCount: number;
   simulationResults: WriteRunnerSimulationResult[];
-  localExecutionResultCount: number;
-  localExecutionResults: WriteRunnerLocalExecutionResult[];
   blockedReasonCount: number;
   blockedReasons: string[];
   createdAt: string;
@@ -616,14 +598,12 @@ export interface WriteRunnerErrorReport {
     | "write_runner_preflight_file_not_found"
     | "write_runner_preflight_file_not_readable"
     | "write_runner_preflight_invalid_json"
-    | "write_runner_preflight_invalid_schema"
-    | "write_runner_verification_missing_action"
-    | "write_runner_verification_not_allowed";
+    | "write_runner_preflight_invalid_schema";
   message: string;
   intentId?: string;
   dryRun: null;
   details?: {
-    kind: "execution_intent" | "execution_trace" | "preflight" | "verification";
+    kind: "execution_intent" | "execution_trace" | "preflight";
   };
   executionEnabled: false;
   writeExecution: "disabled";

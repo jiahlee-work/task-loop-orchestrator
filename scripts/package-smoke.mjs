@@ -27,10 +27,6 @@ async function main() {
     await runStep("pack and install", async () => {
       await mkdir(packDir);
       await mkdir(projectDir);
-      await writeFile(
-        join(projectDir, "package.json"),
-        `${JSON.stringify({ scripts: { typecheck: "node -e \"process.exit(0)\"" } }, null, 2)}\n`
-      );
       await run("npm", ["pack", "--pack-destination", packDir], { cwd: repoRoot });
       tarballPath = await findTarball(packDir);
       await run("npm", ["install", "--prefix", installDir, tarballPath], { cwd: repoRoot });
@@ -281,45 +277,6 @@ async function main() {
         simulationResultCount: 1
       });
 
-      const localVerificationRun = await run(
-        bin,
-        [
-          "write-runner",
-          "--intent",
-          fixture.intentId,
-          "--preflight",
-          preflight.validPath,
-          "--execute-local",
-          "--verification",
-          "typecheck",
-          "--json"
-        ],
-        { cwd: projectDir }
-      );
-      assertWriteRunnerDryRunReport(parseJson(localVerificationRun), fixture.intentId, {
-        status: "local_executed",
-        readinessStatus: "ready",
-        ready: true,
-        localTracePersistence: "saved",
-        mode: "execute_local",
-        simulationResultCount: 0,
-        localExecutionResultCount: 1
-      });
-
-      const blockedLocalVerificationRun = await run(
-        bin,
-        ["write-runner", "--intent", fixture.intentId, "--execute-local", "--verification", "typecheck", "--json"],
-        { cwd: projectDir }
-      );
-      assertWriteRunnerDryRunReport(parseJson(blockedLocalVerificationRun), fixture.intentId, {
-        status: "blocked",
-        readinessStatus: "unknown",
-        ready: false,
-        localTracePersistence: "skipped",
-        mode: "execute_local",
-        localExecutionResultCount: 1
-      });
-
       const disabledExecuteRun = await run(
         bin,
         ["write-runner", "--intent", fixture.intentId, "--preflight", preflight.validPath, "--execute", "--json"],
@@ -474,7 +431,7 @@ async function main() {
       "- write-readiness JSON and plain output read audit fixtures, preflight evidence, and return safe errors through the installed binary"
     );
     console.log(
-      "- write-runner JSON dry-run, simulate, and guarded local verification output block unknown readiness, keep write execution disabled, and save local trace artifacts for ready preflight"
+      "- write-runner JSON dry-run and simulate output block unknown readiness, keep actual execution disabled, and save local trace artifacts for ready preflight"
     );
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
@@ -948,11 +905,6 @@ function assertWriteRunnerDryRunReport(report, intentId, expected) {
     assertEqual(report.policy.mode, expected.mode, "write-runner JSON should include expected policy mode");
   }
   assertEqual(report.policy.actualExecutionEnabled, false, "write-runner policy should keep actual execution disabled");
-  assertArray(report.policy.allowedVerificationActions, "write-runner policy should include allowed verification actions");
-  if (expected.mode === "execute_local" && expected.ready) {
-    assertEqual(report.policy.localExecutionEnabled, true, "write-runner policy should enable guarded local verification");
-    assertEqual(report.policy.localExecutionScope, "verification_only", "write-runner policy should limit local execution scope");
-  }
   assertEqual(report.policy.executionEnabled, false, "write-runner policy should keep execution disabled");
   assertEqual(report.policy.writeExecution, "disabled", "write-runner policy should keep write execution disabled");
   assertNumber(report.simulationResultCount, "write-runner JSON should include simulation result count");
@@ -964,15 +916,6 @@ function assertWriteRunnerDryRunReport(report, intentId, expected) {
       "write-runner JSON should include expected simulation result count"
     );
   }
-  assertNumber(report.localExecutionResultCount, "write-runner JSON should include local execution result count");
-  assertArray(report.localExecutionResults, "write-runner JSON should include local execution results");
-  if (typeof expected.localExecutionResultCount === "number") {
-    assertEqual(
-      report.localExecutionResultCount,
-      expected.localExecutionResultCount,
-      "write-runner JSON should include expected local execution result count"
-    );
-  }
   assertNumber(report.blockedReasonCount, "write-runner JSON should include blocked reason count");
   assertArray(report.blockedReasons, "write-runner JSON should include blocked reasons");
   assertEqual(report.executionEnabled, false, "write-runner JSON should keep execution disabled");
@@ -980,10 +923,6 @@ function assertWriteRunnerDryRunReport(report, intentId, expected) {
   assertEqual(report.hasExecutionResults, false, "write-runner JSON should not expose execution results");
   assertNoExecutionResultFields(report);
   assertNotIncludes(JSON.stringify(report), "\"argv\"", "write-runner JSON should not expose raw command argv");
-  assertNotIncludes(JSON.stringify(report), "\"stdout\"", "write-runner JSON should not expose raw stdout");
-  assertNotIncludes(JSON.stringify(report), "\"stderr\"", "write-runner JSON should not expose raw stderr");
-  assertNotIncludes(JSON.stringify(report), "\"exitCode\"", "write-runner JSON should not expose raw exit code");
-  assertNotIncludes(JSON.stringify(report), "\"executedCommands\"", "write-runner JSON should not expose executed commands");
 }
 
 function assertWriteReadinessPlainOutput(

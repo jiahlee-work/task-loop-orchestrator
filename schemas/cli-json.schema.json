@@ -999,15 +999,11 @@
     },
     "writeRunnerStatus": {
       "type": "string",
-      "enum": ["planned", "blocked", "simulated", "disabled", "local_executed", "local_failed"]
+      "enum": ["planned", "blocked", "simulated", "disabled"]
     },
     "writeRunnerExecutionMode": {
       "type": "string",
-      "enum": ["dry_run", "simulate", "execute_disabled", "execute_local"]
-    },
-    "writeRunnerVerificationAction": {
-      "type": "string",
-      "enum": ["typecheck", "test", "build", "lint", "package:smoke", "release:check"]
+      "enum": ["dry_run", "simulate", "execute_disabled"]
     },
     "writeRunnerExecutionPolicy": {
       "type": "object",
@@ -1016,10 +1012,7 @@
         "requiredReadiness",
         "allowedActions",
         "disallowedActions",
-        "allowedVerificationActions",
         "blockers",
-        "localExecutionEnabled",
-        "localExecutionScope",
         "actualExecutionEnabled",
         "executionEnabled",
         "writeExecution"
@@ -1045,24 +1038,11 @@
             "enum": ["create_branch", "commit", "push", "create_pr"]
           }
         },
-        "allowedVerificationActions": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/writeRunnerVerificationAction"
-          }
-        },
         "blockers": {
           "type": "array",
           "items": {
             "type": "string"
           }
-        },
-        "localExecutionEnabled": {
-          "type": "boolean"
-        },
-        "localExecutionScope": {
-          "type": "string",
-          "enum": ["disabled", "verification_only"]
         },
         "actualExecutionEnabled": {
           "const": false
@@ -1138,48 +1118,6 @@
       },
       "additionalProperties": true
     },
-    "writeRunnerLocalExecutionResult": {
-      "type": "object",
-      "required": [
-        "action",
-        "status",
-        "summary",
-        "durationMs",
-        "outputCaptured",
-        "executionEnabled",
-        "writeExecution",
-        "hasExecutionResults"
-      ],
-      "properties": {
-        "action": {
-          "$ref": "#/$defs/writeRunnerVerificationAction"
-        },
-        "status": {
-          "type": "string",
-          "enum": ["succeeded", "failed", "timed_out", "blocked"]
-        },
-        "summary": {
-          "type": "string"
-        },
-        "durationMs": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "outputCaptured": {
-          "const": false
-        },
-        "executionEnabled": {
-          "const": false
-        },
-        "writeExecution": {
-          "const": "disabled"
-        },
-        "hasExecutionResults": {
-          "const": false
-        }
-      },
-      "additionalProperties": true
-    },
     "writeRunnerDryRunPayload": {
       "type": "object",
       "required": [
@@ -1198,8 +1136,6 @@
         "policy",
         "simulationResultCount",
         "simulationResults",
-        "localExecutionResultCount",
-        "localExecutionResults",
         "blockedReasonCount",
         "blockedReasons",
         "createdAt",
@@ -1269,16 +1205,6 @@
             "$ref": "#/$defs/writeRunnerSimulationResult"
           }
         },
-        "localExecutionResultCount": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "localExecutionResults": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/writeRunnerLocalExecutionResult"
-          }
-        },
         "blockedReasonCount": {
           "type": "integer",
           "minimum": 0
@@ -1325,9 +1251,7 @@
             "write_runner_preflight_file_not_found",
             "write_runner_preflight_file_not_readable",
             "write_runner_preflight_invalid_json",
-            "write_runner_preflight_invalid_schema",
-            "write_runner_verification_missing_action",
-            "write_runner_verification_not_allowed"
+            "write_runner_preflight_invalid_schema"
           ]
         },
         "message": {
@@ -1345,7 +1269,7 @@
           "properties": {
             "kind": {
               "type": "string",
-              "enum": ["execution_intent", "execution_trace", "preflight", "verification"]
+              "enum": ["execution_intent", "execution_trace", "preflight"]
             }
           },
           "additionalProperties": true
