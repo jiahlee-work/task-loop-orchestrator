@@ -226,6 +226,88 @@ describe("CLI JSON schema artifact", () => {
     expect(schema.$defs?.approvalRecord?.properties?.reason).toEqual({ type: "string" });
   });
 
+  it("defines a focused execution audit payload schema", async () => {
+    const schema = await readSchema();
+    const executionAuditPayload = schema.$defs?.executionAuditPayload;
+    const executionAuditIntentReport = schema.$defs?.executionAuditIntentReport;
+    const executionAuditTraceReport = schema.$defs?.executionAuditTraceReport;
+
+    expect(executionAuditPayload?.required).toEqual(
+      expect.arrayContaining([
+        "intent",
+        "traces",
+        "traceCount",
+        "plannedTraceCount",
+        "blockedTraceCount",
+        "traceActionSummary",
+        "blockedReasonCount",
+        "blockedReasons",
+        "mismatchedTraceCount",
+        "mismatchedTraceIds",
+        "executionEnabled",
+        "writeExecution",
+        "hasExecutionResults"
+      ])
+    );
+    expect(executionAuditPayload?.properties?.intent).toEqual({ $ref: "#/$defs/executionAuditIntentReport" });
+    expect(executionAuditPayload?.properties?.traces).toEqual({
+      type: "array",
+      items: {
+        $ref: "#/$defs/executionAuditTraceReport"
+      }
+    });
+    expect(executionAuditPayload?.properties?.executionEnabled).toEqual({ const: false });
+    expect(executionAuditPayload?.properties?.writeExecution).toEqual({ const: "disabled" });
+    expect(executionAuditPayload?.properties?.hasExecutionResults).toEqual({ const: false });
+    expect(executionAuditPayload?.additionalProperties).toBe(true);
+    expect(executionAuditIntentReport?.required).toEqual(
+      expect.arrayContaining([
+        "id",
+        "runId",
+        "planId",
+        "approvalId",
+        "status",
+        "actor",
+        "createdAt",
+        "expiresAt",
+        "targetRef",
+        "baseBranch",
+        "sourceBranch",
+        "permissionMode",
+        "policyVersion",
+        "commandCandidateCount",
+        "commandCandidateActions",
+        "commandActionSummary",
+        "blockedReasonCount",
+        "blockedReasons",
+        "executionEnabled",
+        "writeExecution"
+      ])
+    );
+    expect(executionAuditTraceReport?.required).toEqual(
+      expect.arrayContaining([
+        "id",
+        "intentId",
+        "runId",
+        "planId",
+        "approvalId",
+        "action",
+        "argv",
+        "reason",
+        "status",
+        "policyVersion",
+        "policyDecision",
+        "blockedReasonCount",
+        "blockedReasons",
+        "createdAt",
+        "executionEnabled",
+        "writeExecution",
+        "hasExecutionResults"
+      ])
+    );
+    expect(executionAuditTraceReport?.properties?.hasExecutionResults).toEqual({ const: false });
+  });
+
   it("defines a focused doctor payload schema", async () => {
     const schema = await readSchema();
     const doctorPayload = schema.$defs?.doctorPayload;
@@ -305,7 +387,8 @@ describe("CLI JSON schema artifact", () => {
       checks: "#/$defs/checksPayload",
       "pr-plan": "#/$defs/prPlanPayload",
       "pr-exec": "#/$defs/prExecPayload",
-      "approve-pr": "#/$defs/approvePrPayload"
+      "approve-pr": "#/$defs/approvePrPayload",
+      "execution-audit": "#/$defs/executionAuditPayload"
     };
 
     for (const command of cliJsonCommands) {
@@ -487,6 +570,28 @@ describe("CLI JSON schema artifact", () => {
     );
   });
 
+  it("applies the execution audit branch to concrete audit bundle responses", async () => {
+    const schema = await readSchema();
+
+    expect(schema.allOf).toEqual(
+      expect.arrayContaining([
+        {
+          if: {
+            properties: {
+              command: {
+                const: "execution-audit"
+              }
+            },
+            required: ["command", "intent"]
+          },
+          then: {
+            $ref: "#/$defs/executionAuditPayload"
+          }
+        }
+      ])
+    );
+  });
+
   it("applies the doctor branch to doctor responses", async () => {
     const schema = await readSchema();
 
@@ -544,6 +649,7 @@ describe("CLI JSON schema artifact", () => {
     expect(docs).toContain("PR Plan Schema");
     expect(docs).toContain("PR Execution Schema");
     expect(docs).toContain("PR Approval Schema");
+    expect(docs).toContain("Execution Audit Schema");
     expect(docs).toContain("Doctor Schema");
     expect(docs).toContain("Init Schema");
     expect(docs).toContain("Coverage and Exceptions");
@@ -563,7 +669,8 @@ describe("CLI JSON schema artifact", () => {
       { heading: "Checkpoint Schema", required: requiredFields(schema.$defs?.checkpointPayload) },
       { heading: "PR Plan Schema", required: requiredFields(schema.$defs?.prPlanPayload) },
       { heading: "PR Execution Schema", required: requiredFields(schema.$defs?.prExecPayload) },
-      { heading: "PR Approval Schema", required: requiredFields(schema.$defs?.approvalRecord) }
+      { heading: "PR Approval Schema", required: requiredFields(schema.$defs?.approvalRecord) },
+      { heading: "Execution Audit Schema", required: requiredFields(schema.$defs?.executionAuditPayload) }
     ];
 
     for (const section of sections) {
@@ -588,6 +695,13 @@ describe("CLI JSON schema artifact", () => {
       {
         heading: "PR Approval Schema",
         required: [...requiredFields(schema.$defs?.approvalRecord), ...requiredFields(schema.$defs?.approvalPlanSnapshot)]
+      },
+      {
+        heading: "Execution Audit Schema",
+        required: [
+          ...requiredFields(schema.$defs?.executionAuditIntentReport),
+          ...requiredFields(schema.$defs?.executionAuditTraceReport)
+        ]
       }
     ];
 
@@ -687,6 +801,21 @@ async function readSchema(): Promise<{
       additionalProperties?: boolean;
     };
     approvePrPayload?: Record<string, unknown>;
+    executionAuditPayload?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
+    };
+    executionAuditIntentReport?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
+    };
+    executionAuditTraceReport?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
+    };
     approvalPlanSnapshot?: {
       required?: string[];
     };
@@ -800,6 +929,21 @@ async function readSchema(): Promise<{
         additionalProperties?: boolean;
       };
       approvePrPayload?: Record<string, unknown>;
+      executionAuditPayload?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
+      executionAuditIntentReport?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
+      executionAuditTraceReport?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
       approvalPlanSnapshot?: {
         required?: string[];
       };

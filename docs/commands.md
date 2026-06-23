@@ -191,3 +191,19 @@ task-loop-orchestrator pr-exec --execute --approval approval_xxx --json
 JSON: supported with `--json`.
 
 Behavior: dry-run by default. `--execute` requires approval data, checks stale approvals, and still blocks before write-side execution in the current implementation. `executedCommands` remains empty; branch creation, commit, push, and `gh pr create` are not run. The future write execution design draft is documented in [design/write-execution-model.md](design/write-execution-model.md).
+
+## Execution Audit
+
+### `execution-audit --intent intentId --json`
+
+Purpose: Inspect a persisted execution intent and its matching dry-run traces as a read-only audit bundle.
+
+Example:
+
+```bash
+task-loop-orchestrator execution-audit --intent intent_xxx --json
+```
+
+JSON: supported with `--json`.
+
+Behavior: read-only. It reads `.orchestrator/execution-intents/` and `.orchestrator/execution-traces/` through the local file store and returns the audit bundle described in [json-output.md](json-output.md). It does not write files, does not execute commands, and does not create branches, commits, pushes, PRs, merges, releases, approvals, tags, or GitHub releases. `--all` and plain output are not implemented yet.

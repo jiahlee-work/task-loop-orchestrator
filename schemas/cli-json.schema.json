@@ -22,7 +22,8 @@
         "checks",
         "pr-plan",
         "pr-exec",
-        "approve-pr"
+        "approve-pr",
+        "execution-audit"
       ],
       "description": "CLI command that produced the response."
     },
@@ -359,6 +360,306 @@
     },
     "approvePrPayload": {
       "$ref": "#/$defs/approvalRecord"
+    },
+    "executionIntentStatus": {
+      "type": "string",
+      "enum": ["created", "blocked", "expired"]
+    },
+    "executionTraceStatus": {
+      "type": "string",
+      "enum": ["planned", "blocked"]
+    },
+    "executionTracePolicyDecision": {
+      "type": "string",
+      "enum": ["dry_run_planned", "blocked"]
+    },
+    "executionActionSummary": {
+      "type": "object",
+      "required": ["action", "count"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["create_branch", "commit", "push", "create_pr"]
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    },
+    "executionAuditIntentReport": {
+      "type": "object",
+      "required": [
+        "id",
+        "runId",
+        "planId",
+        "approvalId",
+        "status",
+        "actor",
+        "createdAt",
+        "expiresAt",
+        "targetRef",
+        "baseBranch",
+        "sourceBranch",
+        "permissionMode",
+        "policyVersion",
+        "commandCandidateCount",
+        "commandCandidateActions",
+        "commandActionSummary",
+        "blockedReasonCount",
+        "blockedReasons",
+        "executionEnabled",
+        "writeExecution"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "runId": {
+          "type": "string"
+        },
+        "planId": {
+          "type": "string"
+        },
+        "approvalId": {
+          "type": "string"
+        },
+        "checkpointId": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/executionIntentStatus"
+        },
+        "actor": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "targetRef": {
+          "type": "string"
+        },
+        "baseBranch": {
+          "type": "string"
+        },
+        "sourceBranch": {
+          "type": "string"
+        },
+        "permissionMode": {
+          "$ref": "#/$defs/permissionMode"
+        },
+        "policyVersion": {
+          "type": "string"
+        },
+        "commandCandidateCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "commandCandidateActions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["create_branch", "commit", "push", "create_pr"]
+          }
+        },
+        "commandActionSummary": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/executionActionSummary"
+          }
+        },
+        "blockedReasonCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "blockedReasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "executionEnabled": {
+          "const": false
+        },
+        "writeExecution": {
+          "const": "disabled"
+        }
+      },
+      "additionalProperties": true
+    },
+    "executionAuditTraceReport": {
+      "type": "object",
+      "required": [
+        "id",
+        "intentId",
+        "runId",
+        "planId",
+        "approvalId",
+        "action",
+        "argv",
+        "reason",
+        "status",
+        "policyVersion",
+        "policyDecision",
+        "blockedReasonCount",
+        "blockedReasons",
+        "createdAt",
+        "executionEnabled",
+        "writeExecution",
+        "hasExecutionResults"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "intentId": {
+          "type": "string"
+        },
+        "runId": {
+          "type": "string"
+        },
+        "planId": {
+          "type": "string"
+        },
+        "approvalId": {
+          "type": "string"
+        },
+        "checkpointId": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string",
+          "enum": ["create_branch", "commit", "push", "create_pr"]
+        },
+        "argv": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reason": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/executionTraceStatus"
+        },
+        "policyVersion": {
+          "type": "string"
+        },
+        "policyDecision": {
+          "$ref": "#/$defs/executionTracePolicyDecision"
+        },
+        "blockedReasonCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "blockedReasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "executionEnabled": {
+          "const": false
+        },
+        "writeExecution": {
+          "const": "disabled"
+        },
+        "hasExecutionResults": {
+          "const": false
+        }
+      },
+      "additionalProperties": true
+    },
+    "executionAuditPayload": {
+      "type": "object",
+      "required": [
+        "intent",
+        "traces",
+        "traceCount",
+        "plannedTraceCount",
+        "blockedTraceCount",
+        "traceActionSummary",
+        "blockedReasonCount",
+        "blockedReasons",
+        "mismatchedTraceCount",
+        "mismatchedTraceIds",
+        "executionEnabled",
+        "writeExecution",
+        "hasExecutionResults"
+      ],
+      "properties": {
+        "intent": {
+          "$ref": "#/$defs/executionAuditIntentReport"
+        },
+        "traces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/executionAuditTraceReport"
+          }
+        },
+        "traceCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "plannedTraceCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "blockedTraceCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "traceActionSummary": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/executionActionSummary"
+          }
+        },
+        "blockedReasonCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "blockedReasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "mismatchedTraceCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "mismatchedTraceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "executionEnabled": {
+          "const": false
+        },
+        "writeExecution": {
+          "const": "disabled"
+        },
+        "hasExecutionResults": {
+          "const": false
+        }
+      },
+      "additionalProperties": true
     },
     "ownerDecisionItem": {
       "type": "object",
@@ -771,6 +1072,19 @@
       },
       "then": {
         "$ref": "#/$defs/approvePrPayload"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "execution-audit"
+          }
+        },
+        "required": ["command", "intent"]
+      },
+      "then": {
+        "$ref": "#/$defs/executionAuditPayload"
       }
     },
     {

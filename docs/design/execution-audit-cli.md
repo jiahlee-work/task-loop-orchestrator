@@ -1,18 +1,18 @@
 # Execution Audit Read-Only CLI Surface
 
-Status: design draft, not enabled.
+Status: partial MVP enabled for `execution-audit --intent <intentId> --json`; `--all` and plain output remain deferred.
 
-This document describes a future read-only CLI surface for inspecting persisted execution intents, dry-run traces, and audit bundles. It is not implemented, does not enable command execution, and must not be described as an available command until a later implementation milestone adds tests, JSON schema coverage, and command documentation.
+This document describes the read-only CLI surface for inspecting persisted execution intents, dry-run traces, and audit bundles. The single-intent JSON command is implemented, but it does not enable command execution. Listing all intents, plain output, and write-side actions remain future work.
 
 ## MVP Command
 
-The preferred first command is:
+The enabled first command is:
 
 ```bash
 task-loop-orchestrator execution-audit --intent <intentId> --json
 ```
 
-This starts with one JSON-only command that returns an `ExecutionAuditBundle` assembled by `FileRunStore.loadExecutionAuditBundle(intentId)`. A separate all-intents listing can follow after the single-intent contract is stable:
+This starts with one JSON-only command that returns an `ExecutionAuditBundle` assembled by `FileRunStore.loadExecutionAuditBundle(intentId)`. A separate all-intents listing remains deferred until the single-intent contract is stable:
 
 ```bash
 task-loop-orchestrator execution-audit --all --json
@@ -23,11 +23,11 @@ Alternative command families such as `execution-intents`, `execution-traces`, or
 ## Arguments
 
 - `--intent <intentId>`: load one persisted execution intent and matching dry-run traces.
-- `--all`: list audit bundles for all persisted intents.
+- `--all`: deferred; list audit bundles for all persisted intents in a later milestone.
 - `--json`: required for the MVP. Plain output should be deferred until the JSON contract has shipped.
 - `--root <path>`: defer unless the broader CLI adopts root override semantics. The current CLI uses `process.cwd()`.
 
-`--intent` and `--all` should be mutually exclusive. If neither is provided, the command should return a not-found or usage error rather than guessing.
+`--intent` is required in the current implementation. `--all` is rejected as not implemented, and plain output is rejected because the MVP is JSON-only.
 
 ## JSON Output
 
@@ -84,12 +84,12 @@ It may read `.orchestrator/execution-intents/` and `.orchestrator/execution-trac
 
 ## Implementation Requirements
 
-Before enabling the command, the implementation milestone should add:
+The first implementation milestone includes:
 
 - `CliJsonCommand` support for `execution-audit`.
 - `schemas/cli-json.schema.json` command enum and command-specific payload branch.
 - `docs/json-output.md` command-specific schema documentation.
-- `docs/commands.md` entry after the command exists.
+- `docs/commands.md` entry for the enabled command.
 - package smoke coverage for installed binary JSON output.
 - docs drift tests that keep command usage, JSON support, and read-only behavior aligned.
 - tests proving the command uses `FileRunStore` read helpers and does not execute commands.

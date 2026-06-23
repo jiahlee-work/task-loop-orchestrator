@@ -70,7 +70,7 @@ describe("package metadata", () => {
     expect(readme).toContain("package artifact dry-run review");
     expect(readme).toContain("pnpm run package:artifacts");
     expect(readme).toContain("`dist`, `schemas`, and `orchestrator.config.example.json`");
-    expect(readme).toContain("`checkpoint`, `pr-plan`, `pr-exec`, `approve-pr`, and `checks`");
+    expect(readme).toContain("read-only checkpoint/PR preflight/execution-audit flows");
     expect(readme).toContain("never create GitHub PRs, merge, push, create releases, create tags, or publish to npm");
     expect(releaseCheck.indexOf('"package:artifacts"')).toBeGreaterThan(releaseCheck.indexOf('"build"'));
     expect(releaseCheck.indexOf('"package:artifacts"')).toBeLessThan(releaseCheck.indexOf('"package:smoke"'));

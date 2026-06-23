@@ -98,6 +98,7 @@ function printUsage(): void {
   task-loop-orchestrator pr-plan [runId] [--json]
   task-loop-orchestrator approve-pr [runId] --approved-by name [--reason text] [--json]
   task-loop-orchestrator pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]
+  task-loop-orchestrator execution-audit --intent intentId --json
   task-loop-orchestrator checks [ref] [--json]`);
 }
 
@@ -502,6 +503,24 @@ async function approvePrCommand(args: ParsedArgs): Promise<void> {
   console.log(`Saved: ${store.pathForApproval(approval.id)}`);
 }
 
+async function executionAuditCommand(args: ParsedArgs): Promise<void> {
+  if (args.flags.all === true) {
+    throw new Error("execution-audit --all is not implemented yet.");
+  }
+  if (args.flags.json !== true) {
+    throw new Error("execution-audit currently requires --json.");
+  }
+
+  const intentId = stringFlag(args.flags, "intent");
+  if (!intentId?.trim()) {
+    throw new Error("execution-audit requires --intent <intentId>.");
+  }
+
+  const store = new FileRunStore(process.cwd());
+  const bundle = await store.loadExecutionAuditBundle(intentId);
+  printJson("execution-audit", bundle);
+}
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
@@ -562,6 +581,11 @@ async function main(): Promise<void> {
 
   if (args.command === "approve-pr") {
     await approvePrCommand(args);
+    return;
+  }
+
+  if (args.command === "execution-audit") {
+    await executionAuditCommand(args);
     return;
   }
 

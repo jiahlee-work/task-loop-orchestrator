@@ -3,6 +3,7 @@ import type { GitHubCheckSummary, LoopRun } from "../../src/domain.js";
 import { createPullRequestApproval, preparePullRequestExecution } from "../../src/approval.js";
 import { createCliJsonReport } from "../../src/cli-json.js";
 import { runDoctor } from "../../src/doctor.js";
+import { createExecutionDryRunTraces, createExecutionIntent, summarizeExecutionAuditBundle } from "../../src/execution-intents.js";
 import { initProject } from "../../src/init.js";
 import { createIntegrationCheckpoint } from "../../src/integration.js";
 import { createPullRequestPlan } from "../../src/pr-plan.js";
@@ -26,6 +27,17 @@ export async function buildCliJsonSamples(input: BuildCliJsonSamplesInput): Prom
     approvedBy: "schema-smoke",
     reason: "Schema sample approval."
   });
+  const executionIntent = createExecutionIntent({
+    plan: prPlan,
+    approval,
+    actor: "schema-smoke",
+    reason: "Review execution audit bundle schema.",
+    createdAt,
+    expiresAt: "2026-06-23T00:00:00.000Z",
+    permissionMode: "maintainer"
+  });
+  const executionTraces = createExecutionDryRunTraces(executionIntent, { createdAt });
+  const executionAuditBundle = summarizeExecutionAuditBundle(executionIntent, executionTraces);
   const runReport = createRunCliReport(run, {
     pathForRun: (runId) => join(run.context.runId, ".orchestrator", "runs", `${runId}.json`)
   });
@@ -40,7 +52,8 @@ export async function buildCliJsonSamples(input: BuildCliJsonSamplesInput): Prom
     toJsonObject(createCliJsonReport("checkpoint", checkpoint, createdAt)),
     toJsonObject(createCliJsonReport("pr-plan", prPlan, createdAt)),
     toJsonObject(createCliJsonReport("pr-exec", prExec, createdAt)),
-    toJsonObject(createCliJsonReport("approve-pr", approval, createdAt))
+    toJsonObject(createCliJsonReport("approve-pr", approval, createdAt)),
+    toJsonObject(createCliJsonReport("execution-audit", executionAuditBundle, createdAt))
   ];
 }
 

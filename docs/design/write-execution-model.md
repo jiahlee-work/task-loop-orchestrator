@@ -14,7 +14,7 @@ This document describes the model that should exist before `task-loop-orchestrat
 - Execution audit bundles can group an intent with matching dry-run traces for read-only review while excluding unrelated trace records.
 - The file store can assemble execution audit bundles from persisted intents and traces without writing files or running commands.
 - The audit bundle JSON contract is covered by internal tests before any CLI read surface is enabled.
-- A future read-only CLI surface for audit bundle lookup is drafted in [`execution-audit-cli.md`](execution-audit-cli.md) but is not enabled.
+- A read-only CLI surface for audit bundle lookup is partially enabled for `execution-audit --intent <intentId> --json`; `--all` and plain output remain deferred in [`execution-audit-cli.md`](execution-audit-cli.md).
 - `pr-exec` is dry-run/preflight oriented.
 - `pr-exec --execute` requires approval data, checks stale approvals, and still returns a blocked report before branch, commit, push, or `gh pr create`.
 - `executedCommands` remains empty in the current implementation.
@@ -108,11 +108,12 @@ Audit logs must avoid recording secrets. Full stdout/stderr should not be persis
 4. Add read-only audit bundles that group intents with matching dry-run traces.
 5. Add store-level read-only audit bundle assembly from persisted intent and trace records.
 6. Guard the audit bundle JSON contract with internal fixture-style tests before exposing it through CLI JSON.
-7. Design the read-only `execution-audit` CLI surface before enabling it.
-8. Add a single local-only command behind tests and explicit approval, such as branch creation in a temporary fixture repository.
-9. Add commit execution only after staged-file policy and diff verification exist.
-10. Add push only after remote/ref policy and CI handling are documented and tested.
-11. Add GitHub PR creation only after push policy, approval freshness, and `gh pr create` argument construction are covered.
+7. Enable the read-only `execution-audit --intent <intentId> --json` lookup without command execution.
+8. Add `execution-audit --all` or plain output only after the single-intent JSON contract is stable.
+9. Add a single local-only command behind tests and explicit approval, such as branch creation in a temporary fixture repository.
+10. Add commit execution only after staged-file policy and diff verification exist.
+11. Add push only after remote/ref policy and CI handling are documented and tested.
+12. Add GitHub PR creation only after push policy, approval freshness, and `gh pr create` argument construction are covered.
 
 ## Hard Non-Goals
 

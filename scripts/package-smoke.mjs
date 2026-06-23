@@ -4,7 +4,7 @@
 // Failures are wrapped with step labels plus command/cwd/output excerpts; this
 // script never creates branches, pushes, PRs, merges, releases, or publishes.
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,6 +40,7 @@ async function main() {
       const help = await run(bin, ["--help"], { cwd: projectDir });
       assertIncludes(help.stdout, "task-loop-orchestrator init", "help output should include init usage");
       assertIncludes(help.stdout, "task-loop-orchestrator doctor", "help output should include doctor usage");
+      assertIncludes(help.stdout, "task-loop-orchestrator execution-audit", "help output should include execution-audit usage");
       assertIncludes(help.stdout, "task-loop-orchestrator --version", "help output should include version usage");
     });
 
@@ -122,6 +123,12 @@ async function main() {
       assertApprovalReport(parseJson(approval), loopReport.runId);
     });
 
+    await runStep("execution audit json", async () => {
+      const fixture = await writeExecutionAuditFixture(projectDir);
+      const audit = await run(bin, ["execution-audit", "--intent", fixture.intentId, "--json"], { cwd: projectDir });
+      assertExecutionAuditReport(parseJson(audit), fixture.intentId);
+    });
+
     await runStep("checks json", async () => {
       const checks = await run(bin, ["checks", "HEAD", "--json"], { cwd: projectDir });
       assertChecksReport(parseJson(checks));
@@ -134,7 +141,7 @@ async function main() {
 
     console.log("Package smoke passed:");
     console.log(`- tarball: ${tarballPath}`);
-    console.log("- help output includes init and version usage");
+    console.log("- help output includes init, execution-audit, and version usage");
     console.log("- installed binary version matches package.json");
     console.log("- doctor reports pre-init warnings and post-init readiness");
     console.log("- init creates config and .gitignore");
@@ -142,6 +149,7 @@ async function main() {
     console.log("- all JSON smoke commands include schema metadata");
     console.log("- run/resume/status JSON and plain status work through the installed binary");
     console.log("- checkpoint/pr-plan/pr-exec/approve-pr JSON fields work through the installed binary");
+    console.log("- execution-audit JSON reads persisted intent and trace fixtures through the installed binary");
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
@@ -165,6 +173,67 @@ async function readPackageVersion() {
   }
 
   return packageJson.version;
+}
+
+async function writeExecutionAuditFixture(projectDir) {
+  const intentId = "intent_package_smoke";
+  const createdAt = "2026-06-22T00:00:00.000Z";
+  const intent = {
+    id: intentId,
+    runId: "run_package_smoke",
+    planId: "prplan_package_smoke",
+    planFingerprint: "fingerprint_package_smoke",
+    checkpointId: "checkpoint_package_smoke",
+    approvalId: "approval_package_smoke",
+    actor: "package-smoke",
+    reason: "Package smoke audit fixture.",
+    createdAt,
+    expiresAt: "2026-06-23T00:00:00.000Z",
+    targetRef: "orchestrator/package-smoke",
+    baseBranch: "main",
+    sourceBranch: "orchestrator/package-smoke",
+    permissionMode: "maintainer",
+    policyVersion: "write-execution-intent/v1",
+    commandCandidates: [
+      {
+        action: "create_branch",
+        command: ["git", "switch", "-c", "orchestrator/package-smoke"],
+        reason: "Create package smoke branch candidate.",
+        decisionReady: true
+      }
+    ],
+    status: "created",
+    blockedReasons: []
+  };
+  const trace = {
+    id: "trace_package_smoke",
+    intentId,
+    runId: intent.runId,
+    planId: intent.planId,
+    approvalId: intent.approvalId,
+    checkpointId: intent.checkpointId,
+    commandCandidate: {
+      action: "create_branch",
+      argv: ["git", "switch", "-c", "orchestrator/package-smoke"],
+      reason: "Create package smoke branch candidate."
+    },
+    status: "planned",
+    policyVersion: intent.policyVersion,
+    policyDecision: "dry_run_planned",
+    blockedReasons: [],
+    createdAt,
+    executionEnabled: false,
+    writeExecution: "disabled"
+  };
+  const intentDir = join(projectDir, ".orchestrator", "execution-intents");
+  const traceDir = join(projectDir, ".orchestrator", "execution-traces");
+
+  await mkdir(intentDir, { recursive: true });
+  await mkdir(traceDir, { recursive: true });
+  await writeFile(join(intentDir, `${intent.id}.json`), `${JSON.stringify(intent, null, 2)}\n`);
+  await writeFile(join(traceDir, `${trace.id}.json`), `${JSON.stringify(trace, null, 2)}\n`);
+
+  return { intentId };
 }
 
 async function runStep(label, fn) {
@@ -310,9 +379,48 @@ function assertApprovalReport(report, runId) {
   assertEqual(report.status, "approved", "approve-pr JSON should persist approved status");
 }
 
+function assertExecutionAuditReport(report, intentId) {
+  assertEnvelope(report, "execution-audit");
+  assertObject(report.intent, "execution-audit JSON should include intent");
+  assertEqual(report.intent.id, intentId, "execution-audit JSON should preserve intent id");
+  assertArray(report.traces, "execution-audit JSON should include traces");
+  assertEqual(report.traceCount, 1, "execution-audit JSON should include matching trace count");
+  assertEqual(report.plannedTraceCount, 1, "execution-audit JSON should include planned trace count");
+  assertEqual(report.blockedTraceCount, 0, "execution-audit JSON should include blocked trace count");
+  assertEqual(report.executionEnabled, false, "execution-audit JSON should keep execution disabled");
+  assertEqual(report.writeExecution, "disabled", "execution-audit JSON should keep write execution disabled");
+  assertEqual(report.hasExecutionResults, false, "execution-audit JSON should not expose execution results");
+  assertNoExecutionResultFields(report);
+}
+
 function assertChecksReport(report) {
   assertEnvelope(report, "checks");
   assertEqual(report.source, "github", "checks JSON should preserve provider source");
+}
+
+function assertNoExecutionResultFields(value) {
+  const forbiddenFields = ["executedCommands", "stdout", "stderr", "exitCode"];
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      assertNoExecutionResultFields(item);
+    }
+    return;
+  }
+
+  if (typeof value !== "object" || value === null) {
+    return;
+  }
+
+  for (const field of forbiddenFields) {
+    if (field in value) {
+      throw new Error(`execution-audit JSON should not include ${field}.`);
+    }
+  }
+
+  for (const nestedValue of Object.values(value)) {
+    assertNoExecutionResultFields(nestedValue);
+  }
 }
 
 function assertIncludes(value, expected, message) {

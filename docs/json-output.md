@@ -43,6 +43,7 @@ The envelope applies to every current JSON-capable command:
 - `pr-plan [runId] --json`
 - `pr-exec [runId] --json`
 - `approve-pr [runId] --approved-by <name> --json`
+- `execution-audit --intent <intentId> --json`
 
 ## Raw Status
 
@@ -94,6 +95,16 @@ When present, `planSnapshot` fixes `planTitle`, `baseBranch`, `sourceBranchHint`
 
 The command writes only the approval record under `.orchestrator/approvals/`; it does not create branches, commits, pushes, pull requests, merges, or releases.
 
+## Execution Audit Schema
+
+`execution-audit --intent <intentId> --json` has a command-specific schema branch for read-only execution audit review. Consumers can rely on `intent`, `traces`, `traceCount`, `plannedTraceCount`, `blockedTraceCount`, `traceActionSummary`, `blockedReasonCount`, `blockedReasons`, `mismatchedTraceCount`, `mismatchedTraceIds`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`.
+
+The nested `intent` report fixes `id`, `runId`, `planId`, `approvalId`, `status`, `actor`, `createdAt`, `expiresAt`, `targetRef`, `baseBranch`, `sourceBranch`, `permissionMode`, `policyVersion`, `commandCandidateCount`, `commandCandidateActions`, `commandActionSummary`, `blockedReasonCount`, `blockedReasons`, `executionEnabled`, and `writeExecution`, with optional `checkpointId` and `reason`.
+
+Each `traces[]` item fixes `id`, `intentId`, `runId`, `planId`, `approvalId`, `action`, `argv`, `reason`, `status`, `policyVersion`, `policyDecision`, `blockedReasonCount`, `blockedReasons`, `createdAt`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`, with optional `checkpointId`.
+
+Execution audit output is read-only and intentionally excludes `executedCommands`, raw `stdout`, raw `stderr`, and `exitCode`. `--all` and plain output are deferred.
+
 ## Doctor Schema
 
 `doctor --json` has a command-specific schema branch for installation and project readiness diagnostics. Consumers can rely on top-level `status`, `rootDir`, `githubMode`, and `checks`.
@@ -108,7 +119,7 @@ The `files` object currently reports `config` and `gitignore`. Each file result 
 
 ## Coverage and Exceptions
 
-Every current JSON-capable command is tracked by `schemas/cli-json.schema.json` with a command-specific branch: `init`, `doctor`, `run`, `resume`, `status`, `checkpoint`, `checks`, `pr-plan`, `pr-exec`, and `approve-pr`.
+Every current JSON-capable command is tracked by `schemas/cli-json.schema.json` with a command-specific branch: `init`, `doctor`, `run`, `resume`, `status`, `checkpoint`, `checks`, `pr-plan`, `pr-exec`, `approve-pr`, and `execution-audit`.
 
 Two response families intentionally stay on the flexible common envelope path:
 
@@ -133,6 +144,6 @@ Commands that need an existing run return an enveloped not-found response when `
 
 The machine-readable schema artifact is available at [`../schemas/cli-json.schema.json`](../schemas/cli-json.schema.json). The schema validates the common envelope and command enum while allowing command-specific payload fields to remain flexible.
 
-Command-specific branches are implemented with `allOf` conditions that reference `$defs` payload definitions such as `runReportPayload`, `checksPayload`, `checkpointPayload`, `prPlanPayload`, `prExecPayload`, `approvePrPayload`, `doctorPayload`, and `initPayload`.
+Command-specific branches are implemented with `allOf` conditions that reference `$defs` payload definitions such as `runReportPayload`, `checksPayload`, `checkpointPayload`, `prPlanPayload`, `prExecPayload`, `approvePrPayload`, `executionAuditPayload`, `doctorPayload`, and `initPayload`.
 
 Representative JSON outputs are also covered by the lightweight sample smoke in [`../tests/json-schema-samples.test.ts`](../tests/json-schema-samples.test.ts). Those samples are built from test-only fixtures and checked against the schema envelope, command enum, command-specific branch, and required top-level fields without introducing a full JSON Schema validator.

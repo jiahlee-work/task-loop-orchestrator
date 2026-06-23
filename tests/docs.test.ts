@@ -321,14 +321,13 @@ describe("release readiness documentation", () => {
     ]);
     expectContainsAll(auditCliDesign, [
       "# Execution Audit Read-Only CLI Surface",
-      "Status: design draft, not enabled.",
-      "not implemented",
+      "Status: partial MVP enabled for `execution-audit --intent <intentId> --json`; `--all` and plain output remain deferred.",
       "does not enable command execution",
-      "must not be described as an available command",
+      "Listing all intents, plain output, and write-side actions remain future work.",
       "task-loop-orchestrator execution-audit --intent <intentId> --json",
       "task-loop-orchestrator execution-audit --all --json",
       "`--intent <intentId>`",
-      "`--all`",
+      "`--all`: deferred",
       "`--json`: required",
       "existing CLI JSON envelope",
       "command: \"execution-audit\"",
@@ -351,7 +350,7 @@ describe("release readiness documentation", () => {
       "Trace mismatch",
       "`schemas/cli-json.schema.json`",
       "`docs/json-output.md`",
-      "`docs/commands.md` entry after the command exists",
+      "`docs/commands.md` entry for the enabled command",
       "package smoke coverage",
       "actual command execution",
       "`gh pr create`",
@@ -475,7 +474,8 @@ describe("command json documentation boundaries", () => {
       "checks",
       "pr-plan",
       "pr-exec",
-      "approve-pr"
+      "approve-pr",
+      "execution-audit"
     ]);
   });
 
@@ -507,7 +507,8 @@ describe("command json documentation boundaries", () => {
       ["checks", "#/$defs/checksPayload"],
       ["pr-plan", "#/$defs/prPlanPayload"],
       ["pr-exec", "#/$defs/prExecPayload"],
-      ["approve-pr", "#/$defs/approvePrPayload"]
+      ["approve-pr", "#/$defs/approvePrPayload"],
+      ["execution-audit", "#/$defs/executionAuditPayload"]
     ]);
 
     expect([...branchRefs.keys()].sort()).toEqual([...cliJsonCommands].sort());
@@ -563,6 +564,7 @@ describe("command reference documentation", () => {
       "pr-plan [runId] [--json]",
       "approve-pr [runId] --approved-by name [--reason text] [--json]",
       "pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]",
+      "execution-audit --intent intentId --json",
       "checks [ref] [--json]"
     ]);
     expect(commandHeadings).toEqual([
@@ -577,7 +579,8 @@ describe("command reference documentation", () => {
       "checks",
       "pr-plan",
       "approve-pr",
-      "pr-exec"
+      "pr-exec",
+      "execution-audit"
     ]);
 
     const documentedCommands = new Set(commandHeadings);
@@ -601,6 +604,7 @@ describe("command reference documentation", () => {
       "writes run state under `.orchestrator/runs/`",
       "saves checkpoint JSON under `.orchestrator/checkpoints/`",
       "writes an approval record under `.orchestrator/approvals/`",
+      "reads `.orchestrator/execution-intents/` and `.orchestrator/execution-traces/`",
       "dry-run by default",
       "executedCommands` remains empty",
       "does not create GitHub PRs",
@@ -638,6 +642,14 @@ describe("command reference documentation", () => {
     expectSectionContains(sections, "status", ["read-only", "does not modify local state or external systems"]);
     expectSectionContains(sections, "checks", ["read-only", "unknown", "not_found"]);
     expectSectionContains(sections, "pr-plan", ["read-only planning", "command candidates", "does not execute them"]);
+    expectSectionContains(sections, "execution-audit", [
+      "read-only",
+      ".orchestrator/execution-intents/",
+      ".orchestrator/execution-traces/",
+      "does not write files",
+      "does not execute commands",
+      "`--all` and plain output are not implemented yet"
+    ]);
 
     expectSectionContains(sections, "init", ["writes local bootstrap files only", "orchestrator.config.json", ".gitignore"]);
     expectSectionContains(sections, "run", ["writes run state", ".orchestrator/runs/", "do not call external write-side systems"]);
@@ -696,7 +708,19 @@ describe("command reference documentation", () => {
     expect(examples.get("--help")?.join("\n")).not.toContain("--json");
     expect(examples.get("--version")?.join("\n")).not.toContain("--json");
 
-    for (const command of ["init", "doctor", "run", "resume", "status", "checkpoint", "pr-plan", "pr-exec", "approve-pr", "checks"]) {
+    for (const command of [
+      "init",
+      "doctor",
+      "run",
+      "resume",
+      "status",
+      "checkpoint",
+      "pr-plan",
+      "pr-exec",
+      "approve-pr",
+      "execution-audit",
+      "checks"
+    ]) {
       expect(examples.has(command), `Missing command reference example for ${command}`).toBe(true);
     }
     expectContainsAll(smokeScript, [
@@ -709,6 +733,7 @@ describe("command reference documentation", () => {
       '"pr-plan", loopReport.runId, "--json"',
       '"pr-exec", loopReport.runId, "--json"',
       '"approve-pr", loopReport.runId, "--approved-by", "package-smoke", "--json"',
+      '"execution-audit", "--intent", fixture.intentId, "--json"',
       '"checks", "HEAD", "--json"'
     ]);
   });
