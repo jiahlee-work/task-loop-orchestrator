@@ -220,9 +220,10 @@ Example:
 ```bash
 task-loop-orchestrator write-readiness --intent intent_xxx
 task-loop-orchestrator write-readiness --intent intent_xxx --json
+task-loop-orchestrator write-readiness --intent intent_xxx --preflight readiness-preflight.json
 task-loop-orchestrator write-readiness --intent intent_xxx --preflight readiness-preflight.json --json
 ```
 
 JSON: supported with `--json`.
 
-Behavior: read-only. It reads `.orchestrator/execution-intents/` and `.orchestrator/execution-traces/`, derives an audit bundle, and calls the readiness helper. Plain output is for human terminal review; `--json` is the stable automation contract. JSON mode can also read a safe preflight evidence file with `--preflight <path>`; loader/parser failures return JSON error envelopes with disabled execution markers instead of partial success. Plain `--preflight` output is still deferred and returns a short safe error. Missing intents, missing `--intent`, and invalid persisted audit files return JSON error envelopes with disabled execution markers in JSON mode and short safe plain errors otherwise. It does not write files, does not execute commands, does not query GitHub, and does not create branches, commits, pushes, PRs, merges, releases, approvals, tags, or GitHub releases.
+Behavior: read-only. It reads `.orchestrator/execution-intents/` and `.orchestrator/execution-traces/`, derives an audit bundle, and calls the readiness helper. Plain output is for human terminal review; `--json` is the stable automation contract. Plain and JSON modes can read a safe preflight evidence file with `--preflight <path>`; loader/parser failures return short safe plain errors or JSON error envelopes instead of partial success. Missing intents, missing `--intent`, and invalid persisted audit files return JSON error envelopes with disabled execution markers in JSON mode and short safe plain errors otherwise. It does not write files, does not execute commands, does not query GitHub, and does not create branches, commits, pushes, PRs, merges, releases, approvals, tags, or GitHub releases.

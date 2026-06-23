@@ -105,11 +105,15 @@ npx task-loop-orchestrator execution-audit --all
 npx task-loop-orchestrator execution-audit --all --json
 npx task-loop-orchestrator execution-audit --intent intent_xxx
 npx task-loop-orchestrator execution-audit --intent intent_xxx --json
+npx task-loop-orchestrator write-readiness --intent intent_xxx
+npx task-loop-orchestrator write-readiness --intent intent_xxx --json
+npx task-loop-orchestrator write-readiness --intent intent_xxx --preflight readiness-preflight.json
+npx task-loop-orchestrator write-readiness --intent intent_xxx --preflight readiness-preflight.json --json
 ```
 
 Plain output is for people reading terminal summaries. Use `--json` for automation, scripts, or UI integrations that need the stable JSON envelope.
 
-`execution-audit` is read-only. It reads persisted intent and trace records, but it does not write files, execute external commands, create branches, commit, push, create PRs, merge, publish, create tags, or create GitHub releases.
+`execution-audit` and `write-readiness` are read-only. They read persisted intent and trace records; `write-readiness --preflight <path>` also reads one local evidence JSON file. This surface does not write files, execute external commands, create branches, commit, push, create PRs, merge, publish, create tags, or create GitHub releases. Preflight input can change the readiness summary, but it does not unlock write execution.
 
 `pr-exec` remains a dry-run/preflight and approval-intent surface. Even with `--execute`, current write execution is blocked before branch creation, commit, push, or PR creation.
 

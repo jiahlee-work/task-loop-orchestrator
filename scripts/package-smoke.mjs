@@ -205,6 +205,28 @@ async function main() {
       const plainReadiness = await run(bin, ["write-readiness", "--intent", fixture.intentId], { cwd: projectDir });
       assertWriteReadinessPlainOutput(plainReadiness.stdout, fixture.intentId);
 
+      const plainReadinessWithPreflight = await run(
+        bin,
+        ["write-readiness", "--intent", fixture.intentId, "--preflight", preflight.validPath],
+        { cwd: projectDir }
+      );
+      assertWriteReadinessPlainOutput(plainReadinessWithPreflight.stdout, fixture.intentId, {
+        readinessStatus: "ready",
+        ready: "yes",
+        preflight: "available"
+      });
+
+      const plainInvalidPreflightJson = await runAllowFailure(
+        bin,
+        ["write-readiness", "--intent", fixture.intentId, "--preflight", preflight.invalidJsonPath],
+        { cwd: projectDir }
+      );
+      assertEqual(plainInvalidPreflightJson.exitCode, "1", "write-readiness plain invalid preflight should exit non-zero");
+      assertWriteReadinessPlainErrorOutput(plainInvalidPreflightJson.stdout, {
+        errorCode: "write_readiness_preflight_invalid_json",
+        forbiddenText: preflight.secret
+      });
+
       const plainAudit = await run(bin, ["execution-audit", "--intent", fixture.intentId], { cwd: projectDir });
       assertExecutionAuditPlainOutput(plainAudit.stdout, fixture.intentId);
 
@@ -357,7 +379,7 @@ async function main() {
       "- execution-audit JSON and plain output read fixtures, list bundles, and return safe errors through the installed binary"
     );
     console.log(
-      "- write-readiness JSON and plain output read audit fixtures, JSON preflight evidence, and return safe errors through the installed binary"
+      "- write-readiness JSON and plain output read audit fixtures, preflight evidence, and return safe errors through the installed binary"
     );
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
@@ -808,13 +830,25 @@ function assertWriteReadinessErrorReport(report, expected) {
   assertNoExecutionResultFields(report);
 }
 
-function assertWriteReadinessPlainOutput(output, intentId) {
+function assertWriteReadinessPlainOutput(
+  output,
+  intentId,
+  expected = {
+    readinessStatus: "unknown",
+    ready: "unknown",
+    preflight: "missing"
+  }
+) {
   assertIncludes(output, `Write execution readiness: ${intentId}`, "write-readiness plain output should include intent header");
-  assertIncludes(output, "Status: unknown", "write-readiness plain output should include readiness status");
-  assertIncludes(output, "Ready: unknown", "write-readiness plain output should include ready state");
+  assertIncludes(output, `Status: ${expected.readinessStatus}`, "write-readiness plain output should include readiness status");
+  assertIncludes(output, `Ready: ${expected.ready}`, "write-readiness plain output should include ready state");
   assertIncludes(output, "Execution: disabled", "write-readiness plain output should keep execution disabled");
   assertIncludes(output, "Write execution: disabled", "write-readiness plain output should keep write execution disabled");
-  assertIncludes(output, "Inputs: auditBundle=available, preflight=missing", "write-readiness plain output should show missing preflight");
+  assertIncludes(
+    output,
+    `Inputs: auditBundle=available, preflight=${expected.preflight}`,
+    "write-readiness plain output should include expected preflight state"
+  );
   assertIncludes(output, "Checks:", "write-readiness plain output should include checks");
   assertIncludes(output, "Use --json for the stable automation contract.", "write-readiness plain output should recommend JSON for automation");
   assertNoUnsafePlainExecutionOutput(output);

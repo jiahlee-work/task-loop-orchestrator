@@ -732,23 +732,16 @@ async function writeReadinessCommand(args: ParsedArgs): Promise<void> {
     return;
   }
 
-  if (preflightFlagPresent && !jsonOutput) {
-    printPlainWriteReadinessError(
-      "write_readiness_preflight_unsupported",
-      "write-readiness --preflight currently requires --json.",
+  if (preflightFlagPresent && !preflightPath?.trim()) {
+    printWriteReadinessErrorForMode(
+      jsonOutput,
+      "write_readiness_preflight_missing_path",
+      "write-readiness --preflight requires a path.",
       {
         intentId,
         details: { kind: "preflight" }
       }
     );
-    return;
-  }
-
-  if (preflightFlagPresent && !preflightPath?.trim()) {
-    printWriteReadinessError("write_readiness_preflight_missing_path", "write-readiness --preflight requires a path.", {
-      intentId,
-      details: { kind: "preflight" }
-    });
     return;
   }
 
@@ -793,7 +786,8 @@ async function writeReadinessCommand(args: ParsedArgs): Promise<void> {
   if (preflightPath?.trim()) {
     const loadedPreflight = await loadWriteReadinessPreflightInput(preflightPath);
     if (!loadedPreflight.ok) {
-      printWriteReadinessError(
+      printWriteReadinessErrorForMode(
+        jsonOutput,
         writeReadinessPreflightErrorCode(loadedPreflight.errorCode),
         writeReadinessPreflightErrorMessage(loadedPreflight.errorCode),
         {
