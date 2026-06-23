@@ -105,6 +105,8 @@ Each `traces[]` item fixes `id`, `intentId`, `runId`, `planId`, `approvalId`, `a
 
 Execution audit output is read-only and intentionally excludes `executedCommands`, raw `stdout`, raw `stderr`, and `exitCode`. `--all` list output and plain output are deferred.
 
+The deferred `execution-audit --all --json` contract is documented as a design draft in [`design/execution-audit-cli.md`](design/execution-audit-cli.md). It should use a list wrapper with `status`, `bundleCount`, `bundles`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`, but that payload is not enabled in the production schema until the CLI actually returns it.
+
 The `execution-audit` command-specific branch uses `executionAuditResponsePayload` to allow either a success `executionAuditPayload` bundle or an `executionAuditErrorPayload`. Implemented error envelopes cover missing intents, missing `--intent`, deferred `--all` requests, invalid persisted intent files, and invalid persisted trace files.
 
 Error payloads fix `status`, `errorCode`, `message`, `intent`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`, with optional `intentId` and `details`. `intent` is `null` for these error responses. Invalid persisted file envelopes expose only minimal `details.kind` values such as `execution_intent` or `execution_trace`; they do not include raw file contents, stack traces, secrets, stdout, stderr, or exit codes.

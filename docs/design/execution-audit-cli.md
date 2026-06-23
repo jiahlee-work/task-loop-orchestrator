@@ -53,7 +53,60 @@ The payload should preserve the current `ExecutionAuditBundle` top-level fields:
 - `writeExecution: "disabled"`
 - `hasExecutionResults: false`
 
-When `--all` is implemented, the payload should use a stable wrapper such as `bundles`, `bundleCount`, `executionEnabled`, `writeExecution`, and `hasExecutionResults` rather than returning a bare array.
+When `--all` is implemented, the payload should use the list wrapper described in the `--all JSON List Contract Draft` section rather than returning a bare array.
+
+## `--all` JSON List Contract Draft
+
+Status: design draft, not enabled. The current CLI must continue to reject `execution-audit --all --json` with the existing `execution_audit_all_deferred` error envelope until a later implementation milestone enables this contract.
+
+The proposed read-only command is:
+
+```bash
+task-loop-orchestrator execution-audit --all --json
+```
+
+The command should keep the existing CLI JSON envelope through `printJson("execution-audit", payload)`:
+
+- `schemaVersion: 1`
+- `command: "execution-audit"`
+- `createdAt`
+
+The proposed payload is a list-specific success object:
+
+- `status: "ok"`
+- `bundleCount`: number of returned audit bundles
+- `bundles`: `ExecutionAuditBundle[]`, reusing the same single-intent bundle contract
+- `executionEnabled: false`
+- `writeExecution: "disabled"`
+- `hasExecutionResults: false`
+
+The payload should not return a bare array. Keeping disabled execution markers at the list level lets automation distinguish this read-only inventory response from any future execution result.
+
+Ordering should follow `FileRunStore.listExecutionAuditBundles()`: bundles are ordered by the underlying execution intent `createdAt` value in descending order, newest first. Empty state is a successful list response, not an error:
+
+```json
+{
+  "schemaVersion": 1,
+  "command": "execution-audit",
+  "createdAt": "2026-06-22T00:00:00.000Z",
+  "status": "ok",
+  "bundleCount": 0,
+  "bundles": [],
+  "executionEnabled": false,
+  "writeExecution": "disabled",
+  "hasExecutionResults": false
+}
+```
+
+### Invalid Persisted File Policy For `--all`
+
+The recommended first implementation policy is fail-fast with a single JSON error envelope. If any persisted execution intent or execution trace file cannot be parsed or validated, `execution-audit --all --json` should return `status: "error"` with `errorCode: "invalid_execution_intent_file"` or `errorCode: "invalid_execution_trace_file"` and safe `details.kind`.
+
+This is preferred over partial success because the audit list is used for review and traceability; silently skipping invalid files or returning valid bundles with `errors[]` can hide corrupted audit state from automation. A future milestone can design partial success if there is a concrete UI need, but the first list implementation should keep the failure mode obvious and machine-readable.
+
+All policies must avoid exposing raw file contents, stack traces, secrets, stdout, stderr, exit codes, or execution results. Error paths remain read-only and must not mutate files or run external commands.
+
+Future schema work should add a dedicated list payload definition, for example `executionAuditListPayload`, and update `executionAuditResponsePayload` to allow `ExecutionAuditBundle | executionAuditListPayload | executionAuditErrorPayload`. The production schema branch should not be enabled until the CLI actually returns the list payload.
 
 ## Safety Boundary
 
