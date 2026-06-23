@@ -1629,6 +1629,46 @@
         }
       },
       "additionalProperties": true
+    },
+    "runLookupErrorPayload": {
+      "type": "object",
+      "required": ["status", "runId", "run", "message"],
+      "properties": {
+        "status": {
+          "const": "not_found"
+        },
+        "runId": {
+          "type": "string"
+        },
+        "run": {
+          "type": "null"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "runResponsePayload": {
+      "type": "object",
+      "required": ["runId", "status", "run"],
+      "properties": {
+        "runId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "run": {}
+      },
+      "anyOf": [
+        {
+          "$ref": "#/$defs/runReportPayload"
+        },
+        {
+          "$ref": "#/$defs/runLookupErrorPayload"
+        }
+      ]
     }
   },
   "allOf": [
@@ -1636,13 +1676,26 @@
       "if": {
         "properties": {
           "command": {
-            "enum": ["run", "resume"]
+            "const": "run"
           }
         },
         "required": ["command"]
       },
       "then": {
         "$ref": "#/$defs/runReportPayload"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "resume"
+          }
+        },
+        "required": ["command"]
+      },
+      "then": {
+        "$ref": "#/$defs/runResponsePayload"
       }
     },
     {

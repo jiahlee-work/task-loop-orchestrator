@@ -80,6 +80,16 @@ npx task-loop-orchestrator resume <runId> --max-iterations 1 --json
 
 Use the `runId` returned by `run --json` for `resume <runId>`. After resuming, rerun `status <runId> --json` when you want the explicit stored run report.
 
+For a dependency-free copy-paste flow, capture the run JSON and extract `runId` with Node:
+
+```bash
+run_json="$(npx task-loop-orchestrator run "Quickstart smoke" --max-iterations 1 --json)"
+run_id="$(printf '%s' "$run_json" | node -e 'let input=""; process.stdin.on("data", c => input += c); process.stdin.on("end", () => console.log(JSON.parse(input).runId));')"
+npx task-loop-orchestrator status "$run_id" --json
+npx task-loop-orchestrator resume "$run_id" --max-iterations 1 --json
+npx task-loop-orchestrator status "$run_id" --json
+```
+
 `init` creates or updates only local bootstrap files:
 
 - `orchestrator.config.json`

@@ -100,7 +100,7 @@ task-loop-orchestrator resume <runId> --max-iterations 1 --json
 
 JSON: supported with `--json`.
 
-Behavior: reads and updates local run state. Use the `runId` returned by `run --json`. `--max-iterations` is interpreted as additional iterations from the loaded run.
+Behavior: reads and updates local run state. Use the `runId` returned by `run --json`, then verify the resumed run with `status <runId> --json`. `--max-iterations` is interpreted as additional iterations from the loaded run. Missing run ids return a clear `not_found` JSON response when `--json` is used.
 
 ### `status [runId] [--json] [--raw]`
 
@@ -115,7 +115,7 @@ task-loop-orchestrator status <runId> --json --raw
 
 JSON: supported with `--json`. Use `--json --raw` to print the stored raw `LoopRun` shape.
 
-Behavior: read-only. It does not modify local state or external systems.
+Behavior: read-only. It does not modify local state or external systems. Without `runId`, it reports the latest run; with `runId`, it reports that specific run. In an empty project, `status --json` returns `status: "not_found"` and `run: null` with a message that points back to `run <title> --json`.
 
 ## Integration Status
 

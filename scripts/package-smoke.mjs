@@ -108,24 +108,59 @@ async function main() {
     });
 
     await runStep("mvp first-run json", async () => {
+      const emptyStatus = await run(bin, ["status", "--json"], { cwd: projectDir });
+      assertStatusNotFoundReport(parseJson(emptyStatus));
+
+      const missingResume = await runAllowFailure(bin, ["resume", "run_missing", "--max-iterations", "1", "--json"], {
+        cwd: projectDir
+      });
+      assertEqual(missingResume.exitCode, "1", "resume missing run should exit non-zero");
+      assertResumeNotFoundReport(parseJson(missingResume), "run_missing");
+
       const loop = await run(bin, ["run", "Smoke task", "--max-iterations", "1", "--json"], { cwd: projectDir });
       loopReport = parseJson(loop);
       assertRunReport(loopReport, "run", {
         status: "completed",
         completedCount: 1,
-        runIdIncludes: "run_"
+        runIdIncludes: "run_",
+        taskTitle: "Smoke task"
       });
 
       const statusJson = await run(bin, ["status", "--json"], { cwd: projectDir });
-      assertRunReport(parseJson(statusJson), "status", { runId: loopReport.runId, completedCount: 1 });
+      const latestStatusReport = parseJson(statusJson);
+      assertRunReport(latestStatusReport, "status", {
+        runId: loopReport.runId,
+        completedCount: 1,
+        taskTitle: "Smoke task"
+      });
 
       const resume = await run(bin, ["resume", loopReport.runId, "--max-iterations", "1", "--json"], {
         cwd: projectDir
       });
-      assertRunReport(parseJson(resume), "resume", { runId: loopReport.runId });
+      const resumeReport = parseJson(resume);
+      assertRunReport(resumeReport, "resume", {
+        runId: loopReport.runId,
+        completedCount: 1,
+        taskTitle: "Smoke task"
+      });
 
       const explicitStatusJson = await run(bin, ["status", loopReport.runId, "--json"], { cwd: projectDir });
-      assertRunReport(parseJson(explicitStatusJson), "status", { runId: loopReport.runId });
+      const explicitStatusReport = parseJson(explicitStatusJson);
+      assertRunReport(explicitStatusReport, "status", {
+        runId: loopReport.runId,
+        completedCount: 1,
+        taskTitle: "Smoke task"
+      });
+      assertEqual(
+        explicitStatusReport.status,
+        resumeReport.status,
+        "status <runId> JSON should match resume status after resume"
+      );
+      assertEqual(
+        JSON.stringify(explicitStatusReport.counts),
+        JSON.stringify(resumeReport.counts),
+        "status <runId> JSON should match resume subtask counts after resume"
+      );
 
       const rawStatusJson = await run(bin, ["status", loopReport.runId, "--json", "--raw"], { cwd: projectDir });
       assertRawStatusReport(parseJson(rawStatusJson), loopReport.runId);
@@ -447,6 +482,7 @@ async function main() {
     console.log(
       "- MVP first-run flow init/doctor/run/status/resume/status works through the installed binary with the actual runId"
     );
+    console.log("- status no-run and resume missing-run JSON guidance work through the installed binary");
     console.log("- checkpoint/pr-plan/pr-exec/approve-pr JSON fields work through the installed binary");
     console.log(
       "- execution-audit JSON and plain output read fixtures, list bundles, and return safe errors through the installed binary"
@@ -800,7 +836,34 @@ function assertRunReport(report, command, expected) {
     assertEqual(report.counts.completed, expected.completedCount, `${command} JSON should include subtask counts`);
   }
 
+  if (expected.taskTitle) {
+    assertEqual(report.task.title, expected.taskTitle, `${command} JSON should include task title`);
+    assertEqual(report.run.spec.title, expected.taskTitle, `${command} JSON should include raw run task title`);
+  }
+
+  assertString(report.status, `${command} JSON should include status`);
+  assertNumber(report.iterations, `${command} JSON should include iterations`);
+  assertObject(report.counts, `${command} JSON should include counts`);
+  assertNumber(report.counts.total, `${command} JSON should include total subtask count`);
+  assertObject(report.task, `${command} JSON should include task summary`);
+  assertObject(report.run, `${command} JSON should include raw run`);
   assertIncludes(report.savedPath, report.runId, `${command} JSON should include saved path`);
+}
+
+function assertStatusNotFoundReport(report) {
+  assertEnvelope(report, "status");
+  assertEqual(report.status, "not_found", "empty status JSON should report not_found");
+  assertEqual(report.run, null, "empty status JSON should set run to null");
+  assertIncludes(report.message, "run <title> --json", "empty status JSON should suggest starting a run");
+}
+
+function assertResumeNotFoundReport(report, runId) {
+  assertEnvelope(report, "resume");
+  assertEqual(report.status, "not_found", "missing resume JSON should report not_found");
+  assertEqual(report.runId, runId, "missing resume JSON should preserve requested runId");
+  assertEqual(report.run, null, "missing resume JSON should set run to null");
+  assertIncludes(report.message, "status --json", "missing resume JSON should suggest checking status");
+  assertIncludes(report.message, "run <title> --json", "missing resume JSON should suggest starting a run");
 }
 
 function assertRawStatusReport(report, runId) {

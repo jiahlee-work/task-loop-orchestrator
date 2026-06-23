@@ -369,7 +369,8 @@ async function statusCommand(args: ParsedArgs): Promise<void> {
     if (args.flags.json === true) {
       printJson("status", {
         status: "not_found",
-        run: null
+        run: null,
+        message: "No runs found. Start one with task-loop-orchestrator run <title> --json."
       });
       return;
     }
@@ -415,7 +416,28 @@ async function resumeCommand(args: ParsedArgs): Promise<void> {
     maxIterations: numberFlag(args.flags, "max-iterations") ?? config.maxIterations,
     worktreeEnabled: config.worktree.enabled
   });
-  const run = await orchestrator.resume(runId);
+  let run;
+  try {
+    run = await orchestrator.resume(runId);
+  } catch (error) {
+    if (!isMissingFileError(error)) {
+      throw error;
+    }
+
+    const message = `Run ${runId} was not found. Use task-loop-orchestrator status --json to inspect the latest run, or start one with task-loop-orchestrator run <title> --json.`;
+    if (args.flags.json === true) {
+      printJson("resume", {
+        status: "not_found",
+        runId,
+        run: null,
+        message
+      });
+    } else {
+      console.log(message);
+    }
+    process.exitCode = 1;
+    return;
+  }
 
   if (args.flags.json === true) {
     printJson("resume", createRunCliReport(run, store));

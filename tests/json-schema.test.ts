@@ -34,6 +34,22 @@ describe("CLI JSON schema artifact", () => {
     );
   });
 
+  it("defines run response and lookup error payloads for missing resume targets", async () => {
+    const schema = await readSchema();
+    const runLookupError = schema.$defs?.runLookupErrorPayload;
+    const runResponse = schema.$defs?.runResponsePayload;
+
+    expect(runLookupError?.required).toEqual(expect.arrayContaining(["status", "runId", "run", "message"]));
+    expect(runLookupError?.properties?.status).toEqual({ const: "not_found" });
+    expect(runLookupError?.properties?.run).toEqual({ type: "null" });
+    expect(runLookupError?.additionalProperties).toBe(true);
+    expect(runResponse?.required).toEqual(expect.arrayContaining(["runId", "status", "run"]));
+    expect(runResponse?.anyOf).toEqual([
+      { $ref: "#/$defs/runReportPayload" },
+      { $ref: "#/$defs/runLookupErrorPayload" }
+    ]);
+  });
+
   it("defines a focused checks payload schema", async () => {
     const schema = await readSchema();
     const checksPayload = schema.$defs?.checksPayload;
@@ -718,7 +734,7 @@ describe("CLI JSON schema artifact", () => {
       init: "#/$defs/initPayload",
       doctor: "#/$defs/doctorPayload",
       run: "#/$defs/runReportPayload",
-      resume: "#/$defs/runReportPayload",
+      resume: "#/$defs/runResponsePayload",
       status: "#/$defs/runReportPayload",
       checkpoint: "#/$defs/checkpointPayload",
       checks: "#/$defs/checksPayload",
@@ -764,7 +780,7 @@ describe("CLI JSON schema artifact", () => {
     }
   });
 
-  it("applies the run report branch to run, resume, and default status reports", async () => {
+  it("applies the run response branch only to resume, and the run report branch to run and explicit status reports", async () => {
     const schema = await readSchema();
 
     expect(schema.allOf).toEqual(
@@ -773,13 +789,26 @@ describe("CLI JSON schema artifact", () => {
           if: {
             properties: {
               command: {
-                enum: ["run", "resume"]
+                const: "run"
               }
             },
             required: ["command"]
           },
           then: {
             $ref: "#/$defs/runReportPayload"
+          }
+        },
+        {
+          if: {
+            properties: {
+              command: {
+                const: "resume"
+              }
+            },
+            required: ["command"]
+          },
+          then: {
+            $ref: "#/$defs/runResponsePayload"
           }
         },
         {
@@ -1108,6 +1137,17 @@ async function readSchema(): Promise<{
       properties?: Record<string, unknown>;
       additionalProperties?: boolean;
     };
+    runLookupErrorPayload?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
+    };
+    runResponsePayload?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      anyOf?: unknown[];
+      additionalProperties?: boolean;
+    };
     githubCheckStatus?: {
       type?: string;
       enum?: string[];
@@ -1336,6 +1376,17 @@ async function readSchema(): Promise<{
       runReportPayload?: {
         required?: string[];
         properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
+      runLookupErrorPayload?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
+      runResponsePayload?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        anyOf?: unknown[];
         additionalProperties?: boolean;
       };
       githubCheckStatus?: {

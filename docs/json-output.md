@@ -53,7 +53,7 @@ The envelope applies to every current JSON-capable command:
 
 ## Raw Status
 
-`status --json` returns the stable run report shape used by `run --json` and `resume --json`.
+`status --json` returns the latest stable run report shape used by `run --json` and `resume --json`. When no runs exist, it returns `status: "not_found"`, `run: null`, and a short `message` that points users back to `run <title> --json`.
 
 `status --json --raw` returns the stored raw `LoopRun` shape with the same metadata fields added at the top level.
 
@@ -65,7 +65,7 @@ The first command-specific schema extension covers the stable run report payload
 - `resume <runId> --json`
 - `status [runId] --json`
 
-The schema fixes the summary fields automation commonly reads: `runId`, `status`, `iterations`, `permissionMode`, `task`, `counts`, `savedPath`, and `run`. Additional fields remain allowed for forward-compatible payload expansion.
+Successful run responses use the stable `runReportPayload`, which fixes the summary fields automation commonly reads: `runId`, `status`, `iterations`, `permissionMode`, `task`, `counts`, `savedPath`, and `run`. `resume <runId> --json` can also return `runLookupErrorPayload` with `status: "not_found"`, `runId`, `run: null`, and `message` when the requested run file does not exist; the `resume` command branch is represented by `runResponsePayload`. Additional fields remain allowed for forward-compatible payload expansion.
 
 `status --json --raw` is intentionally excluded from the stricter run report payload branch because it returns the stored raw `LoopRun` object rather than the stable summary report.
 
@@ -184,6 +184,6 @@ Commands that need an existing run return an enveloped not-found response when `
 
 The machine-readable schema artifact is available at [`../schemas/cli-json.schema.json`](../schemas/cli-json.schema.json). The schema validates the common envelope and command enum while allowing command-specific payload fields to remain flexible.
 
-Command-specific branches are implemented with `allOf` conditions that reference `$defs` payload definitions such as `runReportPayload`, `checksPayload`, `checkpointPayload`, `prPlanPayload`, `prExecPayload`, `approvePrPayload`, `executionAuditResponsePayload`, `executionAuditPayload`, `executionAuditErrorPayload`, `writeReadinessResponsePayload`, `writeReadinessPayload`, `writeReadinessErrorPayload`, `writeRunnerResponsePayload`, `writeRunnerDryRunPayload`, `writeRunnerExecutionPolicy`, `writeRunnerSimulationResult`, `writeRunnerErrorPayload`, `doctorPayload`, and `initPayload`.
+Command-specific branches are implemented with `allOf` conditions that reference `$defs` payload definitions such as `runResponsePayload`, `runReportPayload`, `runLookupErrorPayload`, `checksPayload`, `checkpointPayload`, `prPlanPayload`, `prExecPayload`, `approvePrPayload`, `executionAuditResponsePayload`, `executionAuditPayload`, `executionAuditErrorPayload`, `writeReadinessResponsePayload`, `writeReadinessPayload`, `writeReadinessErrorPayload`, `writeRunnerResponsePayload`, `writeRunnerDryRunPayload`, `writeRunnerExecutionPolicy`, `writeRunnerSimulationResult`, `writeRunnerErrorPayload`, `doctorPayload`, and `initPayload`.
 
 Representative JSON outputs are also covered by the lightweight sample smoke in [`../tests/json-schema-samples.test.ts`](../tests/json-schema-samples.test.ts). Those samples are built from test-only fixtures and checked against the schema envelope, command enum, command-specific branch, and required top-level fields without introducing a full JSON Schema validator.
