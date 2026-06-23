@@ -103,9 +103,11 @@ The nested `intent` report fixes `id`, `runId`, `planId`, `approvalId`, `status`
 
 Each `traces[]` item fixes `id`, `intentId`, `runId`, `planId`, `approvalId`, `action`, `argv`, `reason`, `status`, `policyVersion`, `policyDecision`, `blockedReasonCount`, `blockedReasons`, `createdAt`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`, with optional `checkpointId`.
 
-Execution audit output is read-only and intentionally excludes `executedCommands`, raw `stdout`, raw `stderr`, and `exitCode`. `--all` and plain output are deferred.
+Execution audit output is read-only and intentionally excludes `executedCommands`, raw `stdout`, raw `stderr`, and `exitCode`. `--all` list output and plain output are deferred.
 
-JSON error envelopes for missing intents or invalid persisted files are still deferred and documented as a design draft in [`design/execution-audit-cli.md`](design/execution-audit-cli.md). They are not part of the current schema branch yet.
+The `execution-audit` command-specific branch uses `executionAuditResponsePayload` to allow either a success `executionAuditPayload` bundle or an `executionAuditErrorPayload`. The first implemented error envelopes cover missing intents, missing `--intent`, and deferred `--all` requests.
+
+Error payloads fix `status`, `errorCode`, `message`, `intent`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`, with optional `intentId`. `intent` is `null` for these error responses. Invalid persisted file envelopes remain deferred and documented in [`design/execution-audit-cli.md`](design/execution-audit-cli.md).
 
 ## Doctor Schema
 
@@ -146,6 +148,6 @@ Commands that need an existing run return an enveloped not-found response when `
 
 The machine-readable schema artifact is available at [`../schemas/cli-json.schema.json`](../schemas/cli-json.schema.json). The schema validates the common envelope and command enum while allowing command-specific payload fields to remain flexible.
 
-Command-specific branches are implemented with `allOf` conditions that reference `$defs` payload definitions such as `runReportPayload`, `checksPayload`, `checkpointPayload`, `prPlanPayload`, `prExecPayload`, `approvePrPayload`, `executionAuditPayload`, `doctorPayload`, and `initPayload`.
+Command-specific branches are implemented with `allOf` conditions that reference `$defs` payload definitions such as `runReportPayload`, `checksPayload`, `checkpointPayload`, `prPlanPayload`, `prExecPayload`, `approvePrPayload`, `executionAuditResponsePayload`, `executionAuditPayload`, `executionAuditErrorPayload`, `doctorPayload`, and `initPayload`.
 
 Representative JSON outputs are also covered by the lightweight sample smoke in [`../tests/json-schema-samples.test.ts`](../tests/json-schema-samples.test.ts). Those samples are built from test-only fixtures and checked against the schema envelope, command enum, command-specific branch, and required top-level fields without introducing a full JSON Schema validator.

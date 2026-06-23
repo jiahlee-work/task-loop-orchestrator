@@ -349,20 +349,21 @@ describe("release readiness documentation", () => {
       "No traces for an existing intent",
       "Trace mismatch",
       "JSON Error Envelope Draft",
-      "Status: design draft, not enabled. The current command only returns enveloped JSON for successful audit bundles",
-      "`status`: `not_found` for missing records, or `error` for invalid persisted data",
+      "Status: partially enabled. The current command returns enveloped JSON for successful audit bundles, missing intents, missing `--intent`, and deferred `--all` requests.",
+      "`status`: `not_found` for missing records, or `error` for usage/deferred cases",
       "`errorCode`: stable machine-readable code",
       "`execution_intent_not_found`",
-      "`invalid_execution_intent_file`",
-      "`invalid_execution_trace_file`",
       "`execution_audit_all_deferred`",
       "`execution_audit_missing_intent`",
-      "`execution_audit_json_required`",
       "`intent`: `null` for not-found responses",
-      "`details`: optional structured context",
+      "`details`: deferred optional structured context",
+      "invalid persisted intent file",
+      "invalid persisted trace file",
+      "missing `--json`, which still uses the existing non-JSON usage error path",
       "ExecutionAuditBundle | executionAuditErrorPayload",
+      "executionAuditResponsePayload",
       "no file writes, no external command execution, no branch creation, no commit, no push",
-      "extend `schemas/cli-json.schema.json` with an `executionAuditErrorPayload` definition",
+      "add invalid persisted file envelopes after deciding what structured `details` should expose",
       "`schemas/cli-json.schema.json`",
       "`docs/json-output.md`",
       "`docs/commands.md` entry for the enabled command",
@@ -523,7 +524,7 @@ describe("command json documentation boundaries", () => {
       ["pr-plan", "#/$defs/prPlanPayload"],
       ["pr-exec", "#/$defs/prExecPayload"],
       ["approve-pr", "#/$defs/approvePrPayload"],
-      ["execution-audit", "#/$defs/executionAuditPayload"]
+      ["execution-audit", "#/$defs/executionAuditResponsePayload"]
     ]);
 
     expect([...branchRefs.keys()].sort()).toEqual([...cliJsonCommands].sort());
@@ -661,9 +662,10 @@ describe("command reference documentation", () => {
       "read-only",
       ".orchestrator/execution-intents/",
       ".orchestrator/execution-traces/",
+      "JSON error envelopes with disabled execution markers",
       "does not write files",
       "does not execute commands",
-      "`--all` and plain output are not implemented yet"
+      "`--all` list output and plain output are not implemented yet"
     ]);
 
     expectSectionContains(sections, "init", ["writes local bootstrap files only", "orchestrator.config.json", ".gitignore"]);

@@ -661,6 +661,75 @@
       },
       "additionalProperties": true
     },
+    "executionAuditErrorPayload": {
+      "type": "object",
+      "required": [
+        "status",
+        "errorCode",
+        "message",
+        "intent",
+        "executionEnabled",
+        "writeExecution",
+        "hasExecutionResults"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["not_found", "error"]
+        },
+        "errorCode": {
+          "type": "string",
+          "enum": [
+            "execution_intent_not_found",
+            "execution_audit_all_deferred",
+            "execution_audit_missing_intent"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "intentId": {
+          "type": "string"
+        },
+        "intent": {
+          "const": null
+        },
+        "executionEnabled": {
+          "const": false
+        },
+        "writeExecution": {
+          "const": "disabled"
+        },
+        "hasExecutionResults": {
+          "const": false
+        }
+      },
+      "additionalProperties": true
+    },
+    "executionAuditResponsePayload": {
+      "type": "object",
+      "required": ["executionEnabled", "writeExecution", "hasExecutionResults"],
+      "properties": {
+        "executionEnabled": {
+          "const": false
+        },
+        "writeExecution": {
+          "const": "disabled"
+        },
+        "hasExecutionResults": {
+          "const": false
+        }
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/executionAuditPayload"
+        },
+        {
+          "$ref": "#/$defs/executionAuditErrorPayload"
+        }
+      ],
+      "additionalProperties": true
+    },
     "ownerDecisionItem": {
       "type": "object",
       "required": ["source", "reason"],
@@ -1084,7 +1153,7 @@
         "required": ["command", "intent"]
       },
       "then": {
-        "$ref": "#/$defs/executionAuditPayload"
+        "$ref": "#/$defs/executionAuditResponsePayload"
       }
     },
     {

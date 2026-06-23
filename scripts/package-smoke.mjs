@@ -127,6 +127,27 @@ async function main() {
       const fixture = await writeExecutionAuditFixture(projectDir);
       const audit = await run(bin, ["execution-audit", "--intent", fixture.intentId, "--json"], { cwd: projectDir });
       assertExecutionAuditReport(parseJson(audit), fixture.intentId);
+
+      const missingAudit = await run(bin, ["execution-audit", "--intent", "intent_missing", "--json"], {
+        cwd: projectDir
+      });
+      assertExecutionAuditErrorReport(parseJson(missingAudit), {
+        status: "not_found",
+        errorCode: "execution_intent_not_found",
+        intentId: "intent_missing"
+      });
+
+      const missingIntent = await run(bin, ["execution-audit", "--json"], { cwd: projectDir });
+      assertExecutionAuditErrorReport(parseJson(missingIntent), {
+        status: "error",
+        errorCode: "execution_audit_missing_intent"
+      });
+
+      const allDeferred = await run(bin, ["execution-audit", "--all", "--json"], { cwd: projectDir });
+      assertExecutionAuditErrorReport(parseJson(allDeferred), {
+        status: "error",
+        errorCode: "execution_audit_all_deferred"
+      });
     });
 
     await runStep("checks json", async () => {
@@ -149,7 +170,7 @@ async function main() {
     console.log("- all JSON smoke commands include schema metadata");
     console.log("- run/resume/status JSON and plain status work through the installed binary");
     console.log("- checkpoint/pr-plan/pr-exec/approve-pr JSON fields work through the installed binary");
-    console.log("- execution-audit JSON reads persisted intent and trace fixtures through the installed binary");
+    console.log("- execution-audit JSON reads fixtures and returns stable error envelopes through the installed binary");
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
@@ -390,6 +411,21 @@ function assertExecutionAuditReport(report, intentId) {
   assertEqual(report.executionEnabled, false, "execution-audit JSON should keep execution disabled");
   assertEqual(report.writeExecution, "disabled", "execution-audit JSON should keep write execution disabled");
   assertEqual(report.hasExecutionResults, false, "execution-audit JSON should not expose execution results");
+  assertNoExecutionResultFields(report);
+}
+
+function assertExecutionAuditErrorReport(report, expected) {
+  assertEnvelope(report, "execution-audit");
+  assertEqual(report.status, expected.status, "execution-audit error JSON should include expected status");
+  assertEqual(report.errorCode, expected.errorCode, "execution-audit error JSON should include expected errorCode");
+  assertString(report.message, "execution-audit error JSON should include message");
+  if (expected.intentId) {
+    assertEqual(report.intentId, expected.intentId, "execution-audit error JSON should preserve intent id");
+  }
+  assertEqual(report.intent, null, "execution-audit error JSON should set intent to null");
+  assertEqual(report.executionEnabled, false, "execution-audit error JSON should keep execution disabled");
+  assertEqual(report.writeExecution, "disabled", "execution-audit error JSON should keep write execution disabled");
+  assertEqual(report.hasExecutionResults, false, "execution-audit error JSON should not expose execution results");
   assertNoExecutionResultFields(report);
 }
 

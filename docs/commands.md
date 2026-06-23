@@ -206,4 +206,4 @@ task-loop-orchestrator execution-audit --intent intent_xxx --json
 
 JSON: supported with `--json`.
 
-Behavior: read-only. It reads `.orchestrator/execution-intents/` and `.orchestrator/execution-traces/` through the local file store and returns the audit bundle described in [json-output.md](json-output.md). It does not write files, does not execute commands, and does not create branches, commits, pushes, PRs, merges, releases, approvals, tags, or GitHub releases. `--all` and plain output are not implemented yet.
+Behavior: read-only. It reads `.orchestrator/execution-intents/` and `.orchestrator/execution-traces/` through the local file store and returns the audit bundle described in [json-output.md](json-output.md). Missing intents, missing `--intent`, and deferred `--all` requests return JSON error envelopes with disabled execution markers. It does not write files, does not execute commands, and does not create branches, commits, pushes, PRs, merges, releases, approvals, tags, or GitHub releases. `--all` list output and plain output are not implemented yet.

@@ -84,9 +84,9 @@ It may read `.orchestrator/execution-intents/` and `.orchestrator/execution-trac
 
 ## JSON Error Envelope Draft
 
-Status: design draft, not enabled. The current command only returns enveloped JSON for successful audit bundles; missing intent and invalid persisted file cases still use the existing CLI error path.
+Status: partially enabled. The current command returns enveloped JSON for successful audit bundles, missing intents, missing `--intent`, and deferred `--all` requests. Invalid persisted file cases still use the existing CLI error path.
 
-The next implementation milestone should add an error payload that keeps the common CLI metadata envelope while separating success bundles from failures:
+The first implementation uses an error payload that keeps the common CLI metadata envelope while separating success bundles from failures:
 
 ```json
 {
@@ -103,34 +103,34 @@ The next implementation milestone should add an error payload that keeps the com
 
 Candidate top-level fields:
 
-- `status`: `not_found` for missing records, or `error` for invalid persisted data and usage errors that are returned as JSON.
-- `errorCode`: stable machine-readable code such as `execution_intent_not_found`, `execution_intents_empty`, `invalid_execution_intent_file`, `invalid_execution_trace_file`, `execution_audit_all_deferred`, `execution_audit_missing_intent`, or `execution_audit_json_required`.
+- `status`: `not_found` for missing records, or `error` for usage/deferred cases that are returned as JSON.
+- `errorCode`: stable machine-readable code such as `execution_intent_not_found`, `execution_audit_all_deferred`, or `execution_audit_missing_intent`.
 - `message`: short human-readable explanation.
 - `intentId`: included when the user supplied or implied a specific intent id.
 - `intent`: `null` for not-found responses.
-- `details`: optional structured context for invalid persisted files; avoid raw file contents and secrets.
+- `details`: deferred optional structured context for invalid persisted files; avoid raw file contents and secrets.
 
-The schema should model `ExecutionAuditBundle | executionAuditErrorPayload` rather than mixing error fields into the success bundle definition. The command-specific branch can stay conditional on `command: "execution-audit"` while allowing either the success payload with `intent` and `traces`, or the error payload with `status`, `errorCode`, and `message`.
+The schema models `ExecutionAuditBundle | executionAuditErrorPayload` through `executionAuditResponsePayload` rather than mixing error fields into the success bundle definition. The command-specific branch stays conditional on `command: "execution-audit"` while allowing either the success payload with `intent` and `traces`, or the error payload with `status`, `errorCode`, and `message`.
 
 Error cases to cover:
 
-- no persisted intents
-- intent not found
+- intent not found, including the case where no persisted intents exist
+- `--all --json` rejected because it remains deferred
+- missing `--intent` when `--json` is present
+
+Deferred error cases:
+
 - invalid persisted intent file
 - invalid persisted trace file
-- `--all` rejected because it remains deferred
-- missing `--intent`
-- missing `--json`
+- missing `--json`, which still uses the existing non-JSON usage error path
 
 The error path must preserve the same read-only guarantee as the success path: no file writes, no external command execution, no branch creation, no commit, no push, no pull request creation or mutation, no approval mutation, and no run status transition.
 
-Implementation requirements for the future milestone:
+Remaining implementation requirements for future milestones:
 
-- add a small JSON error helper that uses the existing envelope metadata
-- extend `schemas/cli-json.schema.json` with an `executionAuditErrorPayload` definition
-- document the enabled error payload in `docs/json-output.md` only after implementation
-- add focused CLI tests for not-found and invalid persisted file cases
-- extend package smoke only if deterministic fixture-based error checks stay fast and read-only
+- add invalid persisted file envelopes after deciding what structured `details` should expose
+- add focused CLI tests for invalid persisted file cases
+- extend package smoke only if deterministic fixture-based invalid-file checks stay fast and read-only
 
 ## Implementation Requirements
 

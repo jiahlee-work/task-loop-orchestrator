@@ -121,6 +121,23 @@ function printJson(command: CliJsonCommand, payload: object): void {
   console.log(JSON.stringify(createCliJsonReport(command, payload), null, 2));
 }
 
+function printExecutionAuditError(
+  errorCode: "execution_intent_not_found" | "execution_audit_all_deferred" | "execution_audit_missing_intent",
+  message: string,
+  options: { status?: "not_found" | "error"; intentId?: string } = {}
+): void {
+  printJson("execution-audit", {
+    status: options.status ?? "error",
+    errorCode,
+    message,
+    ...(options.intentId ? { intentId: options.intentId } : {}),
+    intent: null,
+    executionEnabled: false,
+    writeExecution: "disabled",
+    hasExecutionResults: false
+  });
+}
+
 async function doctorCommand(args: ParsedArgs): Promise<void> {
   const githubMode = stringFlag(args.flags, "github") ? githubFlag(stringFlag(args.flags, "github")) : "none";
   const report = await runDoctor(process.cwd(), { githubMode });
@@ -504,21 +521,51 @@ async function approvePrCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function executionAuditCommand(args: ParsedArgs): Promise<void> {
-  if (args.flags.all === true) {
-    throw new Error("execution-audit --all is not implemented yet.");
-  }
   if (args.flags.json !== true) {
     throw new Error("execution-audit currently requires --json.");
   }
 
+  if (args.flags.all === true) {
+    printExecutionAuditError(
+      "execution_audit_all_deferred",
+      "execution-audit --all is not implemented yet."
+    );
+    return;
+  }
+
   const intentId = stringFlag(args.flags, "intent");
   if (!intentId?.trim()) {
-    throw new Error("execution-audit requires --intent <intentId>.");
+    printExecutionAuditError(
+      "execution_audit_missing_intent",
+      "execution-audit requires --intent <intentId>."
+    );
+    return;
   }
 
   const store = new FileRunStore(process.cwd());
-  const bundle = await store.loadExecutionAuditBundle(intentId);
+  let bundle: Awaited<ReturnType<FileRunStore["loadExecutionAuditBundle"]>>;
+  try {
+    bundle = await store.loadExecutionAuditBundle(intentId);
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      printExecutionAuditError("execution_intent_not_found", "Execution intent was not found.", {
+        status: "not_found",
+        intentId
+      });
+      return;
+    }
+    throw error;
+  }
   printJson("execution-audit", bundle);
+}
+
+function isMissingFileError(error: unknown): error is { code: "ENOENT" } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "ENOENT"
+  );
 }
 
 async function main(): Promise<void> {
