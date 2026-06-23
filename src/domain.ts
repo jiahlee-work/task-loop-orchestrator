@@ -439,6 +439,69 @@ export interface ExecutionAuditErrorReport {
   hasExecutionResults: false;
 }
 
+export type WriteExecutionReadinessStatus = "ready" | "blocked" | "unknown";
+
+export type WriteExecutionReadinessCategory =
+  | "approval"
+  | "precondition"
+  | "permission"
+  | "trace"
+  | "policy"
+  | "ci"
+  | "repo_state"
+  | "unknown";
+
+export type WriteExecutionReadinessCheckStatus = "pass" | "blocked" | "unknown";
+
+export type WriteExecutionReadinessSource = "audit_bundle" | "preflight";
+
+export interface WriteExecutionReadinessBlocker {
+  category: WriteExecutionReadinessCategory;
+  code: string;
+  message: string;
+  source: WriteExecutionReadinessSource;
+}
+
+export interface WriteExecutionReadinessCheck {
+  category: WriteExecutionReadinessCategory;
+  status: WriteExecutionReadinessCheckStatus;
+  code: string;
+  message: string;
+  source: WriteExecutionReadinessSource;
+}
+
+export interface WriteExecutionReadinessPreflightInput {
+  approvalFresh?: boolean;
+  approvalNotExpired?: boolean;
+  planFingerprintMatches?: boolean;
+  checkpointMatches?: boolean;
+  repoClean?: boolean;
+  diffVerified?: boolean;
+  refPolicySatisfied?: boolean;
+  ciPolicySatisfied?: boolean;
+  permissionAllowed?: boolean;
+  commandRunnerConfigured?: boolean;
+}
+
+export interface WriteExecutionReadinessReport {
+  readinessStatus: WriteExecutionReadinessStatus;
+  ready: boolean;
+  intentId: string;
+  runId: string;
+  planId: string;
+  approvalId: string;
+  checkpointId?: string;
+  blockers: WriteExecutionReadinessBlocker[];
+  checks: WriteExecutionReadinessCheck[];
+  inputs: {
+    auditBundle: "available";
+    preflight: "missing" | "partial" | "available";
+  };
+  executionEnabled: false;
+  writeExecution: "disabled";
+  hasExecutionResults: false;
+}
+
 export type ProposedSubtask = Omit<Subtask, "status" | "createdAt" | "updatedAt"> &
   Partial<Pick<Subtask, "createdAt" | "updatedAt">>;
 

@@ -15,6 +15,7 @@ This document describes the model that should exist before `task-loop-orchestrat
 - The file store can assemble execution audit bundles from persisted intents and traces without writing files or running commands.
 - The audit bundle JSON contract is covered by internal tests before any CLI read surface is enabled.
 - A read-only CLI surface for audit bundle lookup is enabled for `execution-audit --intent <intentId>` and `execution-audit --all` in both plain and JSON modes, as documented in [`execution-audit-cli.md`](execution-audit-cli.md).
+- A pure write execution readiness helper can summarize an audit bundle plus optional future preflight input without enabling CLI/schema output or command execution.
 - `pr-exec` is dry-run/preflight oriented.
 - `pr-exec --execute` requires approval data, checks stale approvals, and still returns a blocked report before branch, commit, push, or `gh pr create`.
 - `executedCommands` remains empty in the current implementation.
@@ -102,7 +103,7 @@ Audit logs must avoid recording secrets. Full stdout/stderr should not be persis
 
 ## Write Execution Readiness Report Contract
 
-Status: design draft, not enabled.
+Status: helper implemented; CLI and schema are not enabled.
 
 Before any write runner is enabled, the system should be able to explain whether a persisted execution intent is ready for write execution. A readiness report answers three questions:
 
@@ -135,7 +136,7 @@ Needed from a future preflight, but not queried by this design draft:
 
 ### JSON Surface Proposal
 
-When implemented, JSON should use the existing CLI envelope and a command-specific payload. The proposed stable payload fields are:
+The first helper implementation is a JSON-like report object only; it is not exposed through CLI or the active schema. When a future CLI is implemented, JSON should use the existing CLI envelope and a command-specific payload. The proposed stable payload fields are:
 
 - `readinessStatus`: `"ready" | "blocked" | "unknown"`
 - `ready`: boolean
@@ -147,7 +148,14 @@ When implemented, JSON should use the existing CLI envelope and a command-specif
 - `writeExecution: "disabled"`
 - `hasExecutionResults: false`
 
-Blocker categories should stay small and automation-friendly: `approval`, `precondition`, `permission`, `trace`, `policy`, `ci`, `repo_state`, and `unknown`. The initial helper should report `unknown` rather than guessing when a category needs future preflight data.
+Blocker categories stay small and automation-friendly: `approval`, `precondition`, `permission`, `trace`, `policy`, `ci`, `repo_state`, and `unknown`.
+
+The first helper uses conservative readiness rules:
+
+- if the audit bundle contains blocked traces, blocked reasons, or mismatched trace records, readiness is `blocked`
+- if required preflight inputs are missing, readiness is `unknown`
+- `ready` is returned only when the audit bundle has no blockers and every required preflight check is explicitly present and passing
+- every report keeps `executionEnabled: false`, `writeExecution: "disabled"`, and `hasExecutionResults: false`
 
 ### Plain Output Proposal
 
@@ -164,12 +172,15 @@ Plain output must not include raw JSON dumps, raw persisted file contents, stack
 
 ### Implementation Plan
 
-Future implementation should start with pure helpers:
+The first implementation starts with a pure helper:
 
 - `summarizeWriteExecutionReadiness(bundle, preflight?)`
-- `formatWriteExecutionReadiness(report)`
 
 The helper should reuse `ExecutionAuditBundle` rather than re-reading files. A later store or CLI layer may load the audit bundle first, then pass it to the readiness helper. The helper should treat missing future preflight inputs as `unknown` checks or blockers, not as permission to execute.
+
+Future formatter work can add:
+
+- `formatWriteExecutionReadiness(report)`
 
 Tests should cover:
 
