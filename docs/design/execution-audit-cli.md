@@ -181,6 +181,70 @@ Remaining implementation requirements for future milestones:
 - decide whether invalid persisted file envelopes need additional structured `details` beyond `kind`
 - add a broader CLI test harness if future error cases outgrow package smoke coverage
 
+## Plain Output Contract Draft
+
+Status: design draft, not enabled. The current CLI still requires `--json`; this section defines the human-readable contract for a future implementation only.
+
+Plain output is for people reading terminal summaries. Automation, UI integrations, scripts, and schema validation must continue to use `--json` because the JSON envelope is the stable machine-readable contract.
+
+### `execution-audit --intent <intentId>`
+
+The single-intent plain output should be a compact multi-section summary:
+
+- header: `Execution audit: <intentId>`
+- intent line: `Status`, `Run`, `Plan`, `Approval`, `Checkpoint`, and `Created`
+- target line: `Base`, `Source`, and `Target ref`
+- safety line: `Execution: disabled` and `Write execution: disabled`
+- command summary: dry-run trace count, planned trace count, blocked trace count, and action summary
+- blocked summary: blocked reason count plus short blocked reason lines when present
+- mismatch summary: mismatched trace count and trace ids when present
+- trace summary: one line per dry-run trace with action, status, policy decision, and reason
+
+The formatter should avoid dumping full JSON. It should not print raw persisted file contents, raw stdout, raw stderr, stack traces, secrets, exit codes, `executedCommands`, or command execution output.
+
+### `execution-audit --all`
+
+The all-intents plain output should be a list summary:
+
+- header: `Execution audit bundles`
+- count line: `Bundles: <bundleCount>`
+- safety line: `Execution: disabled` and `Write execution: disabled`
+- empty state: `No execution audit bundles found.`
+- ordering note: newest first by execution intent `createdAt`
+- per-bundle summary line: intent id, status, run id, plan id, trace count, blocked reason count, and createdAt
+
+The list output should not print every trace by default. If future UX needs detail expansion, it should use a separate explicit option rather than making the default plain output noisy.
+
+### Plain Error Output
+
+Plain output error handling is intentionally less stable than JSON error envelopes. Missing intent, missing selector, and invalid persisted file cases should print a short human-readable error with a recommended JSON command when useful.
+
+Proposed examples:
+
+- missing selector: `execution-audit requires --intent <intentId> or --all. Use --json for machine-readable errors.`
+- intent not found: `Execution intent not found: <intentId>`
+- invalid persisted intent file: `Invalid execution intent file. Re-run with --json for errorCode and safe details.`
+- invalid persisted trace file: `Invalid execution trace file. Re-run with --json for errorCode and safe details.`
+
+Exit code policy needs an implementation decision before enabling plain output. The current non-JSON CLI error path exits non-zero for thrown usage errors; a future plain formatter should preserve non-zero exits for missing selectors, not found, invalid persisted files, and other errors.
+
+### Formatter Implementation Plan
+
+Future implementation should add pure formatters that consume existing read-only reports without mutating domain state:
+
+- `formatExecutionAuditBundle(bundle)`
+- `formatExecutionAuditList(report)`
+- `formatExecutionAuditError(errorPayload)`
+
+The formatters should reuse `ExecutionAuditBundle`, `ExecutionAuditListReport`, and existing disabled execution markers. They should not parse files, write files, spawn commands, or change approval/intent/trace state.
+
+Focused tests should verify:
+
+- single-intent output includes intent id, status, run id, disabled markers, trace counts, blocked reasons, and mismatch count
+- all-intents output includes bundle count, newest-first note, empty state, and per-bundle one-line summaries
+- plain errors are short, omit raw file contents and stack traces, and keep non-zero CLI behavior
+- package smoke covers at least one installed-binary plain output path after the feature is enabled
+
 ## Implementation Requirements
 
 The first implementation milestone includes:
