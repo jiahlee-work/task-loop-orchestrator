@@ -107,6 +107,10 @@ All policies must avoid exposing raw file contents, stack traces, secrets, stdou
 
 The schema includes `executionAuditListPayload`, and `executionAuditResponsePayload` allows `ExecutionAuditBundle | executionAuditListPayload | executionAuditErrorPayload`.
 
+## Relationship To Write Readiness
+
+`execution-audit` is the read-only evidence surface. A future write execution readiness report can consume an `ExecutionAuditBundle` and separate what is already known from the audit bundle from what still needs future preflight input, as drafted in [`write-execution-model.md`](write-execution-model.md#write-execution-readiness-report-contract). The audit command itself does not decide to unlock write execution.
+
 ## Safety Boundary
 
 The command must be read-only:

@@ -100,6 +100,87 @@ Each execution attempt should record:
 
 Audit logs must avoid recording secrets. Full stdout/stderr should not be persisted by default; summaries and redacted excerpts are safer.
 
+## Write Execution Readiness Report Contract
+
+Status: design draft, not enabled.
+
+Before any write runner is enabled, the system should be able to explain whether a persisted execution intent is ready for write execution. A readiness report answers three questions:
+
+- Is this execution intent ready to run, blocked, or unknown?
+- Which blocker prevents execution, and which safety category owns that blocker?
+- Which approval, precondition, permission, dry-run trace, policy, CI, and repository-state checks are already satisfied versus still requiring a future preflight input?
+
+The report is a read-only judgment surface. It must not write files, execute external commands, create branches, commit, push, create PRs, merge, publish, create tags, create GitHub releases, mutate approvals, or transition run state.
+
+### Inputs
+
+The first implementation should split known audit-bundle facts from future preflight facts.
+
+Known from the existing `ExecutionAuditBundle`:
+
+- intent id, run id, plan id, approval id, checkpoint id, status, actor, reason, and timestamps
+- target ref, base branch, source branch, permission mode, and policy version
+- dry-run trace count, planned trace count, blocked trace count, action summary, blocked reasons, and mismatched trace ids
+- disabled markers: `executionEnabled: false`, `writeExecution: "disabled"`, and `hasExecutionResults: false`
+
+Needed from a future preflight, but not queried by this design draft:
+
+- approval freshness and expiration
+- current plan fingerprint and approved plan fingerprint match
+- current latest checkpoint id
+- clean worktree and diff verification
+- current branch, HEAD, target ref, and remote/ref policy
+- CI/check status policy
+- command runner configuration and permission-gate result
+
+### JSON Surface Proposal
+
+When implemented, JSON should use the existing CLI envelope and a command-specific payload. The proposed stable payload fields are:
+
+- `readinessStatus`: `"ready" | "blocked" | "unknown"`
+- `ready`: boolean
+- `intentId`, `runId`, `planId`, `approvalId`, and `checkpointId`
+- `blockers`: `{ category, code, message, source }[]`
+- `checks`: `{ category, status, message, source }[]`
+- `inputs`: `{ auditBundle: "available", preflight: "missing" | "available" }`
+- `executionEnabled: false`
+- `writeExecution: "disabled"`
+- `hasExecutionResults: false`
+
+Blocker categories should stay small and automation-friendly: `approval`, `precondition`, `permission`, `trace`, `policy`, `ci`, `repo_state`, and `unknown`. The initial helper should report `unknown` rather than guessing when a category needs future preflight data.
+
+### Plain Output Proposal
+
+Plain output should be a short human-readable summary:
+
+- header with intent id and readiness status
+- one line for `Ready: yes|no|unknown`
+- disabled marker line: `Execution: disabled` and `Write execution: disabled`
+- blocker summary grouped by category
+- check summary grouped by category
+- note that automation must use JSON for a stable contract
+
+Plain output must not include raw JSON dumps, raw persisted file contents, stack traces, secrets, raw stdout, raw stderr, exit codes, `executedCommands`, or command execution output.
+
+### Implementation Plan
+
+Future implementation should start with pure helpers:
+
+- `summarizeWriteExecutionReadiness(bundle, preflight?)`
+- `formatWriteExecutionReadiness(report)`
+
+The helper should reuse `ExecutionAuditBundle` rather than re-reading files. A later store or CLI layer may load the audit bundle first, then pass it to the readiness helper. The helper should treat missing future preflight inputs as `unknown` checks or blockers, not as permission to execute.
+
+Tests should cover:
+
+- blocked readiness when the audit bundle has blocked traces or blocked reasons
+- unknown readiness when approval freshness, CI, repo state, or fingerprint checks have no preflight input
+- disabled markers on every report
+- no execution result fields such as `executedCommands`, raw stdout, raw stderr, or exit code
+- plain formatter safety and JSON schema branch only when the CLI surface is explicitly enabled
+
+Package smoke should not include readiness until a CLI command exists. The active JSON schema should not be changed until the command-specific payload is implemented.
+
 ## Rollout Slices
 
 1. Persist execution intents without running commands.
@@ -111,10 +192,12 @@ Audit logs must avoid recording secrets. Full stdout/stderr should not be persis
 7. Enable the read-only `execution-audit --intent <intentId> --json` lookup without command execution.
 8. Enable the read-only `execution-audit --all --json` list lookup without command execution.
 9. Enable `execution-audit` plain output using pure formatters without command execution.
-10. Add a single local-only command behind tests and explicit approval, such as branch creation in a temporary fixture repository.
-11. Add commit execution only after staged-file policy and diff verification exist.
-12. Add push only after remote/ref policy and CI handling are documented and tested.
-13. Add GitHub PR creation only after push policy, approval freshness, and `gh pr create` argument construction are covered.
+10. Add a read-only write execution readiness report helper using audit bundle data and explicit future preflight inputs.
+11. Add a readiness CLI/schema surface only after the helper contract is tested.
+12. Add a single local-only command behind tests and explicit approval, such as branch creation in a temporary fixture repository.
+13. Add commit execution only after staged-file policy and diff verification exist.
+14. Add push only after remote/ref policy and CI handling are documented and tested.
+15. Add GitHub PR creation only after push policy, approval freshness, and `gh pr create` argument construction are covered.
 
 ## Hard Non-Goals
 
