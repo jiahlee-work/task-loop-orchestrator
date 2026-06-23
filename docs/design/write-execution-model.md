@@ -304,6 +304,38 @@ The implementation should reuse the execution-audit loading path, but expose rea
 
 Error payloads should keep `executionEnabled: false`, `writeExecution: "disabled"`, and `hasExecutionResults: false`. They must not expose raw persisted file contents, stack traces, secrets, raw stdout, raw stderr, exit codes, raw command argv, or execution results.
 
+### Future Preflight CLI Success And Error Contract
+
+Status: design draft, not enabled. The production CLI does not accept `--preflight <path>` yet.
+
+Future success mode:
+
+```bash
+task-loop-orchestrator write-readiness --intent <intentId> --preflight <path> [--json]
+```
+
+The CLI should load the audit bundle, load the preflight file with `loadWriteReadinessPreflightInput(path)`, and pass the parsed preflight input to `summarizeWriteExecutionReadiness(bundle, preflight)`. The preflight file remains read-only evidence. Valid preflight evidence can change `inputs.preflight` from `missing` to `partial` or `available`, and it can change readiness from `unknown` to `ready` only when every required preflight check is recognized and passing and the audit bundle has no blockers. It must never unlock write execution.
+
+Future JSON error envelopes should use the existing `write-readiness` command envelope and a readiness error payload with `readiness: null`, `executionEnabled: false`, `writeExecution: "disabled"`, and `hasExecutionResults: false`. Candidate preflight error codes:
+
+- missing `--preflight` value/path: `write_readiness_preflight_missing_path`
+- file not found: `write_readiness_preflight_file_not_found`
+- file not readable: `write_readiness_preflight_file_not_readable`
+- invalid JSON: `write_readiness_preflight_invalid_json`
+- invalid preflight schema/parser result: `write_readiness_preflight_invalid_schema`
+
+Invalid preflight files should fail with an error envelope, not partial readiness success. Loader/parser failure must not fall back to `inputs.preflight: "missing"` because that could hide a broken evidence input from automation.
+
+Future plain errors should use short human-readable messages through the same safety policy as JSON errors. Plain and JSON errors must not include the raw preflight path, raw file contents, stack traces, raw stdout, raw stderr, exit codes, raw command args, `executedCommands`, secrets, or tokens. If a detail object is needed, keep it minimal, such as `{ kind: "preflight" }` plus a stable code; do not include path or content excerpts.
+
+Future package smoke coverage should add installed-binary checks only when the CLI option is implemented:
+
+- valid preflight JSON success path sets `inputs.preflight` to `available` or `partial`
+- valid preflight plain success path shows the preflight input state without raw path echoing
+- invalid JSON returns a safe JSON error envelope and safe plain error
+- invalid preflight schema returns a safe JSON error envelope and safe plain error
+- no smoke path runs command execution, branch creation, commit, push, PR creation, merge, release, tag, or GitHub write actions
+
 ### Rollout Plan For CLI And Schema
 
 1. Keep `write-readiness --intent <intentId> [--json]` under schema/docs/package smoke coverage.

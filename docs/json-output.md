@@ -124,6 +124,8 @@ The `writeReadinessResponsePayload` allows either a success `writeReadinessPaylo
 
 The JSON path handles missing `--intent`, missing execution intents, invalid persisted execution intent files, and invalid persisted execution trace files with safe error envelopes. Plain output is available for human terminal review, but automation should use `--json`. Future preflight evidence must not echo raw file paths, raw file contents, raw command args, stdout, stderr, exit codes, `executedCommands`, stack traces, or secrets. This command does not permit command execution, file writes, GitHub lookup, branch creation, commits, pushes, pull request creation, merges, releases, or tags.
 
+Future `--preflight <path>` CLI support is not active yet. When it is enabled, missing preflight paths, file-not-found/read failures, invalid JSON, and invalid preflight schema should return safe `write-readiness` JSON error envelopes rather than partial readiness success. Those future envelopes should keep `readiness: null`, disabled execution markers, and no raw path or raw file content.
+
 ## Doctor Schema
 
 `doctor --json` has a command-specific schema branch for installation and project readiness diagnostics. Consumers can rely on top-level `status`, `rootDir`, `githubMode`, and `checks`.
