@@ -7,7 +7,9 @@ import {
   createExecutionIntent,
   createPlanFingerprint,
   executionIntentPolicyVersion,
-  parseExecutionIntent
+  parseExecutionIntent,
+  summarizeExecutionIntent,
+  summarizeExecutionIntents
 } from "../src/execution-intents.js";
 import { FileRunStore } from "../src/store.js";
 import type { PullRequestPlan } from "../src/domain.js";
@@ -137,6 +139,90 @@ describe("execution intent persistence", () => {
     delete missingActor.actor;
 
     expect(() => parseExecutionIntent(missingActor)).toThrow("actor must be a non-empty string");
+  });
+
+  it("summarizes an execution intent as a read-only non-executing report", () => {
+    const intent = executionIntent("2026-06-22T00:00:00.000Z");
+
+    const report = summarizeExecutionIntent(intent);
+
+    expect(report).toMatchObject({
+      id: intent.id,
+      runId: intent.runId,
+      planId: intent.planId,
+      approvalId: intent.approvalId,
+      checkpointId: intent.checkpointId,
+      status: "created",
+      actor: "maintainer",
+      reason: "Prepare audited write execution intent.",
+      createdAt: "2026-06-22T00:00:00.000Z",
+      expiresAt: "2026-06-24T00:00:00.000Z",
+      targetRef: "orchestrator/run1",
+      baseBranch: "main",
+      sourceBranch: "orchestrator/run1",
+      permissionMode: "maintainer",
+      policyVersion: executionIntentPolicyVersion,
+      commandCandidateCount: 2,
+      commandCandidateActions: ["create_branch", "create_pr"],
+      commandActionSummary: [
+        { action: "create_branch", count: 1 },
+        { action: "create_pr", count: 1 }
+      ],
+      blockedReasonCount: 0,
+      blockedReasons: [],
+      executionEnabled: false,
+      writeExecution: "disabled"
+    });
+    expect("executedCommands" in report).toBe(false);
+  });
+
+  it("includes blocked reasons in read-only intent reports", () => {
+    const approvedPlan = prPlan("checkpoint-old");
+    const currentPlan = prPlan("checkpoint-current", ["Repository status is not clean."]);
+    const approval = createPullRequestApproval(approvedPlan, {
+      approvedBy: "maintainer"
+    });
+    const intent = createExecutionIntent({
+      plan: currentPlan,
+      approval,
+      actor: "maintainer",
+      createdAt: "2026-06-22T00:00:00.000Z",
+      expiresAt: "2026-06-23T00:00:00.000Z",
+      permissionMode: "maintainer"
+    });
+
+    const report = summarizeExecutionIntent(intent);
+
+    expect(report.status).toBe("blocked");
+    expect(report.blockedReasonCount).toBe(2);
+    expect(report.blockedReasons).toEqual(
+      expect.arrayContaining([
+        "Repository status is not clean.",
+        "Approval checkpoint checkpoint-old does not match current checkpoint checkpoint-current."
+      ])
+    );
+    expect(report.executionEnabled).toBe(false);
+    expect("executedCommands" in report).toBe(false);
+  });
+
+  it("summarizes stored execution intent lists without changing store order", async () => {
+    const root = await mkdtemp(join(tmpdir(), "task-loop-intent-"));
+    const store = new FileRunStore(root);
+    const older = executionIntent("2026-06-22T00:00:00.000Z");
+    const newer = executionIntent("2026-06-23T00:00:00.000Z");
+
+    try {
+      await store.saveExecutionIntent(older);
+      await store.saveExecutionIntent(newer);
+
+      const reports = summarizeExecutionIntents(await store.listExecutionIntents());
+
+      expect(reports.map((report) => report.id)).toEqual([newer.id, older.id]);
+      expect(reports.every((report) => report.executionEnabled === false)).toBe(true);
+      expect(reports.every((report) => !("executedCommands" in report))).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
 

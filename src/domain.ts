@@ -301,6 +301,11 @@ export interface ExecutionIntentCommandCandidate {
   decisionReady: true;
 }
 
+export interface ExecutionIntentCommandActionSummary {
+  action: PullRequestCommandCandidate["action"];
+  count: number;
+}
+
 export interface ExecutionIntent {
   id: string;
   runId: string;
@@ -320,6 +325,31 @@ export interface ExecutionIntent {
   commandCandidates: ExecutionIntentCommandCandidate[];
   status: ExecutionIntentStatus;
   blockedReasons: string[];
+}
+
+export interface ExecutionIntentReport {
+  id: string;
+  runId: string;
+  planId: string;
+  approvalId: string;
+  checkpointId?: string;
+  status: ExecutionIntentStatus;
+  actor: string;
+  reason?: string;
+  createdAt: string;
+  expiresAt: string;
+  targetRef: string;
+  baseBranch: string;
+  sourceBranch: string;
+  permissionMode: PermissionMode;
+  policyVersion: string;
+  commandCandidateCount: number;
+  commandCandidateActions: PullRequestCommandCandidate["action"][];
+  commandActionSummary: ExecutionIntentCommandActionSummary[];
+  blockedReasonCount: number;
+  blockedReasons: string[];
+  executionEnabled: false;
+  writeExecution: "disabled";
 }
 
 export type ProposedSubtask = Omit<Subtask, "status" | "createdAt" | "updatedAt"> &

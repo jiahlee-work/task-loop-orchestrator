@@ -3,8 +3,11 @@ import type {
   ApprovalRecord,
   ExecutionIntent,
   ExecutionIntentCommandCandidate,
+  ExecutionIntentCommandActionSummary,
+  ExecutionIntentReport,
   ExecutionIntentStatus,
   PermissionMode,
+  PullRequestCommandCandidate,
   PullRequestPlan
 } from "./domain.js";
 import { createId, nowIso } from "./ids.js";
@@ -96,6 +99,39 @@ export function parseExecutionIntent(value: unknown): ExecutionIntent {
   };
 }
 
+export function summarizeExecutionIntent(intent: ExecutionIntent): ExecutionIntentReport {
+  const commandCandidateActions = intent.commandCandidates.map((candidate) => candidate.action);
+
+  return {
+    id: intent.id,
+    runId: intent.runId,
+    planId: intent.planId,
+    approvalId: intent.approvalId,
+    checkpointId: intent.checkpointId,
+    status: intent.status,
+    actor: intent.actor,
+    reason: intent.reason,
+    createdAt: intent.createdAt,
+    expiresAt: intent.expiresAt,
+    targetRef: intent.targetRef,
+    baseBranch: intent.baseBranch,
+    sourceBranch: intent.sourceBranch,
+    permissionMode: intent.permissionMode,
+    policyVersion: intent.policyVersion,
+    commandCandidateCount: intent.commandCandidates.length,
+    commandCandidateActions,
+    commandActionSummary: summarizeCommandActions(commandCandidateActions),
+    blockedReasonCount: intent.blockedReasons.length,
+    blockedReasons: [...intent.blockedReasons],
+    executionEnabled: false,
+    writeExecution: "disabled"
+  };
+}
+
+export function summarizeExecutionIntents(intents: ExecutionIntent[]): ExecutionIntentReport[] {
+  return intents.map(summarizeExecutionIntent);
+}
+
 function executionIntentBlockedReasons(plan: PullRequestPlan, approval: ApprovalRecord): string[] {
   const reasons = [...plan.blockedReasons];
 
@@ -124,6 +160,18 @@ function executionIntentBlockedReasons(plan: PullRequestPlan, approval: Approval
   }
 
   return reasons;
+}
+
+function summarizeCommandActions(
+  actions: PullRequestCommandCandidate["action"][]
+): ExecutionIntentCommandActionSummary[] {
+  const counts = new Map<PullRequestCommandCandidate["action"], number>();
+
+  for (const action of actions) {
+    counts.set(action, (counts.get(action) ?? 0) + 1);
+  }
+
+  return Array.from(counts, ([action, count]) => ({ action, count }));
 }
 
 function copyCommandCandidate(candidate: ExecutionIntentCommandCandidate): ExecutionIntentCommandCandidate {

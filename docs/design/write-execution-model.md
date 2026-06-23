@@ -9,6 +9,7 @@ This document describes the model that should exist before `task-loop-orchestrat
 - `pr-plan` produces decision-ready command candidates only.
 - `approve-pr` stores approval records under `.orchestrator/approvals/`.
 - Execution intents can be persisted under `.orchestrator/execution-intents/` for future audited write execution.
+- Execution intent read-only reports summarize stored intents for audit without running commands.
 - `pr-exec` is dry-run/preflight oriented.
 - `pr-exec --execute` requires approval data, checks stale approvals, and still returns a blocked report before branch, commit, push, or `gh pr create`.
 - `executedCommands` remains empty in the current implementation.
@@ -97,11 +98,12 @@ Audit logs must avoid recording secrets. Full stdout/stderr should not be persis
 ## Rollout Slices
 
 1. Persist execution intents without running commands.
-2. Add command runner dry-run trace records that mirror the future audit shape.
-3. Add a single local-only command behind tests and explicit approval, such as branch creation in a temporary fixture repository.
-4. Add commit execution only after staged-file policy and diff verification exist.
-5. Add push only after remote/ref policy and CI handling are documented and tested.
-6. Add GitHub PR creation only after push policy, approval freshness, and `gh pr create` argument construction are covered.
+2. Add read-only execution intent reports for audit before any command runner exists.
+3. Add command runner dry-run trace records that mirror the future audit shape.
+4. Add a single local-only command behind tests and explicit approval, such as branch creation in a temporary fixture repository.
+5. Add commit execution only after staged-file policy and diff verification exist.
+6. Add push only after remote/ref policy and CI handling are documented and tested.
+7. Add GitHub PR creation only after push policy, approval freshness, and `gh pr create` argument construction are covered.
 
 ## Hard Non-Goals
 
