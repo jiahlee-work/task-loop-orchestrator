@@ -126,6 +126,89 @@ describe("write execution readiness helper", () => {
     expectNoUnsafeReadinessOutput(report);
   });
 
+  it("keeps the future preflight file contract aligned with all-pass helper input", () => {
+    const fixture = passingPreflightFileFixture();
+    const report = summarizeWriteExecutionReadiness(
+      executionAuditBundle("2026-06-22T00:00:00.000Z", {
+        commandSecret: "top-secret-readiness"
+      }),
+      helperInputFromPreflightFixture(fixture)
+    );
+
+    expect(fixture).toEqual({
+      schemaVersion: 1,
+      metadata: {
+        createdAt: "2026-06-22T02:00:00.000Z",
+        tool: "write-readiness-preflight-fixture"
+      },
+      checks: expect.arrayContaining([
+        {
+          category: "approval",
+          status: "pass",
+          code: "approval_freshness_passed",
+          message: "Approval freshness is verified.",
+          source: "preflight"
+        },
+        {
+          category: "ci",
+          status: "pass",
+          code: "ci_policy_passed",
+          message: "CI/check policy is satisfied.",
+          source: "preflight"
+        }
+      ])
+    });
+    expect(fixture.checks).toHaveLength(10);
+    expect(report.readinessStatus).toBe("ready");
+    expect(report.ready).toBe(true);
+    expect(report.inputs.preflight).toBe("available");
+    expect(report.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ category: "approval", status: "pass", code: "approval_freshness_passed" }),
+        expect.objectContaining({ category: "ci", status: "pass", code: "ci_policy_passed" }),
+        expect.objectContaining({ category: "repo_state", status: "pass", code: "repo_cleanliness_passed" })
+      ])
+    );
+    expectNoUnsafeReadinessOutput(fixture);
+    expectNoUnsafeReadinessOutput(report);
+  });
+
+  it("keeps blocked future preflight evidence safe and non-executing", () => {
+    const fixture = {
+      ...passingPreflightFileFixture(),
+      checks: passingPreflightFileFixture().checks.map((check) =>
+        check.code === "ci_policy_passed"
+          ? {
+              ...check,
+              status: "blocked" as const,
+              code: "ci_policy_blocked",
+              message: "CI/check policy is not satisfied."
+            }
+          : check
+      )
+    };
+    const report = summarizeWriteExecutionReadiness(
+      executionAuditBundle("2026-06-22T00:00:00.000Z"),
+      helperInputFromPreflightFixture(fixture)
+    );
+
+    expect(report.readinessStatus).toBe("blocked");
+    expect(report.ready).toBe(false);
+    expect(report.inputs.preflight).toBe("available");
+    expect(report.blockers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          category: "ci",
+          code: "ci_policy_blocked",
+          message: "CI/check policy is not satisfied.",
+          source: "preflight"
+        })
+      ])
+    );
+    expectNoUnsafeReadinessOutput(fixture);
+    expectNoUnsafeReadinessOutput(report);
+  });
+
   it("keeps blocked readiness report contract stable as a plain JSON object", () => {
     const approvedPlan = prPlan("checkpoint-old");
     const currentPlan = prPlan("checkpoint-current", ["Repository status is not clean."], "top-secret-readiness");
@@ -481,9 +564,74 @@ function passingPreflight(): Required<WriteExecutionReadinessPreflightInput> {
   };
 }
 
+function passingPreflightFileFixture(): PreflightFileFixture {
+  return {
+    schemaVersion: 1,
+    metadata: {
+      createdAt: "2026-06-22T02:00:00.000Z",
+      tool: "write-readiness-preflight-fixture"
+    },
+    checks: [
+      preflightFixtureCheck("approval", "approval_freshness_passed", "Approval freshness is verified."),
+      preflightFixtureCheck("approval", "approval_expiration_passed", "Approval is not expired."),
+      preflightFixtureCheck("policy", "plan_fingerprint_passed", "Plan fingerprint matches the approved plan."),
+      preflightFixtureCheck("precondition", "checkpoint_match_passed", "Latest checkpoint matches the approved checkpoint."),
+      preflightFixtureCheck("repo_state", "repo_cleanliness_passed", "Repository cleanliness satisfies policy."),
+      preflightFixtureCheck("repo_state", "diff_verification_passed", "Diff verification passed."),
+      preflightFixtureCheck("policy", "ref_policy_passed", "Target ref and branch policy are satisfied."),
+      preflightFixtureCheck("ci", "ci_policy_passed", "CI/check policy is satisfied."),
+      preflightFixtureCheck("permission", "permission_gate_passed", "Permission gate allows the approved action."),
+      preflightFixtureCheck("policy", "command_runner_passed", "Command runner write configuration is available.")
+    ]
+  };
+}
+
+function preflightFixtureCheck(
+  category: PreflightFileFixture["checks"][number]["category"],
+  code: string,
+  message: string
+): PreflightFileFixture["checks"][number] {
+  return {
+    category,
+    status: "pass",
+    code,
+    message,
+    source: "preflight"
+  };
+}
+
+function helperInputFromPreflightFixture(fixture: PreflightFileFixture): WriteExecutionReadinessPreflightInput {
+  const statusByCode = new Map(fixture.checks.map((check) => [check.code, check.status]));
+  const passed = (code: string) => statusByCode.get(code) === "pass";
+  const blocked = (code: string) => statusByCode.get(code) === "blocked";
+
+  return {
+    approvalFresh: passed("approval_freshness_passed"),
+    approvalNotExpired: passed("approval_expiration_passed"),
+    planFingerprintMatches: passed("plan_fingerprint_passed"),
+    checkpointMatches: passed("checkpoint_match_passed"),
+    repoClean: passed("repo_cleanliness_passed"),
+    diffVerified: passed("diff_verification_passed"),
+    refPolicySatisfied: passed("ref_policy_passed"),
+    ciPolicySatisfied: blocked("ci_policy_blocked") ? false : passed("ci_policy_passed"),
+    permissionAllowed: passed("permission_gate_passed"),
+    commandRunnerConfigured: passed("command_runner_passed")
+  };
+}
+
 function expectNoUnsafeReadinessOutput(value: unknown): void {
   const serialized = JSON.stringify(value);
-  for (const forbidden of ["executedCommands", "stdout", "stderr", "exitCode", "stack", "argv", "top-secret-readiness"]) {
+  for (const forbidden of [
+    "executedCommands",
+    "stdout",
+    "stderr",
+    "exitCode",
+    "stack",
+    "argv",
+    "top-secret-readiness",
+    "raw-preflight-secret",
+    "/tmp/preflight.json"
+  ]) {
     expect(serialized).not.toContain(forbidden);
   }
 }
@@ -529,4 +677,19 @@ interface SchemaDefinition {
   required?: string[];
   properties?: Record<string, unknown>;
   additionalProperties?: boolean;
+}
+
+interface PreflightFileFixture {
+  schemaVersion: 1;
+  metadata?: {
+    createdAt?: string;
+    tool?: string;
+  };
+  checks: Array<{
+    category: "approval" | "precondition" | "permission" | "policy" | "ci" | "repo_state";
+    status: "pass" | "blocked" | "unknown";
+    code: string;
+    message: string;
+    source: "preflight";
+  }>;
 }

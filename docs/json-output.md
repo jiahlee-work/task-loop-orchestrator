@@ -118,11 +118,11 @@ Error payloads fix `status`, `errorCode`, `message`, `intent`, `executionEnabled
 
 The `writeReadinessPayload` fixes `readinessStatus`, `ready`, `intentId`, `runId`, `planId`, `approvalId`, `blockers`, `checks`, `inputs`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`, with optional `checkpointId`.
 
-Each `writeReadinessBlocker` fixes `category`, `code`, `message`, and `source`. Each `writeReadinessCheck` fixes `category`, `status`, `code`, `message`, and `source`. The `writeReadinessInputs` object fixes `auditBundle` and `preflight`.
+Each `writeReadinessBlocker` fixes `category`, `code`, `message`, and `source`. Each `writeReadinessCheck` fixes `category`, `status`, `code`, `message`, and `source`. The `writeReadinessInputs` object fixes `auditBundle` and `preflight`; `preflight` is currently `missing` unless a future read-only preflight evidence file is explicitly supported.
 
 The `writeReadinessResponsePayload` allows either a success `writeReadinessPayload` or a `writeReadinessErrorPayload`. Error payloads fix `status`, `errorCode`, `message`, `readiness`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`, with optional `intentId` and `details`. Error payloads keep `readiness: null`, `executionEnabled: false`, `writeExecution: "disabled"`, and `hasExecutionResults: false`.
 
-The JSON path handles missing `--intent`, missing execution intents, invalid persisted execution intent files, and invalid persisted execution trace files with safe error envelopes. Plain output is available for human terminal review, but automation should use `--json`. This command does not permit command execution, file writes, GitHub lookup, branch creation, commits, pushes, pull request creation, merges, releases, or tags.
+The JSON path handles missing `--intent`, missing execution intents, invalid persisted execution intent files, and invalid persisted execution trace files with safe error envelopes. Plain output is available for human terminal review, but automation should use `--json`. Future preflight evidence must not echo raw file paths, raw file contents, raw command args, stdout, stderr, exit codes, `executedCommands`, stack traces, or secrets. This command does not permit command execution, file writes, GitHub lookup, branch creation, commits, pushes, pull request creation, merges, releases, or tags.
 
 ## Doctor Schema
 

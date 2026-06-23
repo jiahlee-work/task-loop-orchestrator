@@ -104,7 +104,7 @@ Audit logs must avoid recording secrets. Full stdout/stderr should not be persis
 
 ## Write Execution Readiness Report Contract
 
-Status: helper and formatter implemented; CLI and schema are not enabled.
+Status: helper, formatter, CLI, and schema are enabled for audit-bundle-only readiness. File-based preflight input is not enabled.
 
 Before any write runner is enabled, the system should be able to explain whether a persisted execution intent is ready for write execution. A readiness report answers three questions:
 
@@ -135,9 +135,39 @@ Needed from a future preflight, but not queried by this design draft:
 - CI/check status policy
 - command runner configuration and permission-gate result
 
+### Future Preflight Input File Contract
+
+Status: design draft, not enabled. The production CLI does not accept `--preflight` yet, and no parser is implemented.
+
+The proposed future CLI surface is:
+
+```bash
+task-loop-orchestrator write-readiness --intent <intentId> --preflight <path> [--json]
+```
+
+The preflight file is a read-only evidence input. Loading it must not run checks, spawn commands, query GitHub, write files, mutate approvals, transition run state, create branches, commit, push, create or mutate PRs, merge, publish, create tags, or create GitHub releases. Supplying preflight evidence only changes the readiness summary; it does not grant permission to execute write-side actions.
+
+The minimal file contract is:
+
+- `schemaVersion: 1`
+- `checks`: an array of preflight check evidence items
+- optional `metadata`: `{ createdAt, tool }`
+
+Each `checks[]` item should use the same stable fields as readiness checks:
+
+- `category`: `approval`, `precondition`, `permission`, `policy`, `ci`, or `repo_state`
+- `status`: `pass`, `blocked`, or `unknown`
+- `code`: stable automation code
+- `message`: short human-readable summary
+- `source`: `preflight`
+
+The first parser should map recognized preflight evidence into the existing `WriteExecutionReadinessPreflightInput` booleans. A complete all-pass file can produce `inputs.preflight: "available"` and `readinessStatus: "ready"` only when the audit bundle has no blockers. Missing or unrecognized checks should remain `unknown` rather than implying approval.
+
+Preflight files must not contain raw command args, raw stdout, raw stderr, exit codes, `executedCommands`, stack traces, secrets, tokens, raw persisted file content, or full command output. Plain and JSON readiness output must also avoid echoing the raw preflight file path or raw file contents.
+
 ### JSON Surface Proposal
 
-The first helper implementation is a JSON-like report object only; it is not exposed through CLI or the active schema. When a future CLI is implemented, JSON should use the existing CLI envelope and a command-specific payload. The proposed stable payload fields are:
+The JSON CLI path uses the existing CLI envelope and a command-specific payload. The stable payload fields are:
 
 - `readinessStatus`: `"ready" | "blocked" | "unknown"`
 - `ready`: boolean
@@ -176,19 +206,20 @@ Plain output must not include raw JSON dumps, raw persisted file contents, stack
 
 ### Implementation Plan
 
-The first implementation includes pure helpers:
+The current implementation includes pure helpers:
 
 - `summarizeWriteExecutionReadiness(bundle, preflight?)`
 - `formatWriteExecutionReadiness(report)`
 
-The helper reuses `ExecutionAuditBundle` rather than re-reading files. A later store or CLI layer may load the audit bundle first, then pass it to the readiness helper. The helper treats missing future preflight inputs as `unknown` checks, not as permission to execute. The formatter only reads a readiness report and does not parse files, write files, spawn commands, or mutate domain state.
+The helper reuses `ExecutionAuditBundle` rather than re-reading files. The CLI layer loads the audit bundle first, then passes it to the readiness helper without preflight input. The helper treats missing future preflight inputs as `unknown` checks, not as permission to execute. The formatter only reads a readiness report and does not parse files, write files, spawn commands, or mutate domain state. Future preflight file parsing should stay outside the helper and should translate a safe evidence file into `WriteExecutionReadinessPreflightInput`.
 
 Tests should cover:
 
 - blocked readiness when the audit bundle has blocked traces or blocked reasons
 - unknown readiness when approval freshness, CI, repo state, or fingerprint checks have no preflight input
 - disabled markers on every report
-- contract fixture coverage for blocked and ready JSON-like report shapes before CLI/schema enablement
+- contract fixture coverage for blocked and ready JSON-like report shapes
+- future preflight file contract fixture coverage without enabling the production `--preflight` option
 - no execution result fields such as `executedCommands`, raw stdout, raw stderr, or exit code
 - plain formatter safety and command-specific JSON schema branch only when the CLI surface is explicitly enabled
 
@@ -218,10 +249,11 @@ Initial options:
 Deferred options:
 
 - `--all`: defer list output until single-intent readiness is stable.
-- preflight flags such as `--with-repo-state`, `--with-checks`, or `--preflight`: defer until each input source has a read-only policy and test fixture.
+- `--preflight <path>`: defer until the file contract has a parser, safe fixture tests, and no-write policy.
+- preflight query flags such as `--with-repo-state` or `--with-checks`: defer until each input source has a read-only policy and test fixture.
 - `--root <path>`: defer unless the broader CLI adopts root override semantics.
 
-Plain output uses `formatWriteExecutionReadiness(report)` for human terminal review. JSON is the stable automation contract. Both modes must preserve the same read-only safety boundary: no file writes, no external command execution, no GitHub lookup, no branch creation, no commit, no push, no pull request creation or mutation, no merge, no release, no tag, no approval mutation, and no run status transition.
+Plain output uses `formatWriteExecutionReadiness(report)` for human terminal review. JSON is the stable automation contract. Both modes must preserve the same read-only safety boundary: no file writes, no external command execution, no GitHub lookup, no branch creation, no commit, no push, no pull request creation or mutation, no merge, no release, no tag, no approval mutation, and no run status transition. Future `--preflight <path>` support must read evidence only and must not echo raw file paths or raw file contents.
 
 ### Future JSON Schema Surface
 
@@ -273,7 +305,7 @@ Error payloads should keep `executionEnabled: false`, `writeExecution: "disabled
 ### Rollout Plan For CLI And Schema
 
 1. Keep `write-readiness --intent <intentId> [--json]` under schema/docs/package smoke coverage.
-2. Add optional read-only preflight input support only after each preflight source has a fixture and no-write policy.
+2. Add optional read-only `--preflight <path>` support only after the file parser has safe fixtures, no raw output echoing, and no-write policy.
 3. Treat actual write execution unlock as a separate milestone that must first test approval freshness, clean worktree policy, diff verification, CI policy, and remote/ref policy.
 
 ## Rollout Slices
