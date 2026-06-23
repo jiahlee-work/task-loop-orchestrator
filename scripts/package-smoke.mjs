@@ -134,8 +134,17 @@ async function main() {
       const audit = await run(bin, ["execution-audit", "--intent", fixture.intentId, "--json"], { cwd: projectDir });
       assertExecutionAuditReport(parseJson(audit), fixture.intentId);
 
+      const plainAudit = await run(bin, ["execution-audit", "--intent", fixture.intentId], { cwd: projectDir });
+      assertExecutionAuditPlainOutput(plainAudit.stdout, fixture.intentId);
+
       const auditList = await run(bin, ["execution-audit", "--all", "--json"], { cwd: projectDir });
       assertExecutionAuditListReport(parseJson(auditList), {
+        bundleCount: 1,
+        intentIds: [fixture.intentId]
+      });
+
+      const plainAuditList = await run(bin, ["execution-audit", "--all"], { cwd: projectDir });
+      assertExecutionAuditPlainListOutput(plainAuditList.stdout, {
         bundleCount: 1,
         intentIds: [fixture.intentId]
       });
@@ -155,6 +164,12 @@ async function main() {
         errorCode: "execution_audit_missing_intent"
       });
 
+      const plainMissingIntent = await runAllowFailure(bin, ["execution-audit"], { cwd: projectDir });
+      assertEqual(plainMissingIntent.exitCode, "1", "execution-audit plain missing selector should exit non-zero");
+      assertExecutionAuditPlainErrorOutput(plainMissingIntent.stdout, {
+        errorCode: "execution_audit_missing_intent"
+      });
+
       const invalidIntent = await writeInvalidExecutionIntentFixture(projectDir);
       const invalidIntentResult = await run(bin, ["execution-audit", "--intent", invalidIntent.intentId, "--json"], {
         cwd: projectDir
@@ -164,6 +179,16 @@ async function main() {
         errorCode: "invalid_execution_intent_file",
         intentId: invalidIntent.intentId,
         detailsKind: "execution_intent",
+        forbiddenText: invalidIntent.secret
+      });
+      const invalidIntentPlainResult = await runAllowFailure(
+        bin,
+        ["execution-audit", "--intent", invalidIntent.intentId],
+        { cwd: projectDir }
+      );
+      assertEqual(invalidIntentPlainResult.exitCode, "1", "execution-audit plain invalid intent should exit non-zero");
+      assertExecutionAuditPlainErrorOutput(invalidIntentPlainResult.stdout, {
+        errorCode: "invalid_execution_intent_file",
         forbiddenText: invalidIntent.secret
       });
       const invalidIntentListResult = await run(bin, ["execution-audit", "--all", "--json"], { cwd: projectDir });
@@ -215,7 +240,9 @@ async function main() {
     console.log("- all JSON smoke commands include schema metadata");
     console.log("- run/resume/status JSON and plain status work through the installed binary");
     console.log("- checkpoint/pr-plan/pr-exec/approve-pr JSON fields work through the installed binary");
-    console.log("- execution-audit JSON reads fixtures, lists bundles, and returns stable error envelopes through the installed binary");
+    console.log(
+      "- execution-audit JSON and plain output read fixtures, list bundles, and return safe errors through the installed binary"
+    );
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
@@ -358,6 +385,33 @@ async function run(command, args, options) {
         formatOutput("stderr", stderr)
       ].filter(Boolean).join("\n")
     );
+  }
+}
+
+async function runAllowFailure(command, args, options) {
+  const commandText = formatCommand(command, args);
+  try {
+    const result = await execFileAsync(command, args, {
+      cwd: options.cwd,
+      maxBuffer: 1024 * 1024 * 10
+    });
+    return {
+      ...result,
+      commandText,
+      cwd: options.cwd,
+      exitCode: "0"
+    };
+  } catch (error) {
+    const stdout = typeof error?.stdout === "string" ? error.stdout : "";
+    const stderr = typeof error?.stderr === "string" ? error.stderr : "";
+    const exitCode = typeof error?.code === "number" || typeof error?.code === "string" ? String(error.code) : "unknown";
+    return {
+      stdout,
+      stderr,
+      commandText,
+      cwd: options.cwd,
+      exitCode
+    };
   }
 }
 
@@ -519,9 +573,62 @@ function assertExecutionAuditErrorReport(report, expected) {
   assertNoExecutionResultFields(report);
 }
 
+function assertExecutionAuditPlainOutput(output, intentId) {
+  assertIncludes(output, `Execution audit: ${intentId}`, "execution-audit plain output should include intent header");
+  assertIncludes(output, "Execution: disabled", "execution-audit plain output should keep execution disabled");
+  assertIncludes(output, "Write execution: disabled", "execution-audit plain output should keep write execution disabled");
+  assertIncludes(
+    output,
+    "Dry-run traces: 1 total, 1 planned, 0 blocked",
+    "execution-audit plain output should include trace counts"
+  );
+  assertIncludes(output, "Trace summary:", "execution-audit plain output should include trace summary");
+  assertNoUnsafePlainExecutionOutput(output);
+}
+
+function assertExecutionAuditPlainListOutput(output, expected) {
+  assertIncludes(output, "Execution audit bundles", "execution-audit plain list should include header");
+  assertIncludes(output, `Bundles: ${expected.bundleCount}`, "execution-audit plain list should include bundle count");
+  assertIncludes(output, "Execution: disabled", "execution-audit plain list should keep execution disabled");
+  assertIncludes(output, "Write execution: disabled", "execution-audit plain list should keep write execution disabled");
+  assertIncludes(
+    output,
+    "Order: newest first by execution intent createdAt",
+    "execution-audit plain list should include ordering note"
+  );
+  for (const intentId of expected.intentIds) {
+    assertIncludes(output, `- ${intentId}`, "execution-audit plain list should include intent summary");
+  }
+  assertNoUnsafePlainExecutionOutput(output);
+}
+
+function assertExecutionAuditPlainErrorOutput(output, expected) {
+  assertIncludes(output, "Execution audit error:", "execution-audit plain error should include header");
+  assertIncludes(output, `Code: ${expected.errorCode}`, "execution-audit plain error should include error code");
+  assertIncludes(
+    output,
+    "Re-run with --json for machine-readable error details.",
+    "execution-audit plain error should recommend JSON for automation"
+  );
+  if (expected.forbiddenText) {
+    assertNotIncludes(
+      output,
+      expected.forbiddenText,
+      "execution-audit plain error should not expose raw persisted file content"
+    );
+  }
+  assertNoUnsafePlainExecutionOutput(output);
+}
+
 function assertChecksReport(report) {
   assertEnvelope(report, "checks");
   assertEqual(report.source, "github", "checks JSON should preserve provider source");
+}
+
+function assertNoUnsafePlainExecutionOutput(output) {
+  for (const fragment of ["executedCommands", "stdout", "stderr", "exitCode", "stack"]) {
+    assertNotIncludes(output, fragment, "execution-audit plain output should not expose execution result fields");
+  }
 }
 
 function assertNoExecutionResultFields(value) {

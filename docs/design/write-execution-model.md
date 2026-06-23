@@ -14,7 +14,7 @@ This document describes the model that should exist before `task-loop-orchestrat
 - Execution audit bundles can group an intent with matching dry-run traces for read-only review while excluding unrelated trace records.
 - The file store can assemble execution audit bundles from persisted intents and traces without writing files or running commands.
 - The audit bundle JSON contract is covered by internal tests before any CLI read surface is enabled.
-- A read-only CLI surface for audit bundle lookup is enabled for `execution-audit --intent <intentId> --json` and `execution-audit --all --json`; plain output remains deferred in [`execution-audit-cli.md`](execution-audit-cli.md).
+- A read-only CLI surface for audit bundle lookup is enabled for `execution-audit --intent <intentId>` and `execution-audit --all` in both plain and JSON modes, as documented in [`execution-audit-cli.md`](execution-audit-cli.md).
 - `pr-exec` is dry-run/preflight oriented.
 - `pr-exec --execute` requires approval data, checks stale approvals, and still returns a blocked report before branch, commit, push, or `gh pr create`.
 - `executedCommands` remains empty in the current implementation.
@@ -110,7 +110,7 @@ Audit logs must avoid recording secrets. Full stdout/stderr should not be persis
 6. Guard the audit bundle JSON contract with internal fixture-style tests before exposing it through CLI JSON.
 7. Enable the read-only `execution-audit --intent <intentId> --json` lookup without command execution.
 8. Enable the read-only `execution-audit --all --json` list lookup without command execution.
-9. Add `execution-audit` plain output only after the human-readable contract is reviewed and tested.
+9. Enable `execution-audit` plain output using pure formatters without command execution.
 10. Add a single local-only command behind tests and explicit approval, such as branch creation in a temporary fixture repository.
 11. Add commit execution only after staged-file policy and diff verification exist.
 12. Add push only after remote/ref policy and CI handling are documented and tested.

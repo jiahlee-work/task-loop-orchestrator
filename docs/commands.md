@@ -194,17 +194,19 @@ Behavior: dry-run by default. `--execute` requires approval data, checks stale a
 
 ## Execution Audit
 
-### `execution-audit (--intent intentId|--all) --json`
+### `execution-audit (--intent intentId|--all) [--json]`
 
 Purpose: Inspect one persisted execution intent and its matching dry-run traces, or list all persisted execution audit bundles, as read-only audit output.
 
 Example:
 
 ```bash
+task-loop-orchestrator execution-audit --intent intent_xxx
 task-loop-orchestrator execution-audit --intent intent_xxx --json
+task-loop-orchestrator execution-audit --all
 task-loop-orchestrator execution-audit --all --json
 ```
 
 JSON: supported with `--json`.
 
-Behavior: read-only. It reads `.orchestrator/execution-intents/` and `.orchestrator/execution-traces/` through the local file store and returns the audit bundle or list wrapper described in [json-output.md](json-output.md). Missing intents, missing `--intent`, and invalid persisted audit files return JSON error envelopes with disabled execution markers. It does not write files, does not execute commands, and does not create branches, commits, pushes, PRs, merges, releases, approvals, tags, or GitHub releases. Plain output is not implemented yet; the future human-readable contract is drafted in [design/execution-audit-cli.md](design/execution-audit-cli.md).
+Behavior: read-only. It reads `.orchestrator/execution-intents/` and `.orchestrator/execution-traces/` through the local file store and returns a human-readable audit summary by default, or the audit bundle/list wrapper described in [json-output.md](json-output.md) when `--json` is used. Missing intents, missing `--intent`, and invalid persisted audit files return JSON error envelopes with disabled execution markers in JSON mode and short safe plain errors otherwise. It does not write files, does not execute commands, and does not create branches, commits, pushes, PRs, merges, releases, approvals, tags, or GitHub releases.

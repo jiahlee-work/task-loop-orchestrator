@@ -10,9 +10,14 @@ import {
   normalizeReviewerMode
 } from "./config.js";
 import { createCliJsonReport, type CliJsonCommand } from "./cli-json.js";
-import type { ExecutorMode, GitHubProviderMode, PermissionMode, ReviewerMode } from "./domain.js";
+import type { ExecutionAuditErrorReport, ExecutorMode, GitHubProviderMode, PermissionMode, ReviewerMode } from "./domain.js";
 import { runDoctor, type DoctorReport } from "./doctor.js";
 import { CodexCliExecutor } from "./executors.js";
+import {
+  formatExecutionAuditBundle,
+  formatExecutionAuditError,
+  formatExecutionAuditList
+} from "./execution-audit-format.js";
 import {
   summarizeExecutionAuditBundle,
   summarizeExecutionAuditBundles,
@@ -103,7 +108,7 @@ function printUsage(): void {
   task-loop-orchestrator pr-plan [runId] [--json]
   task-loop-orchestrator approve-pr [runId] --approved-by name [--reason text] [--json]
   task-loop-orchestrator pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]
-  task-loop-orchestrator execution-audit (--intent intentId|--all) --json
+  task-loop-orchestrator execution-audit (--intent intentId|--all) [--json]
   task-loop-orchestrator checks [ref] [--json]`);
 }
 
@@ -135,7 +140,19 @@ function printExecutionAuditError(
   message: string,
   options: { status?: "not_found" | "error"; intentId?: string; details?: { kind: "execution_intent" | "execution_trace" } } = {}
 ): void {
-  printJson("execution-audit", {
+  printJson("execution-audit", createExecutionAuditErrorReport(errorCode, message, options));
+}
+
+function createExecutionAuditErrorReport(
+  errorCode:
+    | "execution_intent_not_found"
+    | "execution_audit_missing_intent"
+    | "invalid_execution_intent_file"
+    | "invalid_execution_trace_file",
+  message: string,
+  options: { status?: "not_found" | "error"; intentId?: string; details?: { kind: "execution_intent" | "execution_trace" } } = {}
+): ExecutionAuditErrorReport {
+  return {
     status: options.status ?? "error",
     errorCode,
     message,
@@ -145,7 +162,20 @@ function printExecutionAuditError(
     executionEnabled: false,
     writeExecution: "disabled",
     hasExecutionResults: false
-  });
+  };
+}
+
+function printPlainExecutionAuditError(
+  errorCode:
+    | "execution_intent_not_found"
+    | "execution_audit_missing_intent"
+    | "invalid_execution_intent_file"
+    | "invalid_execution_trace_file",
+  message: string,
+  options: { status?: "not_found" | "error"; intentId?: string; details?: { kind: "execution_intent" | "execution_trace" } } = {}
+): void {
+  process.stdout.write(formatExecutionAuditError(createExecutionAuditErrorReport(errorCode, message, options)));
+  process.exitCode = 1;
 }
 
 async function doctorCommand(args: ParsedArgs): Promise<void> {
@@ -531,9 +561,7 @@ async function approvePrCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function executionAuditCommand(args: ParsedArgs): Promise<void> {
-  if (args.flags.json !== true) {
-    throw new Error("execution-audit currently requires --json.");
-  }
+  const jsonOutput = args.flags.json === true;
 
   if (args.flags.all === true) {
     const store = new FileRunStore(process.cwd());
@@ -542,7 +570,7 @@ async function executionAuditCommand(args: ParsedArgs): Promise<void> {
       intents = await store.listExecutionIntents();
     } catch (error) {
       if (isInvalidExecutionIntentFileError(error)) {
-        printExecutionAuditError("invalid_execution_intent_file", "Execution intent file is invalid.", {
+        printExecutionAuditErrorForMode(jsonOutput, "invalid_execution_intent_file", "Execution intent file is invalid.", {
           details: { kind: "execution_intent" }
         });
         return;
@@ -555,7 +583,7 @@ async function executionAuditCommand(args: ParsedArgs): Promise<void> {
       traces = await store.listExecutionTraces();
     } catch (error) {
       if (isInvalidExecutionTraceFileError(error)) {
-        printExecutionAuditError("invalid_execution_trace_file", "Execution trace file is invalid.", {
+        printExecutionAuditErrorForMode(jsonOutput, "invalid_execution_trace_file", "Execution trace file is invalid.", {
           details: { kind: "execution_trace" }
         });
         return;
@@ -563,15 +591,21 @@ async function executionAuditCommand(args: ParsedArgs): Promise<void> {
       throw error;
     }
 
-    printJson("execution-audit", summarizeExecutionAuditList(summarizeExecutionAuditBundles(intents, traces)));
+    const report = summarizeExecutionAuditList(summarizeExecutionAuditBundles(intents, traces));
+    if (jsonOutput) {
+      printJson("execution-audit", report);
+    } else {
+      process.stdout.write(formatExecutionAuditList(report));
+    }
     return;
   }
 
   const intentId = stringFlag(args.flags, "intent");
   if (!intentId?.trim()) {
-    printExecutionAuditError(
+    printExecutionAuditErrorForMode(
+      jsonOutput,
       "execution_audit_missing_intent",
-      "execution-audit requires --intent <intentId>."
+      "execution-audit requires --intent <intentId> or --all."
     );
     return;
   }
@@ -582,14 +616,14 @@ async function executionAuditCommand(args: ParsedArgs): Promise<void> {
     intent = await store.loadExecutionIntent(intentId);
   } catch (error) {
     if (isMissingFileError(error)) {
-      printExecutionAuditError("execution_intent_not_found", "Execution intent was not found.", {
+      printExecutionAuditErrorForMode(jsonOutput, "execution_intent_not_found", "Execution intent was not found.", {
         status: "not_found",
         intentId
       });
       return;
     }
     if (isInvalidExecutionIntentFileError(error)) {
-      printExecutionAuditError("invalid_execution_intent_file", "Execution intent file is invalid.", {
+      printExecutionAuditErrorForMode(jsonOutput, "invalid_execution_intent_file", "Execution intent file is invalid.", {
         intentId,
         details: { kind: "execution_intent" }
       });
@@ -603,7 +637,7 @@ async function executionAuditCommand(args: ParsedArgs): Promise<void> {
     traces = await store.listExecutionTraces();
   } catch (error) {
     if (isInvalidExecutionTraceFileError(error)) {
-      printExecutionAuditError("invalid_execution_trace_file", "Execution trace file is invalid.", {
+      printExecutionAuditErrorForMode(jsonOutput, "invalid_execution_trace_file", "Execution trace file is invalid.", {
         intentId,
         details: { kind: "execution_trace" }
       });
@@ -612,7 +646,28 @@ async function executionAuditCommand(args: ParsedArgs): Promise<void> {
     throw error;
   }
   const bundle = summarizeExecutionAuditBundle(intent, traces);
-  printJson("execution-audit", bundle);
+  if (jsonOutput) {
+    printJson("execution-audit", bundle);
+  } else {
+    process.stdout.write(formatExecutionAuditBundle(bundle));
+  }
+}
+
+function printExecutionAuditErrorForMode(
+  jsonOutput: boolean,
+  errorCode:
+    | "execution_intent_not_found"
+    | "execution_audit_missing_intent"
+    | "invalid_execution_intent_file"
+    | "invalid_execution_trace_file",
+  message: string,
+  options: { status?: "not_found" | "error"; intentId?: string; details?: { kind: "execution_intent" | "execution_trace" } } = {}
+): void {
+  if (jsonOutput) {
+    printExecutionAuditError(errorCode, message, options);
+  } else {
+    printPlainExecutionAuditError(errorCode, message, options);
+  }
 }
 
 function isMissingFileError(error: unknown): error is { code: "ENOENT" } {

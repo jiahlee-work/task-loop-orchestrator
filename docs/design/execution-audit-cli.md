@@ -1,15 +1,17 @@
 # Execution Audit Read-Only CLI Surface
 
-Status: JSON MVP enabled for `execution-audit --intent <intentId> --json` and `execution-audit --all --json`; plain output remains deferred.
+Status: JSON and plain read-only output enabled for `execution-audit --intent <intentId>` and `execution-audit --all`.
 
-This document describes the read-only CLI surface for inspecting persisted execution intents, dry-run traces, and audit bundles. The single-intent and all-intents JSON commands are implemented, but they do not enable command execution. Plain output and write-side actions remain future work.
+This document describes the read-only CLI surface for inspecting persisted execution intents, dry-run traces, and audit bundles. The single-intent and all-intents JSON and plain commands are implemented, but they do not enable command execution. Write-side actions remain future work.
 
 ## MVP Commands
 
-The enabled JSON commands are:
+The enabled read-only commands are:
 
 ```bash
+task-loop-orchestrator execution-audit --intent <intentId>
 task-loop-orchestrator execution-audit --intent <intentId> --json
+task-loop-orchestrator execution-audit --all
 task-loop-orchestrator execution-audit --all --json
 ```
 
@@ -21,10 +23,10 @@ Alternative command families such as `execution-intents`, `execution-traces`, or
 
 - `--intent <intentId>`: load one persisted execution intent and matching dry-run traces.
 - `--all`: list audit bundles for all persisted intents.
-- `--json`: required for the MVP. Plain output remains deferred until there is a separate human-readable output design.
+- `--json`: optional; use it for the stable machine-readable envelope. Plain output is for human terminal summaries.
 - `--root <path>`: defer unless the broader CLI adopts root override semantics. The current CLI uses `process.cwd()`.
 
-Exactly one of `--intent` or `--all` should be used. Plain output is rejected because the MVP is JSON-only.
+Exactly one of `--intent` or `--all` should be used.
 
 ## JSON Output
 
@@ -134,7 +136,7 @@ It may read `.orchestrator/execution-intents/` and `.orchestrator/execution-trac
 
 ## JSON Error Envelope Draft
 
-Status: enabled for success bundles, list bundles, missing intents, missing `--intent`, and invalid persisted intent/trace files. Plain output remains deferred.
+Status: enabled for success bundles, list bundles, missing intents, missing `--intent`, and invalid persisted intent/trace files.
 
 The first implementation uses an error payload that keeps the common CLI metadata envelope while separating success bundles from failures:
 
@@ -170,9 +172,9 @@ Error cases to cover:
 - invalid persisted intent file
 - invalid persisted trace file
 
-Deferred error cases:
+Plain error cases:
 
-- missing `--json`, which still uses the existing non-JSON usage error path
+- when `--json` is omitted, the same missing selector, not-found, and invalid persisted file cases are formatted with short safe plain errors instead of JSON envelopes
 
 The error path must preserve the same read-only guarantee as the success path: no file writes, no external command execution, no branch creation, no commit, no push, no pull request creation or mutation, no approval mutation, and no run status transition.
 
@@ -181,9 +183,9 @@ Remaining implementation requirements for future milestones:
 - decide whether invalid persisted file envelopes need additional structured `details` beyond `kind`
 - add a broader CLI test harness if future error cases outgrow package smoke coverage
 
-## Plain Output Contract Draft
+## Plain Output Contract
 
-Status: formatter helpers implemented; CLI plain output not enabled. The current CLI still requires `--json`; this section defines the human-readable contract for a future CLI implementation.
+Status: enabled through pure formatter helpers. The CLI uses these formatters when `--json` is omitted.
 
 Plain output is for people reading terminal summaries. Automation, UI integrations, scripts, and schema validation must continue to use `--json` because the JSON envelope is the stable machine-readable contract.
 
@@ -226,7 +228,7 @@ Proposed examples:
 - invalid persisted intent file: `Invalid execution intent file. Re-run with --json for errorCode and safe details.`
 - invalid persisted trace file: `Invalid execution trace file. Re-run with --json for errorCode and safe details.`
 
-Exit code policy needs an implementation decision before enabling plain output. The current non-JSON CLI error path exits non-zero for thrown usage errors; a future plain formatter should preserve non-zero exits for missing selectors, not found, invalid persisted files, and other errors.
+Plain output preserves non-zero exits for missing selectors, not found, invalid persisted files, and other errors. Successful single-intent and list summaries exit zero.
 
 ### Formatter Implementation Plan
 
@@ -254,7 +256,8 @@ The first implementation milestone includes:
 - `executionAuditListPayload` support for `execution-audit --all --json`.
 - `docs/json-output.md` command-specific schema documentation.
 - `docs/commands.md` entry for the enabled command.
-- package smoke coverage for installed binary JSON output.
+- plain output wiring through pure formatters for single-intent, all-intents, and safe error summaries.
+- package smoke coverage for installed binary JSON and plain output.
 - docs drift tests that keep command usage, JSON support, and read-only behavior aligned.
 - tests proving the command uses `FileRunStore` read helpers and does not execute commands.
 

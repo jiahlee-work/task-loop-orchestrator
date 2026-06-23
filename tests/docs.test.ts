@@ -321,14 +321,16 @@ describe("release readiness documentation", () => {
     ]);
     expectContainsAll(auditCliDesign, [
       "# Execution Audit Read-Only CLI Surface",
-      "Status: JSON MVP enabled for `execution-audit --intent <intentId> --json` and `execution-audit --all --json`; plain output remains deferred.",
+      "Status: JSON and plain read-only output enabled for `execution-audit --intent <intentId>` and `execution-audit --all`.",
       "do not enable command execution",
-      "Plain output and write-side actions remain future work.",
+      "Write-side actions remain future work.",
+      "task-loop-orchestrator execution-audit --intent <intentId>",
       "task-loop-orchestrator execution-audit --intent <intentId> --json",
+      "task-loop-orchestrator execution-audit --all",
       "task-loop-orchestrator execution-audit --all --json",
       "`--intent <intentId>`",
       "`--all`: list audit bundles for all persisted intents.",
-      "`--json`: required",
+      "`--json`: optional",
       "existing CLI JSON envelope",
       "command: \"execution-audit\"",
       "ExecutionAuditBundle",
@@ -384,13 +386,13 @@ describe("release readiness documentation", () => {
       "raw file contents, stack traces, secrets, stdout, stderr, and exit codes",
       "invalid persisted intent file",
       "invalid persisted trace file",
-      "missing `--json`, which still uses the existing non-JSON usage error path",
+      "when `--json` is omitted, the same missing selector, not-found, and invalid persisted file cases are formatted with short safe plain errors instead of JSON envelopes",
       "ExecutionAuditBundle | executionAuditListPayload | executionAuditErrorPayload",
       "executionAuditResponsePayload",
       "no file writes, no external command execution, no branch creation, no commit, no push",
-      "Plain Output Contract Draft",
-      "Status: formatter helpers implemented; CLI plain output not enabled.",
-      "The current CLI still requires `--json`",
+      "Plain Output Contract",
+      "Status: enabled through pure formatter helpers.",
+      "The CLI uses these formatters when `--json` is omitted.",
       "Plain output is for people reading terminal summaries",
       "Automation, UI integrations, scripts, and schema validation must continue to use `--json`",
       "header: `Execution audit: <intentId>`",
@@ -406,18 +408,20 @@ describe("release readiness documentation", () => {
       "per-bundle summary line",
       "should not print every trace by default",
       "the JSON envelope is the stable machine-readable contract",
-      "Exit code policy needs an implementation decision",
+      "preserves non-zero exits for missing selectors, not found, invalid persisted files, and other errors",
+      "Successful single-intent and list summaries exit zero",
       "formatExecutionAuditBundle",
       "formatExecutionAuditList",
       "formatExecutionAuditError",
       "pure helpers",
       "do not parse files, write files, spawn commands, or change approval/intent/trace state",
-      "package smoke covers at least one installed-binary plain output path after the feature is enabled",
+      "package smoke covers at least one installed-binary plain output path",
       "decide whether invalid persisted file envelopes need additional structured `details` beyond `kind`",
       "`schemas/cli-json.schema.json`",
       "`docs/json-output.md`",
       "`docs/commands.md` entry for the enabled command",
-      "package smoke coverage",
+      "plain output wiring through pure formatters",
+      "package smoke coverage for installed binary JSON and plain output",
       "actual command execution",
       "`gh pr create`",
       "npm publish",
@@ -630,7 +634,7 @@ describe("command reference documentation", () => {
       "pr-plan [runId] [--json]",
       "approve-pr [runId] --approved-by name [--reason text] [--json]",
       "pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]",
-      "execution-audit (--intent intentId|--all) --json",
+      "execution-audit (--intent intentId|--all) [--json]",
       "checks [ref] [--json]"
     ]);
     expect(commandHeadings).toEqual([
@@ -715,8 +719,8 @@ describe("command reference documentation", () => {
       "JSON error envelopes with disabled execution markers",
       "does not write files",
       "does not execute commands",
-      "Plain output is not implemented yet",
-      "future human-readable contract is drafted"
+      "human-readable audit summary by default",
+      "short safe plain errors otherwise"
     ]);
 
     expectSectionContains(sections, "init", ["writes local bootstrap files only", "orchestrator.config.json", ".gitignore"]);
@@ -802,6 +806,8 @@ describe("command reference documentation", () => {
       '"pr-exec", loopReport.runId, "--json"',
       '"approve-pr", loopReport.runId, "--approved-by", "package-smoke", "--json"',
       '"execution-audit", "--intent", fixture.intentId, "--json"',
+      '"execution-audit", "--intent", fixture.intentId]',
+      '"execution-audit", "--all"]',
       '"checks", "HEAD", "--json"'
     ]);
   });
