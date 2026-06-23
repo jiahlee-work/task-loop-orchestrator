@@ -585,6 +585,116 @@ describe("execution intent persistence", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it("keeps execution audit bundle JSON contract plain and non-executing", () => {
+    const intent = executionIntent("2026-06-22T00:00:00.000Z");
+    const traces = createExecutionDryRunTraces(intent, {
+      createdAt: "2026-06-22T01:00:00.000Z"
+    });
+
+    const bundle = summarizeExecutionAuditBundle(intent, traces);
+    const json = JSON.parse(JSON.stringify(bundle));
+
+    expect(json).toEqual(bundle);
+    expect(Object.keys(json).sort()).toEqual([
+      "blockedReasonCount",
+      "blockedReasons",
+      "blockedTraceCount",
+      "executionEnabled",
+      "hasExecutionResults",
+      "intent",
+      "mismatchedTraceCount",
+      "mismatchedTraceIds",
+      "plannedTraceCount",
+      "traceActionSummary",
+      "traceCount",
+      "traces",
+      "writeExecution"
+    ]);
+    expect(Object.keys(json.intent).sort()).toEqual([
+      "actor",
+      "approvalId",
+      "baseBranch",
+      "blockedReasonCount",
+      "blockedReasons",
+      "checkpointId",
+      "commandActionSummary",
+      "commandCandidateActions",
+      "commandCandidateCount",
+      "createdAt",
+      "executionEnabled",
+      "expiresAt",
+      "id",
+      "permissionMode",
+      "planId",
+      "policyVersion",
+      "reason",
+      "runId",
+      "sourceBranch",
+      "status",
+      "targetRef",
+      "writeExecution"
+    ]);
+    expect(json.traces).toHaveLength(2);
+    expect(Object.keys(json.traces[0]).sort()).toEqual([
+      "action",
+      "approvalId",
+      "argv",
+      "blockedReasonCount",
+      "blockedReasons",
+      "checkpointId",
+      "createdAt",
+      "executionEnabled",
+      "hasExecutionResults",
+      "id",
+      "intentId",
+      "planId",
+      "policyDecision",
+      "policyVersion",
+      "reason",
+      "runId",
+      "status",
+      "writeExecution"
+    ]);
+    expect(json).toMatchObject({
+      traceCount: 2,
+      plannedTraceCount: 2,
+      blockedTraceCount: 0,
+      traceActionSummary: [
+        { action: "create_branch", count: 1 },
+        { action: "create_pr", count: 1 }
+      ],
+      blockedReasonCount: 0,
+      blockedReasons: [],
+      mismatchedTraceCount: 0,
+      mismatchedTraceIds: [],
+      executionEnabled: false,
+      writeExecution: "disabled",
+      hasExecutionResults: false
+    });
+    expect(json.intent).toMatchObject({
+      id: intent.id,
+      runId: intent.runId,
+      planId: intent.planId,
+      approvalId: intent.approvalId,
+      checkpointId: intent.checkpointId,
+      executionEnabled: false,
+      writeExecution: "disabled"
+    });
+    expect(json.traces[0]).toMatchObject({
+      intentId: intent.id,
+      action: "create_branch",
+      argv: ["git", "switch", "-c", "orchestrator/run1"],
+      status: "planned",
+      policyDecision: "dry_run_planned",
+      blockedReasonCount: 0,
+      blockedReasons: [],
+      executionEnabled: false,
+      writeExecution: "disabled",
+      hasExecutionResults: false
+    });
+    expectNoExecutionResultFields(json);
+  });
 });
 
 function executionIntent(createdAt: string) {
@@ -632,4 +742,27 @@ function prPlan(checkpointId = "checkpoint-1", blockedReasons: string[] = []): P
     ],
     createdAt: "2026-06-22T00:00:00.000Z"
   };
+}
+
+function expectNoExecutionResultFields(value: unknown): void {
+  const forbiddenFields = ["executedCommands", "stdout", "stderr", "exitCode"];
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      expectNoExecutionResultFields(item);
+    }
+    return;
+  }
+
+  if (typeof value !== "object" || value === null) {
+    return;
+  }
+
+  for (const field of forbiddenFields) {
+    expect(field in value).toBe(false);
+  }
+
+  for (const nestedValue of Object.values(value)) {
+    expectNoExecutionResultFields(nestedValue);
+  }
 }

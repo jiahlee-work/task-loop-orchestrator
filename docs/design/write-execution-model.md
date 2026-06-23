@@ -13,6 +13,7 @@ This document describes the model that should exist before `task-loop-orchestrat
 - Execution dry-run trace records can be persisted under `.orchestrator/execution-traces/` to model future command-runner audit entries without spawning commands.
 - Execution audit bundles can group an intent with matching dry-run traces for read-only review while excluding unrelated trace records.
 - The file store can assemble execution audit bundles from persisted intents and traces without writing files or running commands.
+- The audit bundle JSON contract is covered by internal tests before any CLI read surface is enabled.
 - `pr-exec` is dry-run/preflight oriented.
 - `pr-exec --execute` requires approval data, checks stale approvals, and still returns a blocked report before branch, commit, push, or `gh pr create`.
 - `executedCommands` remains empty in the current implementation.
@@ -105,10 +106,11 @@ Audit logs must avoid recording secrets. Full stdout/stderr should not be persis
 3. Add command runner dry-run trace records that mirror the future audit shape without spawning commands.
 4. Add read-only audit bundles that group intents with matching dry-run traces.
 5. Add store-level read-only audit bundle assembly from persisted intent and trace records.
-6. Add a single local-only command behind tests and explicit approval, such as branch creation in a temporary fixture repository.
-7. Add commit execution only after staged-file policy and diff verification exist.
-8. Add push only after remote/ref policy and CI handling are documented and tested.
-9. Add GitHub PR creation only after push policy, approval freshness, and `gh pr create` argument construction are covered.
+6. Guard the audit bundle JSON contract with internal fixture-style tests before exposing it through CLI JSON.
+7. Add a single local-only command behind tests and explicit approval, such as branch creation in a temporary fixture repository.
+8. Add commit execution only after staged-file policy and diff verification exist.
+9. Add push only after remote/ref policy and CI handling are documented and tested.
+10. Add GitHub PR creation only after push policy, approval freshness, and `gh pr create` argument construction are covered.
 
 ## Hard Non-Goals
 
