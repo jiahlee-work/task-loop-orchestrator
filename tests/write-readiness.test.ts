@@ -118,6 +118,156 @@ describe("write execution readiness helper", () => {
     expectNoUnsafeReadinessOutput(report);
   });
 
+  it("keeps blocked readiness report contract stable as a plain JSON object", () => {
+    const approvedPlan = prPlan("checkpoint-old");
+    const currentPlan = prPlan("checkpoint-current", ["Repository status is not clean."], "top-secret-readiness");
+    const report = summarizeWriteExecutionReadiness(
+      executionAuditBundle("2026-06-22T00:00:00.000Z", {
+        approvedPlan,
+        currentPlan
+      })
+    );
+    const json = JSON.parse(JSON.stringify(report));
+
+    expect(json).toEqual(report);
+    expect(Object.keys(json).sort()).toEqual([
+      "approvalId",
+      "blockers",
+      "checkpointId",
+      "checks",
+      "executionEnabled",
+      "hasExecutionResults",
+      "inputs",
+      "intentId",
+      "planId",
+      "readinessStatus",
+      "ready",
+      "runId",
+      "writeExecution"
+    ]);
+    expect(Object.keys(json.blockers[0]).sort()).toEqual(["category", "code", "message", "source"]);
+    expect(Object.keys(json.checks[0]).sort()).toEqual(["category", "code", "message", "source", "status"]);
+    expect(json).toMatchObject({
+      readinessStatus: "blocked",
+      ready: false,
+      inputs: {
+        auditBundle: "available",
+        preflight: "missing"
+      },
+      executionEnabled: false,
+      writeExecution: "disabled",
+      hasExecutionResults: false
+    });
+    expect(json.intentId).toMatch(/^intent_/);
+    expect(json).toMatchObject({
+      runId: "run-1",
+      planId: "prplan-1",
+      checkpointId: "checkpoint-current"
+    });
+    expect(json.approvalId).toMatch(/^approval_/);
+    expect(json.blockers).toEqual([
+      {
+        category: "trace",
+        code: "blocked_dry_run_trace",
+        message: "2 dry-run trace(s) are blocked.",
+        source: "audit_bundle"
+      },
+      {
+        category: "precondition",
+        code: "audit_blocked_reason",
+        message: "Repository status is not clean.",
+        source: "audit_bundle"
+      },
+      {
+        category: "precondition",
+        code: "audit_blocked_reason",
+        message: "Approval checkpoint checkpoint-old does not match current checkpoint checkpoint-current.",
+        source: "audit_bundle"
+      }
+    ]);
+    expect(json.checks).toEqual(
+      expect.arrayContaining([
+        {
+          category: "trace",
+          status: "blocked",
+          code: "blocked_dry_run_trace",
+          message: "2 dry-run trace(s) are blocked.",
+          source: "audit_bundle"
+        },
+        {
+          category: "approval",
+          status: "unknown",
+          code: "approval_freshness_unverified",
+          message: "Approval freshness has not been verified.",
+          source: "preflight"
+        }
+      ])
+    );
+    expectNoUnsafeReadinessOutput(json);
+  });
+
+  it("keeps ready readiness report contract stable as a plain JSON object", () => {
+    const report = summarizeWriteExecutionReadiness(executionAuditBundle("2026-06-22T00:00:00.000Z"), passingPreflight());
+    const json = JSON.parse(JSON.stringify(report));
+
+    expect(json).toEqual(report);
+    expect(Object.keys(json).sort()).toEqual([
+      "approvalId",
+      "blockers",
+      "checkpointId",
+      "checks",
+      "executionEnabled",
+      "hasExecutionResults",
+      "inputs",
+      "intentId",
+      "planId",
+      "readinessStatus",
+      "ready",
+      "runId",
+      "writeExecution"
+    ]);
+    expect(json).toMatchObject({
+      readinessStatus: "ready",
+      ready: true,
+      blockers: [],
+      inputs: {
+        auditBundle: "available",
+        preflight: "available"
+      },
+      executionEnabled: false,
+      writeExecution: "disabled",
+      hasExecutionResults: false
+    });
+    expect(json.checks).toHaveLength(13);
+    expect(json.checks.every((check: { status: string }) => check.status === "pass")).toBe(true);
+    expect(json.checks).toEqual(
+      expect.arrayContaining([
+        {
+          category: "trace",
+          status: "pass",
+          code: "dry_run_traces_not_blocked",
+          message: "Dry-run traces are not blocked.",
+          source: "audit_bundle"
+        },
+        {
+          category: "approval",
+          status: "pass",
+          code: "approval_freshness_passed",
+          message: "Approval freshness is verified.",
+          source: "preflight"
+        },
+        {
+          category: "ci",
+          status: "pass",
+          code: "ci_policy_passed",
+          message: "CI/check policy is satisfied.",
+          source: "preflight"
+        }
+      ])
+    );
+    expectNoUnsafeReadinessOutput(json);
+  });
+
   it("formats blocked readiness reports with grouped blockers and disabled markers", () => {
     const approvedPlan = prPlan("checkpoint-old");
     const currentPlan = prPlan("checkpoint-current", ["Repository status is not clean."]);

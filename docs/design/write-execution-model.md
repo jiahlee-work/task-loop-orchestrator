@@ -187,6 +187,7 @@ Tests should cover:
 - blocked readiness when the audit bundle has blocked traces or blocked reasons
 - unknown readiness when approval freshness, CI, repo state, or fingerprint checks have no preflight input
 - disabled markers on every report
+- contract fixture coverage for blocked and ready JSON-like report shapes before CLI/schema enablement
 - no execution result fields such as `executedCommands`, raw stdout, raw stderr, or exit code
 - plain formatter safety and JSON schema branch only when the CLI surface is explicitly enabled
 

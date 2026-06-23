@@ -354,6 +354,7 @@ describe("release readiness documentation", () => {
       "summarizeWriteExecutionReadiness(bundle, preflight?)",
       "formatWriteExecutionReadiness(report)",
       "does not parse files, write files, spawn commands, or mutate domain state",
+      "contract fixture coverage for blocked and ready JSON-like report shapes before CLI/schema enablement",
       "The active JSON schema should not be changed until the command-specific payload is implemented",
       "Persist execution intents without running commands",
       "Add a read-only write execution readiness report helper",
