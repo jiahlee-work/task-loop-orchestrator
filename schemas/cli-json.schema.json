@@ -781,6 +781,192 @@
       ],
       "additionalProperties": true
     },
+    "writeReadinessStatus": {
+      "type": "string",
+      "enum": ["ready", "blocked", "unknown"]
+    },
+    "writeReadinessCategory": {
+      "type": "string",
+      "enum": ["approval", "precondition", "permission", "trace", "policy", "ci", "repo_state", "unknown"]
+    },
+    "writeReadinessCheckStatus": {
+      "type": "string",
+      "enum": ["pass", "blocked", "unknown"]
+    },
+    "writeReadinessSource": {
+      "type": "string",
+      "enum": ["audit_bundle", "preflight"]
+    },
+    "writeReadinessBlocker": {
+      "type": "object",
+      "required": ["category", "code", "message", "source"],
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/writeReadinessCategory"
+        },
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/writeReadinessSource"
+        }
+      },
+      "additionalProperties": true
+    },
+    "writeReadinessCheck": {
+      "type": "object",
+      "required": ["category", "status", "code", "message", "source"],
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/writeReadinessCategory"
+        },
+        "status": {
+          "$ref": "#/$defs/writeReadinessCheckStatus"
+        },
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/writeReadinessSource"
+        }
+      },
+      "additionalProperties": true
+    },
+    "writeReadinessInputs": {
+      "type": "object",
+      "required": ["auditBundle", "preflight"],
+      "properties": {
+        "auditBundle": {
+          "const": "available"
+        },
+        "preflight": {
+          "type": "string",
+          "enum": ["missing", "partial", "available"]
+        }
+      },
+      "additionalProperties": true
+    },
+    "writeReadinessPayload": {
+      "type": "object",
+      "required": [
+        "readinessStatus",
+        "ready",
+        "intentId",
+        "runId",
+        "planId",
+        "approvalId",
+        "blockers",
+        "checks",
+        "inputs",
+        "executionEnabled",
+        "writeExecution",
+        "hasExecutionResults"
+      ],
+      "properties": {
+        "readinessStatus": {
+          "$ref": "#/$defs/writeReadinessStatus"
+        },
+        "ready": {
+          "type": "boolean"
+        },
+        "intentId": {
+          "type": "string"
+        },
+        "runId": {
+          "type": "string"
+        },
+        "planId": {
+          "type": "string"
+        },
+        "approvalId": {
+          "type": "string"
+        },
+        "checkpointId": {
+          "type": "string"
+        },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/writeReadinessBlocker"
+          }
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/writeReadinessCheck"
+          }
+        },
+        "inputs": {
+          "$ref": "#/$defs/writeReadinessInputs"
+        },
+        "executionEnabled": {
+          "const": false
+        },
+        "writeExecution": {
+          "const": "disabled"
+        },
+        "hasExecutionResults": {
+          "const": false
+        }
+      },
+      "additionalProperties": true
+    },
+    "writeReadinessErrorPayload": {
+      "type": "object",
+      "required": ["status", "errorCode", "message", "readiness", "executionEnabled", "writeExecution", "hasExecutionResults"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["not_found", "error"]
+        },
+        "errorCode": {
+          "type": "string",
+          "enum": [
+            "write_readiness_missing_intent",
+            "write_readiness_intent_not_found",
+            "invalid_execution_intent_file",
+            "invalid_execution_trace_file",
+            "write_readiness_preflight_unsupported"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "intentId": {
+          "type": "string"
+        },
+        "readiness": {
+          "const": null
+        },
+        "details": {
+          "type": "object",
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["execution_intent", "execution_trace", "preflight"]
+            }
+          },
+          "additionalProperties": true
+        },
+        "executionEnabled": {
+          "const": false
+        },
+        "writeExecution": {
+          "const": "disabled"
+        },
+        "hasExecutionResults": {
+          "const": false
+        }
+      },
+      "additionalProperties": true
+    },
     "ownerDecisionItem": {
       "type": "object",
       "required": ["source", "reason"],

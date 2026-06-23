@@ -16,7 +16,7 @@ This document describes the model that should exist before `task-loop-orchestrat
 - The audit bundle JSON contract is covered by internal tests before any CLI read surface is enabled.
 - A read-only CLI surface for audit bundle lookup is enabled for `execution-audit --intent <intentId>` and `execution-audit --all` in both plain and JSON modes, as documented in [`execution-audit-cli.md`](execution-audit-cli.md).
 - A pure write execution readiness helper can summarize an audit bundle plus optional future preflight input without enabling CLI/schema output or command execution.
-- A future write readiness CLI/schema surface is drafted below, but no production command or active schema branch is enabled yet.
+- Future write readiness schema definitions are prepared in the schema artifact, but no production command or active command-specific branch is enabled yet.
 - `pr-exec` is dry-run/preflight oriented.
 - `pr-exec --execute` requires approval data, checks stale approvals, and still returns a blocked report before branch, commit, push, or `gh pr create`.
 - `executedCommands` remains empty in the current implementation.
@@ -190,13 +190,13 @@ Tests should cover:
 - disabled markers on every report
 - contract fixture coverage for blocked and ready JSON-like report shapes before CLI/schema enablement
 - no execution result fields such as `executedCommands`, raw stdout, raw stderr, or exit code
-- plain formatter safety and JSON schema branch only when the CLI surface is explicitly enabled
+- plain formatter safety and command-specific JSON schema branch only when the CLI surface is explicitly enabled
 
-Package smoke should not include readiness until a CLI command exists. The active JSON schema should not be changed until the command-specific payload is implemented.
+Package smoke should not include readiness until a CLI command exists. The schema artifact can define inactive readiness `$defs`, but the active command enum and command-specific branch should not change until the CLI surface is implemented.
 
 ## Write Readiness CLI And Schema Surface Draft
 
-Status: design draft, not enabled. This section documents the next read-only surface only; it does not add a production CLI command, does not change `schemas/cli-json.schema.json`, and does not unlock write execution.
+Status: schema payload definitions prepared; CLI command and active schema branch not enabled. This section documents the next read-only surface only; it does not add a production CLI command, does not add `write-readiness` to the active command enum, and does not unlock write execution.
 
 ### Recommended CLI Surface
 
@@ -225,12 +225,12 @@ Plain output is for a human terminal summary. JSON is the stable automation cont
 
 ### Future JSON Schema Surface
 
-The active schema is intentionally unchanged in this design milestone. When the command is implemented, the future schema work should add `"write-readiness"` to `CliJsonCommand` and to the schema `command` enum, then add a command-specific branch:
+The schema artifact now includes inactive `$defs` for the readiness payload contract, but the active command enum and command-specific branch remain unchanged. When the command is implemented, the future schema work should add `"write-readiness"` to `CliJsonCommand` and to the schema `command` enum, then add a command-specific branch:
 
 - branch condition: `command: "write-readiness"`
 - branch payload reference: `#/$defs/writeReadinessPayload`
 
-Proposed `$defs`:
+Prepared `$defs`:
 
 - `writeReadinessPayload`
 - `writeReadinessBlocker`
@@ -255,7 +255,7 @@ The first `writeReadinessPayload` required fields should match the existing read
 
 `checkpointId` should remain optional because older or partial audit data may not have one. `writeReadinessBlocker` should require `category`, `code`, `message`, and `source`. `writeReadinessCheck` should require `category`, `status`, `code`, `message`, and `source`. `writeReadinessInputs` should require `auditBundle` and `preflight`.
 
-Schema tests should compare this future branch against the contract fixture tests in `tests/write-readiness.test.ts` before enabling the command. The schema must remain extensible with `additionalProperties: true` so future preflight evidence can be added without breaking existing consumers.
+Schema tests compare these inactive payload definitions against the contract fixture tests in `tests/write-readiness.test.ts`. Before enabling the command, a later milestone should add command enum coverage and the command-specific branch. The schema must remain extensible with `additionalProperties: true` so future preflight evidence can be added without breaking existing consumers.
 
 ### Error Policy
 
@@ -271,7 +271,7 @@ Error payloads should keep `executionEnabled: false`, `writeExecution: "disabled
 
 ### Rollout Plan For CLI And Schema
 
-1. Keep this schema/CLI design under docs drift tests while the active schema remains unchanged.
+1. Keep inactive readiness `$defs` and CLI design under schema/docs drift tests while the active command enum and branch remain unchanged.
 2. Add the read-only `write-readiness --intent <intentId> --json` path and the command-specific schema branch.
 3. Add plain `write-readiness --intent <intentId>` output using `formatWriteExecutionReadiness(report)`.
 4. Add optional read-only preflight input support only after each preflight source has a fixture and no-write policy.

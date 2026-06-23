@@ -111,6 +111,18 @@ The `execution-audit` command-specific branch uses `executionAuditResponsePayloa
 
 Error payloads fix `status`, `errorCode`, `message`, `intent`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`, with optional `intentId` and `details`. `intent` is `null` for these error responses. Invalid persisted file envelopes expose only minimal `details.kind` values such as `execution_intent` or `execution_trace`; they do not include raw file contents, stack traces, secrets, stdout, stderr, or exit codes.
 
+## Future Write Readiness Schema Definitions
+
+`write-readiness` is not an active JSON command yet. It is not in the schema `command` enum, and there is no command-specific `allOf` branch until the CLI surface is implemented. The schema artifact does include inactive `$defs` for the future read-only readiness payload so the helper contract can be tested before routing is enabled.
+
+The future `writeReadinessPayload` fixes `readinessStatus`, `ready`, `intentId`, `runId`, `planId`, `approvalId`, `blockers`, `checks`, `inputs`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`, with optional `checkpointId`.
+
+Each `writeReadinessBlocker` fixes `category`, `code`, `message`, and `source`. Each `writeReadinessCheck` fixes `category`, `status`, `code`, `message`, and `source`. The `writeReadinessInputs` object fixes `auditBundle` and `preflight`.
+
+The future `writeReadinessErrorPayload` fixes `status`, `errorCode`, `message`, `readiness`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`, with optional `intentId` and `details`. Error payloads keep `readiness: null`, `executionEnabled: false`, `writeExecution: "disabled"`, and `hasExecutionResults: false`.
+
+These definitions are contract preparation only. They do not enable `write-readiness --json`, do not change package smoke, and do not permit command execution, file writes, GitHub lookup, branch creation, commits, pushes, pull request creation, merges, releases, or tags.
+
 ## Doctor Schema
 
 `doctor --json` has a command-specific schema branch for installation and project readiness diagnostics. Consumers can rely on top-level `status`, `rootDir`, `githubMode`, and `checks`.
@@ -150,6 +162,6 @@ Commands that need an existing run return an enveloped not-found response when `
 
 The machine-readable schema artifact is available at [`../schemas/cli-json.schema.json`](../schemas/cli-json.schema.json). The schema validates the common envelope and command enum while allowing command-specific payload fields to remain flexible.
 
-Command-specific branches are implemented with `allOf` conditions that reference `$defs` payload definitions such as `runReportPayload`, `checksPayload`, `checkpointPayload`, `prPlanPayload`, `prExecPayload`, `approvePrPayload`, `executionAuditResponsePayload`, `executionAuditPayload`, `executionAuditErrorPayload`, `doctorPayload`, and `initPayload`.
+Command-specific branches are implemented with `allOf` conditions that reference `$defs` payload definitions such as `runReportPayload`, `checksPayload`, `checkpointPayload`, `prPlanPayload`, `prExecPayload`, `approvePrPayload`, `executionAuditResponsePayload`, `executionAuditPayload`, `executionAuditErrorPayload`, `doctorPayload`, and `initPayload`. Inactive future definitions such as `writeReadinessPayload`, `writeReadinessBlocker`, `writeReadinessCheck`, `writeReadinessInputs`, and `writeReadinessErrorPayload` may exist before their CLI command branch is enabled.
 
 Representative JSON outputs are also covered by the lightweight sample smoke in [`../tests/json-schema-samples.test.ts`](../tests/json-schema-samples.test.ts). Those samples are built from test-only fixtures and checked against the schema envelope, command enum, command-specific branch, and required top-level fields without introducing a full JSON Schema validator.

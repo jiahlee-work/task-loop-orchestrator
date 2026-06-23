@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createPullRequestApproval } from "../src/approval.js";
 import type { ExecutionAuditBundle, PullRequestPlan, WriteExecutionReadinessPreflightInput } from "../src/domain.js";
@@ -7,6 +9,8 @@ import {
   summarizeExecutionAuditBundle
 } from "../src/execution-intents.js";
 import { formatWriteExecutionReadiness, summarizeWriteExecutionReadiness } from "../src/write-readiness.js";
+
+const root = process.cwd();
 
 describe("write execution readiness helper", () => {
   it("blocks readiness when the audit bundle contains blocked traces or blocked reasons", () => {
@@ -268,6 +272,34 @@ describe("write execution readiness helper", () => {
     expectNoUnsafeReadinessOutput(json);
   });
 
+  it("matches the inactive write readiness schema payload definition", async () => {
+    const approvedPlan = prPlan("checkpoint-old");
+    const currentPlan = prPlan("checkpoint-current", ["Repository status is not clean."], "top-secret-readiness");
+    const report = summarizeWriteExecutionReadiness(
+      executionAuditBundle("2026-06-22T00:00:00.000Z", {
+        approvedPlan,
+        currentPlan
+      })
+    );
+    const json = JSON.parse(JSON.stringify(report));
+    const schema = await readWriteReadinessSchema();
+
+    expectRequiredFields(json, schema.payload.required);
+    expectRequiredFields(json.inputs, schema.inputs.required);
+    expectRequiredFields(json.blockers[0], schema.blocker.required);
+    expectRequiredFields(json.checks[0], schema.check.required);
+    expect(schema.payload.properties?.executionEnabled).toEqual({ const: false });
+    expect(schema.payload.properties?.writeExecution).toEqual({ const: "disabled" });
+    expect(schema.payload.properties?.hasExecutionResults).toEqual({ const: false });
+    expect(json.executionEnabled).toBe(false);
+    expect(json.writeExecution).toBe("disabled");
+    expect(json.hasExecutionResults).toBe(false);
+    expect(schema.payload.additionalProperties).toBe(true);
+    expect(schema.blocker.additionalProperties).toBe(true);
+    expect(schema.check.additionalProperties).toBe(true);
+    expectNoUnsafeReadinessOutput(json);
+  });
+
   it("formats blocked readiness reports with grouped blockers and disabled markers", () => {
     const approvedPlan = prPlan("checkpoint-old");
     const currentPlan = prPlan("checkpoint-current", ["Repository status is not clean."]);
@@ -426,4 +458,47 @@ function expectNoUnsafeReadinessOutput(value: unknown): void {
   for (const forbidden of ["executedCommands", "stdout", "stderr", "exitCode", "stack", "argv", "top-secret-readiness"]) {
     expect(serialized).not.toContain(forbidden);
   }
+}
+
+async function readWriteReadinessSchema(): Promise<{
+  payload: SchemaDefinition;
+  blocker: SchemaDefinition;
+  check: SchemaDefinition;
+  inputs: SchemaDefinition;
+}> {
+  const schema = JSON.parse(await readFile(join(root, "schemas", "cli-json.schema.json"), "utf8")) as {
+    $defs?: Record<string, SchemaDefinition>;
+  };
+
+  return {
+    payload: requiredDefinition(schema.$defs, "writeReadinessPayload"),
+    blocker: requiredDefinition(schema.$defs, "writeReadinessBlocker"),
+    check: requiredDefinition(schema.$defs, "writeReadinessCheck"),
+    inputs: requiredDefinition(schema.$defs, "writeReadinessInputs")
+  };
+}
+
+function requiredDefinition(defs: Record<string, SchemaDefinition> | undefined, name: string): SchemaDefinition {
+  const definition = defs?.[name];
+  expect(definition, `missing schema definition ${name}`).toBeDefined();
+  return definition ?? {};
+}
+
+function expectRequiredFields(value: unknown, required: string[] | undefined): void {
+  expect(required?.length).toBeGreaterThan(0);
+  const record = asRecord(value);
+  expect(record).toBeDefined();
+  for (const field of required ?? []) {
+    expect(record, `expected fixture to include required schema field ${field}`).toHaveProperty(field);
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : undefined;
+}
+
+interface SchemaDefinition {
+  required?: string[];
+  properties?: Record<string, unknown>;
+  additionalProperties?: boolean;
 }

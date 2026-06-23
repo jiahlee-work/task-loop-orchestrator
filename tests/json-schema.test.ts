@@ -382,6 +382,113 @@ describe("CLI JSON schema artifact", () => {
     expect(executionAuditTraceReport?.properties?.hasExecutionResults).toEqual({ const: false });
   });
 
+  it("defines inactive write readiness payload schemas without enabling the command branch", async () => {
+    const schema = await readSchema();
+    const writeReadinessPayload = schema.$defs?.writeReadinessPayload;
+    const writeReadinessBlocker = schema.$defs?.writeReadinessBlocker;
+    const writeReadinessCheck = schema.$defs?.writeReadinessCheck;
+    const writeReadinessInputs = schema.$defs?.writeReadinessInputs;
+    const writeReadinessErrorPayload = schema.$defs?.writeReadinessErrorPayload;
+
+    expect(schema.properties?.command?.enum).not.toContain("write-readiness");
+    expect(branchRefsForCommand(schema, "write-readiness")).toEqual([]);
+    expect(schema.$defs?.writeReadinessStatus).toEqual({
+      type: "string",
+      enum: ["ready", "blocked", "unknown"]
+    });
+    expect(schema.$defs?.writeReadinessCategory).toEqual({
+      type: "string",
+      enum: ["approval", "precondition", "permission", "trace", "policy", "ci", "repo_state", "unknown"]
+    });
+    expect(schema.$defs?.writeReadinessCheckStatus).toEqual({
+      type: "string",
+      enum: ["pass", "blocked", "unknown"]
+    });
+    expect(schema.$defs?.writeReadinessSource).toEqual({
+      type: "string",
+      enum: ["audit_bundle", "preflight"]
+    });
+    expect(writeReadinessPayload?.required).toEqual(
+      expect.arrayContaining([
+        "readinessStatus",
+        "ready",
+        "intentId",
+        "runId",
+        "planId",
+        "approvalId",
+        "blockers",
+        "checks",
+        "inputs",
+        "executionEnabled",
+        "writeExecution",
+        "hasExecutionResults"
+      ])
+    );
+    expect(writeReadinessPayload?.required).not.toContain("checkpointId");
+    expect(writeReadinessPayload?.properties?.readinessStatus).toEqual({ $ref: "#/$defs/writeReadinessStatus" });
+    expect(writeReadinessPayload?.properties?.ready).toEqual({ type: "boolean" });
+    expect(writeReadinessPayload?.properties?.checkpointId).toEqual({ type: "string" });
+    expect(writeReadinessPayload?.properties?.blockers).toEqual({
+      type: "array",
+      items: {
+        $ref: "#/$defs/writeReadinessBlocker"
+      }
+    });
+    expect(writeReadinessPayload?.properties?.checks).toEqual({
+      type: "array",
+      items: {
+        $ref: "#/$defs/writeReadinessCheck"
+      }
+    });
+    expect(writeReadinessPayload?.properties?.inputs).toEqual({ $ref: "#/$defs/writeReadinessInputs" });
+    expect(writeReadinessPayload?.properties?.executionEnabled).toEqual({ const: false });
+    expect(writeReadinessPayload?.properties?.writeExecution).toEqual({ const: "disabled" });
+    expect(writeReadinessPayload?.properties?.hasExecutionResults).toEqual({ const: false });
+    expect(writeReadinessPayload?.additionalProperties).toBe(true);
+    expect(writeReadinessBlocker?.required).toEqual(expect.arrayContaining(["category", "code", "message", "source"]));
+    expect(writeReadinessBlocker?.properties?.category).toEqual({ $ref: "#/$defs/writeReadinessCategory" });
+    expect(writeReadinessBlocker?.properties?.source).toEqual({ $ref: "#/$defs/writeReadinessSource" });
+    expect(writeReadinessBlocker?.additionalProperties).toBe(true);
+    expect(writeReadinessCheck?.required).toEqual(
+      expect.arrayContaining(["category", "status", "code", "message", "source"])
+    );
+    expect(writeReadinessCheck?.properties?.status).toEqual({ $ref: "#/$defs/writeReadinessCheckStatus" });
+    expect(writeReadinessCheck?.additionalProperties).toBe(true);
+    expect(writeReadinessInputs?.required).toEqual(expect.arrayContaining(["auditBundle", "preflight"]));
+    expect(writeReadinessInputs?.properties?.auditBundle).toEqual({ const: "available" });
+    expect(writeReadinessInputs?.properties?.preflight).toEqual({
+      type: "string",
+      enum: ["missing", "partial", "available"]
+    });
+    expect(writeReadinessInputs?.additionalProperties).toBe(true);
+    expect(writeReadinessErrorPayload?.required).toEqual(
+      expect.arrayContaining([
+        "status",
+        "errorCode",
+        "message",
+        "readiness",
+        "executionEnabled",
+        "writeExecution",
+        "hasExecutionResults"
+      ])
+    );
+    expect(writeReadinessErrorPayload?.properties?.errorCode).toEqual({
+      type: "string",
+      enum: [
+        "write_readiness_missing_intent",
+        "write_readiness_intent_not_found",
+        "invalid_execution_intent_file",
+        "invalid_execution_trace_file",
+        "write_readiness_preflight_unsupported"
+      ]
+    });
+    expect(writeReadinessErrorPayload?.properties?.readiness).toEqual({ const: null });
+    expect(writeReadinessErrorPayload?.properties?.executionEnabled).toEqual({ const: false });
+    expect(writeReadinessErrorPayload?.properties?.writeExecution).toEqual({ const: "disabled" });
+    expect(writeReadinessErrorPayload?.properties?.hasExecutionResults).toEqual({ const: false });
+    expect(writeReadinessErrorPayload?.additionalProperties).toBe(true);
+  });
+
   it("defines a focused doctor payload schema", async () => {
     const schema = await readSchema();
     const doctorPayload = schema.$defs?.doctorPayload;
@@ -724,6 +831,7 @@ describe("CLI JSON schema artifact", () => {
     expect(docs).toContain("PR Execution Schema");
     expect(docs).toContain("PR Approval Schema");
     expect(docs).toContain("Execution Audit Schema");
+    expect(docs).toContain("Future Write Readiness Schema Definitions");
     expect(docs).toContain("Doctor Schema");
     expect(docs).toContain("Init Schema");
     expect(docs).toContain("Coverage and Exceptions");
@@ -747,7 +855,9 @@ describe("CLI JSON schema artifact", () => {
       { heading: "Execution Audit Schema", required: requiredFields(schema.$defs?.executionAuditPayload) },
       { heading: "Execution Audit Schema", required: requiredFields(schema.$defs?.executionAuditListPayload) },
       { heading: "Execution Audit Schema", required: requiredFields(schema.$defs?.executionAuditErrorPayload) },
-      { heading: "Execution Audit Schema", required: requiredFields(schema.$defs?.executionAuditResponsePayload) }
+      { heading: "Execution Audit Schema", required: requiredFields(schema.$defs?.executionAuditResponsePayload) },
+      { heading: "Future Write Readiness Schema Definitions", required: requiredFields(schema.$defs?.writeReadinessPayload) },
+      { heading: "Future Write Readiness Schema Definitions", required: requiredFields(schema.$defs?.writeReadinessErrorPayload) }
     ];
 
     for (const section of sections) {
@@ -778,6 +888,14 @@ describe("CLI JSON schema artifact", () => {
         required: [
           ...requiredFields(schema.$defs?.executionAuditIntentReport),
           ...requiredFields(schema.$defs?.executionAuditTraceReport)
+        ]
+      },
+      {
+        heading: "Future Write Readiness Schema Definitions",
+        required: [
+          ...requiredFields(schema.$defs?.writeReadinessBlocker),
+          ...requiredFields(schema.$defs?.writeReadinessCheck),
+          ...requiredFields(schema.$defs?.writeReadinessInputs)
         ]
       }
     ];
@@ -905,6 +1023,47 @@ async function readSchema(): Promise<{
       additionalProperties?: boolean;
     };
     executionAuditTraceReport?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
+    };
+    writeReadinessStatus?: {
+      type?: string;
+      enum?: string[];
+    };
+    writeReadinessCategory?: {
+      type?: string;
+      enum?: string[];
+    };
+    writeReadinessCheckStatus?: {
+      type?: string;
+      enum?: string[];
+    };
+    writeReadinessSource?: {
+      type?: string;
+      enum?: string[];
+    };
+    writeReadinessPayload?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
+    };
+    writeReadinessBlocker?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
+    };
+    writeReadinessCheck?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
+    };
+    writeReadinessInputs?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
+    };
+    writeReadinessErrorPayload?: {
       required?: string[];
       properties?: Record<string, unknown>;
       additionalProperties?: boolean;
@@ -1049,6 +1208,47 @@ async function readSchema(): Promise<{
         additionalProperties?: boolean;
       };
       executionAuditTraceReport?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
+      writeReadinessStatus?: {
+        type?: string;
+        enum?: string[];
+      };
+      writeReadinessCategory?: {
+        type?: string;
+        enum?: string[];
+      };
+      writeReadinessCheckStatus?: {
+        type?: string;
+        enum?: string[];
+      };
+      writeReadinessSource?: {
+        type?: string;
+        enum?: string[];
+      };
+      writeReadinessPayload?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
+      writeReadinessBlocker?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
+      writeReadinessCheck?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
+      writeReadinessInputs?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
+      writeReadinessErrorPayload?: {
         required?: string[];
         properties?: Record<string, unknown>;
         additionalProperties?: boolean;
