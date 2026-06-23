@@ -134,6 +134,28 @@ export function summarizeWriteExecutionReadiness(
   };
 }
 
+export function formatWriteExecutionReadiness(report: WriteExecutionReadinessReport): string {
+  const lines = [
+    `Write execution readiness: ${report.intentId}`,
+    `Status: ${report.readinessStatus}`,
+    `Ready: ${formatReadyValue(report)}`,
+    `Run: ${report.runId}`,
+    `Plan: ${report.planId}`,
+    `Approval: ${report.approvalId}`,
+    `Checkpoint: ${report.checkpointId ?? "none"}`,
+    `Execution: ${report.executionEnabled ? "enabled" : "disabled"}`,
+    `Write execution: ${report.writeExecution}`,
+    `Inputs: auditBundle=${report.inputs.auditBundle}, preflight=${report.inputs.preflight}`,
+    "Blockers:",
+    ...formatBlockers(report),
+    "Checks:",
+    ...formatChecks(report),
+    "Use --json for the stable automation contract."
+  ];
+
+  return `${lines.join("\n")}\n`;
+}
+
 function addAuditBundleChecks(
   bundle: ExecutionAuditBundle,
   blockers: WriteExecutionReadinessBlocker[],
@@ -234,4 +256,39 @@ function passCode(code: string): string {
 
 function blockedCode(code: string): string {
   return code.replace(/_unverified$/, "_blocked");
+}
+
+function formatReadyValue(report: WriteExecutionReadinessReport): "yes" | "no" | "unknown" {
+  if (report.ready) {
+    return "yes";
+  }
+
+  return report.readinessStatus === "unknown" ? "unknown" : "no";
+}
+
+function formatBlockers(report: WriteExecutionReadinessReport): string[] {
+  if (report.blockers.length === 0) {
+    return ["  - none"];
+  }
+
+  return groupedLines(report.blockers, (blocker) => `    - ${blocker.code}: ${blocker.message} (${blocker.source})`);
+}
+
+function formatChecks(report: WriteExecutionReadinessReport): string[] {
+  if (report.checks.length === 0) {
+    return ["  - none"];
+  }
+
+  return groupedLines(report.checks, (check) => `    - [${check.status}] ${check.code}: ${check.message} (${check.source})`);
+}
+
+function groupedLines<T extends { category: WriteExecutionReadinessCategory }>(
+  items: T[],
+  formatItem: (item: T) => string
+): string[] {
+  const categories = [...new Set(items.map((item) => item.category))];
+  return categories.flatMap((category) => [
+    `  ${category}:`,
+    ...items.filter((item) => item.category === category).map(formatItem)
+  ]);
 }

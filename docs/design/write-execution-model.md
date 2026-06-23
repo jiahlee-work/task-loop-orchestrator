@@ -103,7 +103,7 @@ Audit logs must avoid recording secrets. Full stdout/stderr should not be persis
 
 ## Write Execution Readiness Report Contract
 
-Status: helper implemented; CLI and schema are not enabled.
+Status: helper and formatter implemented; CLI and schema are not enabled.
 
 Before any write runner is enabled, the system should be able to explain whether a persisted execution intent is ready for write execution. A readiness report answers three questions:
 
@@ -157,30 +157,30 @@ The first helper uses conservative readiness rules:
 - `ready` is returned only when the audit bundle has no blockers and every required preflight check is explicitly present and passing
 - every report keeps `executionEnabled: false`, `writeExecution: "disabled"`, and `hasExecutionResults: false`
 
-### Plain Output Proposal
+### Plain Output
 
-Plain output should be a short human-readable summary:
+The pure formatter returns a short human-readable summary:
 
-- header with intent id and readiness status
-- one line for `Ready: yes|no|unknown`
+- header: `Write execution readiness: <intentId>`
+- status line: `Status: ready|blocked|unknown`
+- ready line: `Ready: yes|no|unknown`
+- intent linkage: run id, plan id, approval id, and checkpoint id
 - disabled marker line: `Execution: disabled` and `Write execution: disabled`
-- blocker summary grouped by category
-- check summary grouped by category
-- note that automation must use JSON for a stable contract
+- input line: `Inputs: auditBundle=available, preflight=missing|partial|available`
+- blocker summary grouped by category, with stable empty output when there are no blockers
+- check summary grouped by category, with stable empty output when there are no checks
+- note: `Use --json for the stable automation contract.`
 
 Plain output must not include raw JSON dumps, raw persisted file contents, stack traces, secrets, raw stdout, raw stderr, exit codes, `executedCommands`, or command execution output.
 
 ### Implementation Plan
 
-The first implementation starts with a pure helper:
+The first implementation includes pure helpers:
 
 - `summarizeWriteExecutionReadiness(bundle, preflight?)`
-
-The helper should reuse `ExecutionAuditBundle` rather than re-reading files. A later store or CLI layer may load the audit bundle first, then pass it to the readiness helper. The helper should treat missing future preflight inputs as `unknown` checks or blockers, not as permission to execute.
-
-Future formatter work can add:
-
 - `formatWriteExecutionReadiness(report)`
+
+The helper reuses `ExecutionAuditBundle` rather than re-reading files. A later store or CLI layer may load the audit bundle first, then pass it to the readiness helper. The helper treats missing future preflight inputs as `unknown` checks, not as permission to execute. The formatter only reads a readiness report and does not parse files, write files, spawn commands, or mutate domain state.
 
 Tests should cover:
 
@@ -204,11 +204,12 @@ Package smoke should not include readiness until a CLI command exists. The activ
 8. Enable the read-only `execution-audit --all --json` list lookup without command execution.
 9. Enable `execution-audit` plain output using pure formatters without command execution.
 10. Add a read-only write execution readiness report helper using audit bundle data and explicit future preflight inputs.
-11. Add a readiness CLI/schema surface only after the helper contract is tested.
-12. Add a single local-only command behind tests and explicit approval, such as branch creation in a temporary fixture repository.
-13. Add commit execution only after staged-file policy and diff verification exist.
-14. Add push only after remote/ref policy and CI handling are documented and tested.
-15. Add GitHub PR creation only after push policy, approval freshness, and `gh pr create` argument construction are covered.
+11. Add a read-only write execution readiness plain formatter without command execution.
+12. Add a readiness CLI/schema surface only after the helper and formatter contracts are tested.
+13. Add a single local-only command behind tests and explicit approval, such as branch creation in a temporary fixture repository.
+14. Add commit execution only after staged-file policy and diff verification exist.
+15. Add push only after remote/ref policy and CI handling are documented and tested.
+16. Add GitHub PR creation only after push policy, approval freshness, and `gh pr create` argument construction are covered.
 
 ## Hard Non-Goals
 

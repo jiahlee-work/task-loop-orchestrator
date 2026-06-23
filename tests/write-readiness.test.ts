@@ -6,7 +6,7 @@ import {
   createExecutionIntent,
   summarizeExecutionAuditBundle
 } from "../src/execution-intents.js";
-import { summarizeWriteExecutionReadiness } from "../src/write-readiness.js";
+import { formatWriteExecutionReadiness, summarizeWriteExecutionReadiness } from "../src/write-readiness.js";
 
 describe("write execution readiness helper", () => {
   it("blocks readiness when the audit bundle contains blocked traces or blocked reasons", () => {
@@ -116,6 +116,89 @@ describe("write execution readiness helper", () => {
       ])
     );
     expectNoUnsafeReadinessOutput(report);
+  });
+
+  it("formats blocked readiness reports with grouped blockers and disabled markers", () => {
+    const approvedPlan = prPlan("checkpoint-old");
+    const currentPlan = prPlan("checkpoint-current", ["Repository status is not clean."]);
+    const report = summarizeWriteExecutionReadiness(
+      executionAuditBundle("2026-06-22T00:00:00.000Z", {
+        approvedPlan,
+        currentPlan
+      })
+    );
+
+    const output = formatWriteExecutionReadiness(report);
+
+    expect(output).toContain(`Write execution readiness: ${report.intentId}`);
+    expect(output).toContain("Status: blocked");
+    expect(output).toContain("Ready: no");
+    expect(output).toContain(`Run: ${report.runId}`);
+    expect(output).toContain(`Plan: ${report.planId}`);
+    expect(output).toContain(`Approval: ${report.approvalId}`);
+    expect(output).toContain("Execution: disabled");
+    expect(output).toContain("Write execution: disabled");
+    expect(output).toContain("Blockers:");
+    expect(output).toContain("  trace:");
+    expect(output).toContain("blocked_dry_run_trace");
+    expect(output).toContain("  precondition:");
+    expect(output).toContain("Repository status is not clean.");
+    expect(output).toContain("Checks:");
+    expect(output).toContain("[blocked]");
+    expect(output).toContain("Use --json for the stable automation contract.");
+    expectNoUnsafeReadinessOutput(output);
+  });
+
+  it("formats unknown readiness reports with unknown checks", () => {
+    const report = summarizeWriteExecutionReadiness(executionAuditBundle("2026-06-22T00:00:00.000Z"));
+
+    const output = formatWriteExecutionReadiness(report);
+
+    expect(output).toContain("Status: unknown");
+    expect(output).toContain("Ready: unknown");
+    expect(output).toContain("Inputs: auditBundle=available, preflight=missing");
+    expect(output).toContain("approval_freshness_unverified");
+    expect(output).toContain("ci_policy_unverified");
+    expect(output).toContain("[unknown]");
+    expect(output).toContain("Blockers:");
+    expect(output).toContain("  - none");
+    expectNoUnsafeReadinessOutput(output);
+  });
+
+  it("formats ready reports with pass checks and stable empty blocker output", () => {
+    const report = summarizeWriteExecutionReadiness(
+      executionAuditBundle("2026-06-22T00:00:00.000Z", {
+        commandSecret: "top-secret-readiness"
+      }),
+      passingPreflight()
+    );
+
+    const output = formatWriteExecutionReadiness(report);
+
+    expect(output).toContain("Status: ready");
+    expect(output).toContain("Ready: yes");
+    expect(output).toContain("Inputs: auditBundle=available, preflight=available");
+    expect(output).toContain("Blockers:");
+    expect(output).toContain("  - none");
+    expect(output).toContain("[pass]");
+    expect(output).toContain("approval_freshness_passed");
+    expect(output).toContain("ci_policy_passed");
+    expectNoUnsafeReadinessOutput(output);
+  });
+
+  it("formats empty report sections without exposing unsafe fields", () => {
+    const report = {
+      ...summarizeWriteExecutionReadiness(executionAuditBundle("2026-06-22T00:00:00.000Z"), passingPreflight()),
+      blockers: [],
+      checks: []
+    };
+
+    const output = formatWriteExecutionReadiness(report);
+
+    expect(output).toContain("Blockers:");
+    expect(output).toContain("Checks:");
+    expect(output.match(/  - none/g)).toHaveLength(2);
+    expectNoUnsafeReadinessOutput(output);
   });
 });
 
