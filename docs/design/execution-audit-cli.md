@@ -1,33 +1,30 @@
 # Execution Audit Read-Only CLI Surface
 
-Status: partial MVP enabled for `execution-audit --intent <intentId> --json`; `--all` and plain output remain deferred.
+Status: JSON MVP enabled for `execution-audit --intent <intentId> --json` and `execution-audit --all --json`; plain output remains deferred.
 
-This document describes the read-only CLI surface for inspecting persisted execution intents, dry-run traces, and audit bundles. The single-intent JSON command is implemented, but it does not enable command execution. Listing all intents, plain output, and write-side actions remain future work.
+This document describes the read-only CLI surface for inspecting persisted execution intents, dry-run traces, and audit bundles. The single-intent and all-intents JSON commands are implemented, but they do not enable command execution. Plain output and write-side actions remain future work.
 
-## MVP Command
+## MVP Commands
 
-The enabled first command is:
+The enabled JSON commands are:
 
 ```bash
 task-loop-orchestrator execution-audit --intent <intentId> --json
-```
-
-This starts with one JSON-only command that returns an `ExecutionAuditBundle` assembled by `FileRunStore.loadExecutionAuditBundle(intentId)`. A separate all-intents listing remains deferred until the single-intent contract is stable:
-
-```bash
 task-loop-orchestrator execution-audit --all --json
 ```
+
+The single-intent command returns an `ExecutionAuditBundle` assembled by `FileRunStore.loadExecutionAuditBundle(intentId)`. The all-intents command returns a list wrapper assembled from `FileRunStore.listExecutionAuditBundles()`.
 
 Alternative command families such as `execution-intents`, `execution-traces`, or `audit execution` are intentionally deferred. A single `execution-audit` surface keeps the first CLI contract focused on the review object users need before any write runner exists.
 
 ## Arguments
 
 - `--intent <intentId>`: load one persisted execution intent and matching dry-run traces.
-- `--all`: deferred; list audit bundles for all persisted intents in a later milestone.
-- `--json`: required for the MVP. Plain output should be deferred until the JSON contract has shipped.
+- `--all`: list audit bundles for all persisted intents.
+- `--json`: required for the MVP. Plain output remains deferred until there is a separate human-readable output design.
 - `--root <path>`: defer unless the broader CLI adopts root override semantics. The current CLI uses `process.cwd()`.
 
-`--intent` is required in the current implementation. `--all` is rejected as not implemented, and plain output is rejected because the MVP is JSON-only.
+Exactly one of `--intent` or `--all` should be used. Plain output is rejected because the MVP is JSON-only.
 
 ## JSON Output
 
@@ -53,25 +50,25 @@ The payload should preserve the current `ExecutionAuditBundle` top-level fields:
 - `writeExecution: "disabled"`
 - `hasExecutionResults: false`
 
-When `--all` is implemented, the payload should use the list wrapper described in the `--all JSON List Contract Draft` section rather than returning a bare array.
+`--all` uses the list wrapper described in the `--all JSON List Contract` section rather than returning a bare array.
 
-## `--all` JSON List Contract Draft
+## `--all` JSON List Contract
 
-Status: design draft, not enabled. The current CLI must continue to reject `execution-audit --all --json` with the existing `execution_audit_all_deferred` error envelope until a later implementation milestone enables this contract.
+Status: enabled for `execution-audit --all --json`.
 
-The proposed read-only command is:
+The read-only command is:
 
 ```bash
 task-loop-orchestrator execution-audit --all --json
 ```
 
-The command should keep the existing CLI JSON envelope through `printJson("execution-audit", payload)`:
+The command keeps the existing CLI JSON envelope through `printJson("execution-audit", payload)`:
 
 - `schemaVersion: 1`
 - `command: "execution-audit"`
 - `createdAt`
 
-The proposed payload is a list-specific success object:
+The payload is a list-specific success object:
 
 - `status: "ok"`
 - `bundleCount`: number of returned audit bundles
@@ -80,7 +77,7 @@ The proposed payload is a list-specific success object:
 - `writeExecution: "disabled"`
 - `hasExecutionResults: false`
 
-The payload should not return a bare array. Keeping disabled execution markers at the list level lets automation distinguish this read-only inventory response from any future execution result.
+The payload does not return a bare array. Keeping disabled execution markers at the list level lets automation distinguish this read-only inventory response from any future execution result.
 
 Ordering should follow `FileRunStore.listExecutionAuditBundles()`: bundles are ordered by the underlying execution intent `createdAt` value in descending order, newest first. Empty state is a successful list response, not an error:
 
@@ -100,13 +97,13 @@ Ordering should follow `FileRunStore.listExecutionAuditBundles()`: bundles are o
 
 ### Invalid Persisted File Policy For `--all`
 
-The recommended first implementation policy is fail-fast with a single JSON error envelope. If any persisted execution intent or execution trace file cannot be parsed or validated, `execution-audit --all --json` should return `status: "error"` with `errorCode: "invalid_execution_intent_file"` or `errorCode: "invalid_execution_trace_file"` and safe `details.kind`.
+The implementation policy is fail-fast with a single JSON error envelope. If any persisted execution intent or execution trace file cannot be parsed or validated, `execution-audit --all --json` returns `status: "error"` with `errorCode: "invalid_execution_intent_file"` or `errorCode: "invalid_execution_trace_file"` and safe `details.kind`.
 
-This is preferred over partial success because the audit list is used for review and traceability; silently skipping invalid files or returning valid bundles with `errors[]` can hide corrupted audit state from automation. A future milestone can design partial success if there is a concrete UI need, but the first list implementation should keep the failure mode obvious and machine-readable.
+This is preferred over partial success because the audit list is used for review and traceability; silently skipping invalid files or returning valid bundles with `errors[]` can hide corrupted audit state from automation. A future milestone can design partial success if there is a concrete UI need, but the first list implementation keeps the failure mode obvious and machine-readable.
 
 All policies must avoid exposing raw file contents, stack traces, secrets, stdout, stderr, exit codes, or execution results. Error paths remain read-only and must not mutate files or run external commands.
 
-Future schema work should add a dedicated list payload definition, for example `executionAuditListPayload`, and update `executionAuditResponsePayload` to allow `ExecutionAuditBundle | executionAuditListPayload | executionAuditErrorPayload`. The production schema branch should not be enabled until the CLI actually returns the list payload.
+The schema includes `executionAuditListPayload`, and `executionAuditResponsePayload` allows `ExecutionAuditBundle | executionAuditListPayload | executionAuditErrorPayload`.
 
 ## Safety Boundary
 
@@ -129,15 +126,15 @@ It may read `.orchestrator/execution-intents/` and `.orchestrator/execution-trac
 
 ## Missing Data Behavior
 
-- No persisted intents: return an enveloped JSON response with `status: "not_found"` and `intent: null` for `--intent`, or `bundles: []` and `bundleCount: 0` for `--all` after `--all` is implemented.
+- No persisted intents: return an enveloped JSON response with `status: "not_found"` and `intent: null` for `--intent`, or `bundles: []` and `bundleCount: 0` for `--all`.
 - Intent not found: return `status: "not_found"`, `intentId`, and `intent: null`.
 - No traces for an existing intent: return a valid bundle with `traces: []`, `traceCount: 0`, and disabled execution markers.
 - Trace mismatch: include only matching traces in `traces`; report unrelated trace ids through `mismatchedTraceCount` and `mismatchedTraceIds`.
-- Invalid persisted file: return an error envelope after the error contract is implemented; until then, fail with a clear read/parse error and do not mutate files.
+- Invalid persisted file: return a JSON error envelope and do not mutate files.
 
 ## JSON Error Envelope Draft
 
-Status: enabled for success bundles, missing intents, missing `--intent`, deferred `--all` requests, and invalid persisted intent/trace files. Plain output and `--all` bundle lists remain deferred.
+Status: enabled for success bundles, list bundles, missing intents, missing `--intent`, and invalid persisted intent/trace files. Plain output remains deferred.
 
 The first implementation uses an error payload that keeps the common CLI metadata envelope while separating success bundles from failures:
 
@@ -156,19 +153,18 @@ The first implementation uses an error payload that keeps the common CLI metadat
 
 Candidate top-level fields:
 
-- `status`: `not_found` for missing records, or `error` for usage, deferred, and invalid persisted file cases that are returned as JSON.
-- `errorCode`: stable machine-readable code such as `execution_intent_not_found`, `execution_audit_all_deferred`, `execution_audit_missing_intent`, `invalid_execution_intent_file`, or `invalid_execution_trace_file`.
+- `status`: `not_found` for missing records, or `error` for usage and invalid persisted file cases that are returned as JSON.
+- `errorCode`: stable machine-readable code such as `execution_intent_not_found`, `execution_audit_missing_intent`, `invalid_execution_intent_file`, or `invalid_execution_trace_file`.
 - `message`: short human-readable explanation.
 - `intentId`: included when the user supplied or implied a specific intent id.
 - `intent`: `null` for not-found responses.
 - `details`: optional structured context for invalid persisted files. The first implementation only exposes `{ "kind": "execution_intent" }` or `{ "kind": "execution_trace" }` and avoids raw file contents, stack traces, secrets, stdout, stderr, and exit codes.
 
-The schema models `ExecutionAuditBundle | executionAuditErrorPayload` through `executionAuditResponsePayload` rather than mixing error fields into the success bundle definition. The command-specific branch stays conditional on `command: "execution-audit"` while allowing either the success payload with `intent` and `traces`, or the error payload with `status`, `errorCode`, and `message`.
+The schema models `ExecutionAuditBundle | executionAuditListPayload | executionAuditErrorPayload` through `executionAuditResponsePayload` rather than mixing error fields into the success bundle definition. The command-specific branch stays conditional on `command: "execution-audit"` while allowing either the success payload with `intent` and `traces`, the list payload with `status`, `bundleCount`, and `bundles`, or the error payload with `status`, `errorCode`, and `message`.
 
 Error cases to cover:
 
 - intent not found, including the case where no persisted intents exist
-- `--all --json` rejected because it remains deferred
 - missing `--intent` when `--json` is present
 
 - invalid persisted intent file
@@ -191,6 +187,7 @@ The first implementation milestone includes:
 
 - `CliJsonCommand` support for `execution-audit`.
 - `schemas/cli-json.schema.json` command enum and command-specific payload branch.
+- `executionAuditListPayload` support for `execution-audit --all --json`.
 - `docs/json-output.md` command-specific schema documentation.
 - `docs/commands.md` entry for the enabled command.
 - package smoke coverage for installed binary JSON output.

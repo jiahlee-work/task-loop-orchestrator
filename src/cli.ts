@@ -13,7 +13,11 @@ import { createCliJsonReport, type CliJsonCommand } from "./cli-json.js";
 import type { ExecutorMode, GitHubProviderMode, PermissionMode, ReviewerMode } from "./domain.js";
 import { runDoctor, type DoctorReport } from "./doctor.js";
 import { CodexCliExecutor } from "./executors.js";
-import { summarizeExecutionAuditBundle } from "./execution-intents.js";
+import {
+  summarizeExecutionAuditBundle,
+  summarizeExecutionAuditBundles,
+  summarizeExecutionAuditList
+} from "./execution-intents.js";
 import { initProject } from "./init.js";
 import { createIntegrationCheckpoint } from "./integration.js";
 import { RootOrchestrator, createTaskSpec } from "./orchestrator.js";
@@ -99,7 +103,7 @@ function printUsage(): void {
   task-loop-orchestrator pr-plan [runId] [--json]
   task-loop-orchestrator approve-pr [runId] --approved-by name [--reason text] [--json]
   task-loop-orchestrator pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]
-  task-loop-orchestrator execution-audit --intent intentId --json
+  task-loop-orchestrator execution-audit (--intent intentId|--all) --json
   task-loop-orchestrator checks [ref] [--json]`);
 }
 
@@ -125,7 +129,6 @@ function printJson(command: CliJsonCommand, payload: object): void {
 function printExecutionAuditError(
   errorCode:
     | "execution_intent_not_found"
-    | "execution_audit_all_deferred"
     | "execution_audit_missing_intent"
     | "invalid_execution_intent_file"
     | "invalid_execution_trace_file",
@@ -533,10 +536,34 @@ async function executionAuditCommand(args: ParsedArgs): Promise<void> {
   }
 
   if (args.flags.all === true) {
-    printExecutionAuditError(
-      "execution_audit_all_deferred",
-      "execution-audit --all is not implemented yet."
-    );
+    const store = new FileRunStore(process.cwd());
+    let intents: Awaited<ReturnType<FileRunStore["listExecutionIntents"]>>;
+    try {
+      intents = await store.listExecutionIntents();
+    } catch (error) {
+      if (isInvalidExecutionIntentFileError(error)) {
+        printExecutionAuditError("invalid_execution_intent_file", "Execution intent file is invalid.", {
+          details: { kind: "execution_intent" }
+        });
+        return;
+      }
+      throw error;
+    }
+
+    let traces: Awaited<ReturnType<FileRunStore["listExecutionTraces"]>>;
+    try {
+      traces = await store.listExecutionTraces();
+    } catch (error) {
+      if (isInvalidExecutionTraceFileError(error)) {
+        printExecutionAuditError("invalid_execution_trace_file", "Execution trace file is invalid.", {
+          details: { kind: "execution_trace" }
+        });
+        return;
+      }
+      throw error;
+    }
+
+    printJson("execution-audit", summarizeExecutionAuditList(summarizeExecutionAuditBundles(intents, traces)));
     return;
   }
 

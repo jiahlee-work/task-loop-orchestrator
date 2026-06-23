@@ -321,13 +321,13 @@ describe("release readiness documentation", () => {
     ]);
     expectContainsAll(auditCliDesign, [
       "# Execution Audit Read-Only CLI Surface",
-      "Status: partial MVP enabled for `execution-audit --intent <intentId> --json`; `--all` and plain output remain deferred.",
-      "does not enable command execution",
-      "Listing all intents, plain output, and write-side actions remain future work.",
+      "Status: JSON MVP enabled for `execution-audit --intent <intentId> --json` and `execution-audit --all --json`; plain output remains deferred.",
+      "do not enable command execution",
+      "Plain output and write-side actions remain future work.",
       "task-loop-orchestrator execution-audit --intent <intentId> --json",
       "task-loop-orchestrator execution-audit --all --json",
       "`--intent <intentId>`",
-      "`--all`: deferred",
+      "`--all`: list audit bundles for all persisted intents.",
       "`--json`: required",
       "existing CLI JSON envelope",
       "command: \"execution-audit\"",
@@ -335,10 +335,8 @@ describe("release readiness documentation", () => {
       "`executionEnabled: false`",
       "`writeExecution: \"disabled\"`",
       "`hasExecutionResults: false`",
-      "`--all` JSON List Contract Draft",
-      "Status: design draft, not enabled.",
-      "current CLI must continue to reject `execution-audit --all --json`",
-      "`execution_audit_all_deferred` error envelope",
+      "`--all` JSON List Contract",
+      "Status: enabled for `execution-audit --all --json`.",
       "task-loop-orchestrator execution-audit --all --json",
       "`status: \"ok\"`",
       "`bundleCount`",
@@ -358,7 +356,6 @@ describe("release readiness documentation", () => {
       "raw file contents, stack traces, secrets, stdout, stderr, exit codes, or execution results",
       "`executionAuditListPayload`",
       "ExecutionAuditBundle | executionAuditListPayload | executionAuditErrorPayload",
-      "should not be enabled until the CLI actually returns the list payload",
       "no file writes",
       "no external command execution",
       "no `child_process` or shell execution",
@@ -373,11 +370,10 @@ describe("release readiness documentation", () => {
       "No traces for an existing intent",
       "Trace mismatch",
       "JSON Error Envelope Draft",
-      "Status: enabled for success bundles, missing intents, missing `--intent`, deferred `--all` requests, and invalid persisted intent/trace files.",
-      "`status`: `not_found` for missing records, or `error` for usage, deferred, and invalid persisted file cases",
+      "Status: enabled for success bundles, list bundles, missing intents, missing `--intent`, and invalid persisted intent/trace files.",
+      "`status`: `not_found` for missing records, or `error` for usage and invalid persisted file cases",
       "`errorCode`: stable machine-readable code",
       "`execution_intent_not_found`",
-      "`execution_audit_all_deferred`",
       "`execution_audit_missing_intent`",
       "`invalid_execution_intent_file`",
       "`invalid_execution_trace_file`",
@@ -389,7 +385,7 @@ describe("release readiness documentation", () => {
       "invalid persisted intent file",
       "invalid persisted trace file",
       "missing `--json`, which still uses the existing non-JSON usage error path",
-      "ExecutionAuditBundle | executionAuditErrorPayload",
+      "ExecutionAuditBundle | executionAuditListPayload | executionAuditErrorPayload",
       "executionAuditResponsePayload",
       "no file writes, no external command execution, no branch creation, no commit, no push",
       "decide whether invalid persisted file envelopes need additional structured `details` beyond `kind`",
@@ -609,7 +605,7 @@ describe("command reference documentation", () => {
       "pr-plan [runId] [--json]",
       "approve-pr [runId] --approved-by name [--reason text] [--json]",
       "pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]",
-      "execution-audit --intent intentId --json",
+      "execution-audit (--intent intentId|--all) --json",
       "checks [ref] [--json]"
     ]);
     expect(commandHeadings).toEqual([
@@ -694,7 +690,7 @@ describe("command reference documentation", () => {
       "JSON error envelopes with disabled execution markers",
       "does not write files",
       "does not execute commands",
-      "`--all` list output and plain output are not implemented yet"
+      "Plain output is not implemented yet"
     ]);
 
     expectSectionContains(sections, "init", ["writes local bootstrap files only", "orchestrator.config.json", ".gitignore"]);

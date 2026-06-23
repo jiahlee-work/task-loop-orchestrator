@@ -103,11 +103,11 @@ The nested `intent` report fixes `id`, `runId`, `planId`, `approvalId`, `status`
 
 Each `traces[]` item fixes `id`, `intentId`, `runId`, `planId`, `approvalId`, `action`, `argv`, `reason`, `status`, `policyVersion`, `policyDecision`, `blockedReasonCount`, `blockedReasons`, `createdAt`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`, with optional `checkpointId`.
 
-Execution audit output is read-only and intentionally excludes `executedCommands`, raw `stdout`, raw `stderr`, and `exitCode`. `--all` list output and plain output are deferred.
+Execution audit output is read-only and intentionally excludes `executedCommands`, raw `stdout`, raw `stderr`, and `exitCode`. Plain output is deferred.
 
-The deferred `execution-audit --all --json` contract is documented as a design draft in [`design/execution-audit-cli.md`](design/execution-audit-cli.md). It should use a list wrapper with `status`, `bundleCount`, `bundles`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`, but that payload is not enabled in the production schema until the CLI actually returns it.
+`execution-audit --all --json` uses a list wrapper with `status`, `bundleCount`, `bundles`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`. Empty state is a successful response with `status: "ok"`, `bundleCount: 0`, and `bundles: []`. Bundles follow `FileRunStore.listExecutionAuditBundles()` ordering: execution intent `createdAt` descending, newest first.
 
-The `execution-audit` command-specific branch uses `executionAuditResponsePayload` to allow either a success `executionAuditPayload` bundle or an `executionAuditErrorPayload`. Implemented error envelopes cover missing intents, missing `--intent`, deferred `--all` requests, invalid persisted intent files, and invalid persisted trace files.
+The `execution-audit` command-specific branch uses `executionAuditResponsePayload` to allow either a success `executionAuditPayload` bundle, an `executionAuditListPayload`, or an `executionAuditErrorPayload`. Implemented error envelopes cover missing intents, missing `--intent`, invalid persisted intent files, and invalid persisted trace files.
 
 Error payloads fix `status`, `errorCode`, `message`, `intent`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`, with optional `intentId` and `details`. `intent` is `null` for these error responses. Invalid persisted file envelopes expose only minimal `details.kind` values such as `execution_intent` or `execution_trace`; they do not include raw file contents, stack traces, secrets, stdout, stderr, or exit codes.
 

@@ -416,6 +416,15 @@ export interface ExecutionAuditBundle {
   hasExecutionResults: false;
 }
 
+export interface ExecutionAuditListReport {
+  status: "ok";
+  bundleCount: number;
+  bundles: ExecutionAuditBundle[];
+  executionEnabled: false;
+  writeExecution: "disabled";
+  hasExecutionResults: false;
+}
+
 export type ProposedSubtask = Omit<Subtask, "status" | "createdAt" | "updatedAt"> &
   Partial<Pick<Subtask, "createdAt" | "updatedAt">>;
 

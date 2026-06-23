@@ -681,7 +681,6 @@
           "type": "string",
           "enum": [
             "execution_intent_not_found",
-            "execution_audit_all_deferred",
             "execution_audit_missing_intent",
             "invalid_execution_intent_file",
             "invalid_execution_trace_file"
@@ -719,6 +718,42 @@
       },
       "additionalProperties": true
     },
+    "executionAuditListPayload": {
+      "type": "object",
+      "required": [
+        "status",
+        "bundleCount",
+        "bundles",
+        "executionEnabled",
+        "writeExecution",
+        "hasExecutionResults"
+      ],
+      "properties": {
+        "status": {
+          "const": "ok"
+        },
+        "bundleCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bundles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/executionAuditPayload"
+          }
+        },
+        "executionEnabled": {
+          "const": false
+        },
+        "writeExecution": {
+          "const": "disabled"
+        },
+        "hasExecutionResults": {
+          "const": false
+        }
+      },
+      "additionalProperties": true
+    },
     "executionAuditResponsePayload": {
       "type": "object",
       "required": ["executionEnabled", "writeExecution", "hasExecutionResults"],
@@ -736,6 +771,9 @@
       "oneOf": [
         {
           "$ref": "#/$defs/executionAuditPayload"
+        },
+        {
+          "$ref": "#/$defs/executionAuditListPayload"
         },
         {
           "$ref": "#/$defs/executionAuditErrorPayload"
@@ -1163,7 +1201,7 @@
             "const": "execution-audit"
           }
         },
-        "required": ["command", "intent"]
+        "required": ["command"]
       },
       "then": {
         "$ref": "#/$defs/executionAuditResponsePayload"

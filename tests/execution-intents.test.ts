@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -13,6 +13,7 @@ import {
   parseExecutionTraceRecord,
   summarizeExecutionAuditBundle,
   summarizeExecutionAuditBundles,
+  summarizeExecutionAuditList,
   summarizeExecutionIntent,
   summarizeExecutionIntents
 } from "../src/execution-intents.js";
@@ -112,6 +113,19 @@ describe("execution intent persistence", () => {
       const intents = await store.listExecutionIntents();
 
       expect(intents.map((intent) => intent.id)).toEqual([newer.id, older.id]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("returns empty execution intent and trace lists without creating store directories", async () => {
+    const root = await mkdtemp(join(tmpdir(), "task-loop-intent-empty-"));
+    const store = new FileRunStore(root);
+
+    try {
+      await expect(store.listExecutionIntents()).resolves.toEqual([]);
+      await expect(store.listExecutionTraces()).resolves.toEqual([]);
+      await expect(access(join(root, ".orchestrator"))).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -560,6 +574,44 @@ describe("execution intent persistence", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+
+  it("summarizes execution audit lists with disabled execution markers", () => {
+    const olderIntent = executionIntent("2026-06-22T00:00:00.000Z");
+    const newerIntent = executionIntent("2026-06-23T00:00:00.000Z");
+    const bundles = summarizeExecutionAuditBundles(
+      [newerIntent, olderIntent],
+      [
+        ...createExecutionDryRunTraces(olderIntent, { createdAt: "2026-06-22T01:00:00.000Z" }),
+        ...createExecutionDryRunTraces(newerIntent, { createdAt: "2026-06-23T01:00:00.000Z" })
+      ]
+    );
+
+    const report = summarizeExecutionAuditList(bundles);
+
+    expect(report.status).toBe("ok");
+    expect(report.bundleCount).toBe(2);
+    expect(report.bundles.map((bundle) => bundle.intent.id)).toEqual([newerIntent.id, olderIntent.id]);
+    expect(report.executionEnabled).toBe(false);
+    expect(report.writeExecution).toBe("disabled");
+    expect(report.hasExecutionResults).toBe(false);
+    expect("executedCommands" in report).toBe(false);
+    expect("stdout" in report).toBe(false);
+    expect("stderr" in report).toBe(false);
+    expect("exitCode" in report).toBe(false);
+  });
+
+  it("summarizes empty execution audit lists as successful read-only reports", () => {
+    const report = summarizeExecutionAuditList([]);
+
+    expect(report).toEqual({
+      status: "ok",
+      bundleCount: 0,
+      bundles: [],
+      executionEnabled: false,
+      writeExecution: "disabled",
+      hasExecutionResults: false
+    });
   });
 
   it("loads stable execution audit bundles when no traces are stored", async () => {

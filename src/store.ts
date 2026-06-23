@@ -136,8 +136,7 @@ export class FileRunStore {
   }
 
   async listExecutionIntents(): Promise<ExecutionIntent[]> {
-    await mkdir(this.executionIntentsDir, { recursive: true });
-    const entries = await readdir(this.executionIntentsDir);
+    const entries = await readDirectoryIfPresent(this.executionIntentsDir);
     const intents = await Promise.all(
       entries
         .filter((entry) => entry.endsWith(".json"))
@@ -161,8 +160,7 @@ export class FileRunStore {
   }
 
   async listExecutionTraces(): Promise<ExecutionTraceRecord[]> {
-    await mkdir(this.executionTracesDir, { recursive: true });
-    const entries = await readdir(this.executionTracesDir);
+    const entries = await readDirectoryIfPresent(this.executionTracesDir);
     const traces = await Promise.all(
       entries
         .filter((entry) => entry.endsWith(".json"))
@@ -225,6 +223,26 @@ export class FileRunStore {
   private executionTraceFilePath(traceId: string): string {
     return join(this.executionTracesDir, `${traceId}.json`);
   }
+}
+
+async function readDirectoryIfPresent(path: string): Promise<string[]> {
+  try {
+    return await readdir(path);
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      return [];
+    }
+    throw error;
+  }
+}
+
+function isMissingFileError(error: unknown): error is { code: "ENOENT" } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "ENOENT"
+  );
 }
 
 export function migrateRun(run: Partial<LoopRun>): LoopRun {

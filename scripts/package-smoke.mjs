@@ -124,9 +124,21 @@ async function main() {
     });
 
     await runStep("execution audit json", async () => {
+      const emptyAuditList = await run(bin, ["execution-audit", "--all", "--json"], { cwd: projectDir });
+      assertExecutionAuditListReport(parseJson(emptyAuditList), {
+        bundleCount: 0,
+        intentIds: []
+      });
+
       const fixture = await writeExecutionAuditFixture(projectDir);
       const audit = await run(bin, ["execution-audit", "--intent", fixture.intentId, "--json"], { cwd: projectDir });
       assertExecutionAuditReport(parseJson(audit), fixture.intentId);
+
+      const auditList = await run(bin, ["execution-audit", "--all", "--json"], { cwd: projectDir });
+      assertExecutionAuditListReport(parseJson(auditList), {
+        bundleCount: 1,
+        intentIds: [fixture.intentId]
+      });
 
       const missingAudit = await run(bin, ["execution-audit", "--intent", "intent_missing", "--json"], {
         cwd: projectDir
@@ -143,12 +155,6 @@ async function main() {
         errorCode: "execution_audit_missing_intent"
       });
 
-      const allDeferred = await run(bin, ["execution-audit", "--all", "--json"], { cwd: projectDir });
-      assertExecutionAuditErrorReport(parseJson(allDeferred), {
-        status: "error",
-        errorCode: "execution_audit_all_deferred"
-      });
-
       const invalidIntent = await writeInvalidExecutionIntentFixture(projectDir);
       const invalidIntentResult = await run(bin, ["execution-audit", "--intent", invalidIntent.intentId, "--json"], {
         cwd: projectDir
@@ -160,6 +166,14 @@ async function main() {
         detailsKind: "execution_intent",
         forbiddenText: invalidIntent.secret
       });
+      const invalidIntentListResult = await run(bin, ["execution-audit", "--all", "--json"], { cwd: projectDir });
+      assertExecutionAuditErrorReport(parseJson(invalidIntentListResult), {
+        status: "error",
+        errorCode: "invalid_execution_intent_file",
+        detailsKind: "execution_intent",
+        forbiddenText: invalidIntent.secret
+      });
+      await rm(invalidIntent.path, { force: true });
 
       const invalidTrace = await writeInvalidExecutionTraceFixture(projectDir);
       const invalidTraceResult = await run(bin, ["execution-audit", "--intent", fixture.intentId, "--json"], {
@@ -169,6 +183,13 @@ async function main() {
         status: "error",
         errorCode: "invalid_execution_trace_file",
         intentId: fixture.intentId,
+        detailsKind: "execution_trace",
+        forbiddenText: invalidTrace.secret
+      });
+      const invalidTraceListResult = await run(bin, ["execution-audit", "--all", "--json"], { cwd: projectDir });
+      assertExecutionAuditErrorReport(parseJson(invalidTraceListResult), {
+        status: "error",
+        errorCode: "invalid_execution_trace_file",
         detailsKind: "execution_trace",
         forbiddenText: invalidTrace.secret
       });
@@ -194,7 +215,7 @@ async function main() {
     console.log("- all JSON smoke commands include schema metadata");
     console.log("- run/resume/status JSON and plain status work through the installed binary");
     console.log("- checkpoint/pr-plan/pr-exec/approve-pr JSON fields work through the installed binary");
-    console.log("- execution-audit JSON reads fixtures and returns stable error envelopes through the installed binary");
+    console.log("- execution-audit JSON reads fixtures, lists bundles, and returns stable error envelopes through the installed binary");
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
@@ -289,7 +310,7 @@ async function writeInvalidExecutionIntentFixture(projectDir) {
   await mkdir(intentDir, { recursive: true });
   await writeFile(join(intentDir, `${intentId}.json`), `${JSON.stringify({ id: "", secret }, null, 2)}\n`);
 
-  return { intentId, secret };
+  return { intentId, secret, path: join(intentDir, `${intentId}.json`) };
 }
 
 async function writeInvalidExecutionTraceFixture(projectDir) {
@@ -297,9 +318,10 @@ async function writeInvalidExecutionTraceFixture(projectDir) {
   const traceDir = join(projectDir, ".orchestrator", "execution-traces");
 
   await mkdir(traceDir, { recursive: true });
-  await writeFile(join(traceDir, "trace_invalid_package_smoke.json"), `${JSON.stringify({ id: "", secret }, null, 2)}\n`);
+  const path = join(traceDir, "trace_invalid_package_smoke.json");
+  await writeFile(path, `${JSON.stringify({ id: "", secret }, null, 2)}\n`);
 
-  return { secret };
+  return { secret, path };
 }
 
 async function runStep(label, fn) {
@@ -456,6 +478,23 @@ function assertExecutionAuditReport(report, intentId) {
   assertEqual(report.executionEnabled, false, "execution-audit JSON should keep execution disabled");
   assertEqual(report.writeExecution, "disabled", "execution-audit JSON should keep write execution disabled");
   assertEqual(report.hasExecutionResults, false, "execution-audit JSON should not expose execution results");
+  assertNoExecutionResultFields(report);
+}
+
+function assertExecutionAuditListReport(report, expected) {
+  assertEnvelope(report, "execution-audit");
+  assertEqual(report.status, "ok", "execution-audit list JSON should include ok status");
+  assertEqual(report.bundleCount, expected.bundleCount, "execution-audit list JSON should include bundle count");
+  assertArray(report.bundles, "execution-audit list JSON should include bundles");
+  assertEqual(report.bundles.length, expected.bundleCount, "execution-audit list JSON bundle count should match array length");
+  assertEqual(report.executionEnabled, false, "execution-audit list JSON should keep execution disabled");
+  assertEqual(report.writeExecution, "disabled", "execution-audit list JSON should keep write execution disabled");
+  assertEqual(report.hasExecutionResults, false, "execution-audit list JSON should not expose execution results");
+  assertEqual(
+    JSON.stringify(report.bundles.map((bundle) => bundle.intent?.id)),
+    JSON.stringify(expected.intentIds),
+    "execution-audit list JSON should preserve ordered intent ids"
+  );
   assertNoExecutionResultFields(report);
 }
 

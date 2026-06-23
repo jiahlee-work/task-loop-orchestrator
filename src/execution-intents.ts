@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type {
   ApprovalRecord,
   ExecutionAuditBundle,
+  ExecutionAuditListReport,
   ExecutionIntent,
   ExecutionIntentCommandCandidate,
   ExecutionIntentCommandActionSummary,
@@ -260,6 +261,17 @@ export function summarizeExecutionAuditBundles(
   traces: ExecutionTraceRecord[]
 ): ExecutionAuditBundle[] {
   return intents.map((intent) => summarizeExecutionAuditBundle(intent, traces));
+}
+
+export function summarizeExecutionAuditList(bundles: ExecutionAuditBundle[]): ExecutionAuditListReport {
+  return {
+    status: "ok",
+    bundleCount: bundles.length,
+    bundles,
+    executionEnabled: false,
+    writeExecution: "disabled",
+    hasExecutionResults: false
+  };
 }
 
 function dryRunTraceBlockedReasons(intent: ExecutionIntent): string[] {
