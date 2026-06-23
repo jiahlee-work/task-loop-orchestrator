@@ -13,6 +13,7 @@ import { createCliJsonReport, type CliJsonCommand } from "./cli-json.js";
 import type { ExecutorMode, GitHubProviderMode, PermissionMode, ReviewerMode } from "./domain.js";
 import { runDoctor, type DoctorReport } from "./doctor.js";
 import { CodexCliExecutor } from "./executors.js";
+import { summarizeExecutionAuditBundle } from "./execution-intents.js";
 import { initProject } from "./init.js";
 import { createIntegrationCheckpoint } from "./integration.js";
 import { RootOrchestrator, createTaskSpec } from "./orchestrator.js";
@@ -122,15 +123,21 @@ function printJson(command: CliJsonCommand, payload: object): void {
 }
 
 function printExecutionAuditError(
-  errorCode: "execution_intent_not_found" | "execution_audit_all_deferred" | "execution_audit_missing_intent",
+  errorCode:
+    | "execution_intent_not_found"
+    | "execution_audit_all_deferred"
+    | "execution_audit_missing_intent"
+    | "invalid_execution_intent_file"
+    | "invalid_execution_trace_file",
   message: string,
-  options: { status?: "not_found" | "error"; intentId?: string } = {}
+  options: { status?: "not_found" | "error"; intentId?: string; details?: { kind: "execution_intent" | "execution_trace" } } = {}
 ): void {
   printJson("execution-audit", {
     status: options.status ?? "error",
     errorCode,
     message,
     ...(options.intentId ? { intentId: options.intentId } : {}),
+    ...(options.details ? { details: options.details } : {}),
     intent: null,
     executionEnabled: false,
     writeExecution: "disabled",
@@ -543,9 +550,9 @@ async function executionAuditCommand(args: ParsedArgs): Promise<void> {
   }
 
   const store = new FileRunStore(process.cwd());
-  let bundle: Awaited<ReturnType<FileRunStore["loadExecutionAuditBundle"]>>;
+  let intent: Awaited<ReturnType<FileRunStore["loadExecutionIntent"]>>;
   try {
-    bundle = await store.loadExecutionAuditBundle(intentId);
+    intent = await store.loadExecutionIntent(intentId);
   } catch (error) {
     if (isMissingFileError(error)) {
       printExecutionAuditError("execution_intent_not_found", "Execution intent was not found.", {
@@ -554,8 +561,30 @@ async function executionAuditCommand(args: ParsedArgs): Promise<void> {
       });
       return;
     }
+    if (isInvalidExecutionIntentFileError(error)) {
+      printExecutionAuditError("invalid_execution_intent_file", "Execution intent file is invalid.", {
+        intentId,
+        details: { kind: "execution_intent" }
+      });
+      return;
+    }
     throw error;
   }
+
+  let traces: Awaited<ReturnType<FileRunStore["listExecutionTraces"]>>;
+  try {
+    traces = await store.listExecutionTraces();
+  } catch (error) {
+    if (isInvalidExecutionTraceFileError(error)) {
+      printExecutionAuditError("invalid_execution_trace_file", "Execution trace file is invalid.", {
+        intentId,
+        details: { kind: "execution_trace" }
+      });
+      return;
+    }
+    throw error;
+  }
+  const bundle = summarizeExecutionAuditBundle(intent, traces);
   printJson("execution-audit", bundle);
 }
 
@@ -566,6 +595,24 @@ function isMissingFileError(error: unknown): error is { code: "ENOENT" } {
     "code" in error &&
     (error as { code?: unknown }).code === "ENOENT"
   );
+}
+
+function isInvalidExecutionIntentFileError(error: unknown): boolean {
+  if (error instanceof SyntaxError) {
+    return true;
+  }
+
+  const message = error instanceof Error ? error.message : "";
+  return message.startsWith("Invalid execution intent");
+}
+
+function isInvalidExecutionTraceFileError(error: unknown): boolean {
+  if (error instanceof SyntaxError) {
+    return true;
+  }
+
+  const message = error instanceof Error ? error.message : "";
+  return message.startsWith("Invalid execution trace") || message.startsWith("Invalid execution intent");
 }
 
 async function main(): Promise<void> {

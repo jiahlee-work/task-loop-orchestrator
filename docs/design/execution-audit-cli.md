@@ -84,7 +84,7 @@ It may read `.orchestrator/execution-intents/` and `.orchestrator/execution-trac
 
 ## JSON Error Envelope Draft
 
-Status: partially enabled. The current command returns enveloped JSON for successful audit bundles, missing intents, missing `--intent`, and deferred `--all` requests. Invalid persisted file cases still use the existing CLI error path.
+Status: enabled for success bundles, missing intents, missing `--intent`, deferred `--all` requests, and invalid persisted intent/trace files. Plain output and `--all` bundle lists remain deferred.
 
 The first implementation uses an error payload that keeps the common CLI metadata envelope while separating success bundles from failures:
 
@@ -103,12 +103,12 @@ The first implementation uses an error payload that keeps the common CLI metadat
 
 Candidate top-level fields:
 
-- `status`: `not_found` for missing records, or `error` for usage/deferred cases that are returned as JSON.
-- `errorCode`: stable machine-readable code such as `execution_intent_not_found`, `execution_audit_all_deferred`, or `execution_audit_missing_intent`.
+- `status`: `not_found` for missing records, or `error` for usage, deferred, and invalid persisted file cases that are returned as JSON.
+- `errorCode`: stable machine-readable code such as `execution_intent_not_found`, `execution_audit_all_deferred`, `execution_audit_missing_intent`, `invalid_execution_intent_file`, or `invalid_execution_trace_file`.
 - `message`: short human-readable explanation.
 - `intentId`: included when the user supplied or implied a specific intent id.
 - `intent`: `null` for not-found responses.
-- `details`: deferred optional structured context for invalid persisted files; avoid raw file contents and secrets.
+- `details`: optional structured context for invalid persisted files. The first implementation only exposes `{ "kind": "execution_intent" }` or `{ "kind": "execution_trace" }` and avoids raw file contents, stack traces, secrets, stdout, stderr, and exit codes.
 
 The schema models `ExecutionAuditBundle | executionAuditErrorPayload` through `executionAuditResponsePayload` rather than mixing error fields into the success bundle definition. The command-specific branch stays conditional on `command: "execution-audit"` while allowing either the success payload with `intent` and `traces`, or the error payload with `status`, `errorCode`, and `message`.
 
@@ -118,19 +118,19 @@ Error cases to cover:
 - `--all --json` rejected because it remains deferred
 - missing `--intent` when `--json` is present
 
-Deferred error cases:
-
 - invalid persisted intent file
 - invalid persisted trace file
+
+Deferred error cases:
+
 - missing `--json`, which still uses the existing non-JSON usage error path
 
 The error path must preserve the same read-only guarantee as the success path: no file writes, no external command execution, no branch creation, no commit, no push, no pull request creation or mutation, no approval mutation, and no run status transition.
 
 Remaining implementation requirements for future milestones:
 
-- add invalid persisted file envelopes after deciding what structured `details` should expose
-- add focused CLI tests for invalid persisted file cases
-- extend package smoke only if deterministic fixture-based invalid-file checks stay fast and read-only
+- decide whether invalid persisted file envelopes need additional structured `details` beyond `kind`
+- add a broader CLI test harness if future error cases outgrow package smoke coverage
 
 ## Implementation Requirements
 

@@ -279,9 +279,26 @@ describe("CLI JSON schema artifact", () => {
     });
     expect(executionAuditErrorPayload?.properties?.errorCode).toEqual({
       type: "string",
-      enum: ["execution_intent_not_found", "execution_audit_all_deferred", "execution_audit_missing_intent"]
+      enum: [
+        "execution_intent_not_found",
+        "execution_audit_all_deferred",
+        "execution_audit_missing_intent",
+        "invalid_execution_intent_file",
+        "invalid_execution_trace_file"
+      ]
     });
     expect(executionAuditErrorPayload?.properties?.intent).toEqual({ const: null });
+    expect(executionAuditErrorPayload?.properties?.details).toEqual({
+      type: "object",
+      required: ["kind"],
+      properties: {
+        kind: {
+          type: "string",
+          enum: ["execution_intent", "execution_trace"]
+        }
+      },
+      additionalProperties: true
+    });
     expect(executionAuditErrorPayload?.properties?.executionEnabled).toEqual({ const: false });
     expect(executionAuditErrorPayload?.properties?.writeExecution).toEqual({ const: "disabled" });
     expect(executionAuditErrorPayload?.properties?.hasExecutionResults).toEqual({ const: false });

@@ -682,7 +682,9 @@
           "enum": [
             "execution_intent_not_found",
             "execution_audit_all_deferred",
-            "execution_audit_missing_intent"
+            "execution_audit_missing_intent",
+            "invalid_execution_intent_file",
+            "invalid_execution_trace_file"
           ]
         },
         "message": {
@@ -693,6 +695,17 @@
         },
         "intent": {
           "const": null
+        },
+        "details": {
+          "type": "object",
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["execution_intent", "execution_trace"]
+            }
+          },
+          "additionalProperties": true
         },
         "executionEnabled": {
           "const": false

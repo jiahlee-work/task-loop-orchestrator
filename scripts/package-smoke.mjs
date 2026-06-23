@@ -148,6 +148,30 @@ async function main() {
         status: "error",
         errorCode: "execution_audit_all_deferred"
       });
+
+      const invalidIntent = await writeInvalidExecutionIntentFixture(projectDir);
+      const invalidIntentResult = await run(bin, ["execution-audit", "--intent", invalidIntent.intentId, "--json"], {
+        cwd: projectDir
+      });
+      assertExecutionAuditErrorReport(parseJson(invalidIntentResult), {
+        status: "error",
+        errorCode: "invalid_execution_intent_file",
+        intentId: invalidIntent.intentId,
+        detailsKind: "execution_intent",
+        forbiddenText: invalidIntent.secret
+      });
+
+      const invalidTrace = await writeInvalidExecutionTraceFixture(projectDir);
+      const invalidTraceResult = await run(bin, ["execution-audit", "--intent", fixture.intentId, "--json"], {
+        cwd: projectDir
+      });
+      assertExecutionAuditErrorReport(parseJson(invalidTraceResult), {
+        status: "error",
+        errorCode: "invalid_execution_trace_file",
+        intentId: fixture.intentId,
+        detailsKind: "execution_trace",
+        forbiddenText: invalidTrace.secret
+      });
     });
 
     await runStep("checks json", async () => {
@@ -255,6 +279,27 @@ async function writeExecutionAuditFixture(projectDir) {
   await writeFile(join(traceDir, `${trace.id}.json`), `${JSON.stringify(trace, null, 2)}\n`);
 
   return { intentId };
+}
+
+async function writeInvalidExecutionIntentFixture(projectDir) {
+  const intentId = "intent_invalid_package_smoke";
+  const secret = "top-secret-invalid-intent-fixture";
+  const intentDir = join(projectDir, ".orchestrator", "execution-intents");
+
+  await mkdir(intentDir, { recursive: true });
+  await writeFile(join(intentDir, `${intentId}.json`), `${JSON.stringify({ id: "", secret }, null, 2)}\n`);
+
+  return { intentId, secret };
+}
+
+async function writeInvalidExecutionTraceFixture(projectDir) {
+  const secret = "top-secret-invalid-trace-fixture";
+  const traceDir = join(projectDir, ".orchestrator", "execution-traces");
+
+  await mkdir(traceDir, { recursive: true });
+  await writeFile(join(traceDir, "trace_invalid_package_smoke.json"), `${JSON.stringify({ id: "", secret }, null, 2)}\n`);
+
+  return { secret };
 }
 
 async function runStep(label, fn) {
@@ -422,6 +467,12 @@ function assertExecutionAuditErrorReport(report, expected) {
   if (expected.intentId) {
     assertEqual(report.intentId, expected.intentId, "execution-audit error JSON should preserve intent id");
   }
+  if (expected.detailsKind) {
+    assertEqual(report.details?.kind, expected.detailsKind, "execution-audit error JSON should include safe details kind");
+  }
+  if (expected.forbiddenText) {
+    assertNotIncludes(JSON.stringify(report), expected.forbiddenText, "execution-audit error JSON should not expose raw persisted file content");
+  }
   assertEqual(report.intent, null, "execution-audit error JSON should set intent to null");
   assertEqual(report.executionEnabled, false, "execution-audit error JSON should keep execution disabled");
   assertEqual(report.writeExecution, "disabled", "execution-audit error JSON should keep write execution disabled");
@@ -462,6 +513,12 @@ function assertNoExecutionResultFields(value) {
 function assertIncludes(value, expected, message) {
   if (!value.includes(expected)) {
     throw new Error(`${message}. Expected to find ${JSON.stringify(expected)} in:\n${value}`);
+  }
+}
+
+function assertNotIncludes(value, expected, message) {
+  if (value.includes(expected)) {
+    throw new Error(`${message}. Did not expect to find ${JSON.stringify(expected)} in:\n${value}`);
   }
 }
 
