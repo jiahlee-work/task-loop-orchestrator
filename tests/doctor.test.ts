@@ -45,6 +45,34 @@ describe("doctor", () => {
         }
       ]
     });
+    expect(check(report.checks, "gitignore")).toMatchObject({
+      status: "warn",
+      recommendedAction: "Run task-loop-orchestrator init.",
+      suggestions: [
+        {
+          label: "Initialize orchestrator project",
+          command: ["task-loop-orchestrator", "init"],
+          reason: "Create .gitignore and add .orchestrator/.",
+          destructive: false
+        }
+      ]
+    });
+    expect(check(report.checks, "store_path")).toMatchObject({
+      status: "pass",
+      summary: ".orchestrator directory is not created yet, and the project root is writable."
+    });
+    expect(check(report.checks, "github")).toMatchObject({
+      status: "pass",
+      recommendedAction: "Run doctor with --github gh-cli to check read-only GitHub access.",
+      suggestions: [
+        {
+          label: "Check GitHub read access",
+          command: ["task-loop-orchestrator", "doctor", "--github", "gh-cli"],
+          reason: "Re-run doctor with read-only GitHub diagnostics enabled.",
+          destructive: false
+        }
+      ]
+    });
   });
 
   it("passes config and gitignore checks after init in a git repository", async () => {

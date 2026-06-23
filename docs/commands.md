@@ -48,7 +48,7 @@ task-loop-orchestrator init --json
 
 JSON: supported with `--json`.
 
-Behavior: writes local bootstrap files only. It creates `orchestrator.config.json` when missing and ensures `.gitignore` contains `.orchestrator/`. Existing config is not overwritten unless `--force` is provided.
+Behavior: writes local bootstrap files only. It creates `orchestrator.config.json` when missing and ensures `.gitignore` contains `.orchestrator/`. Existing config is skipped unless `--force` is provided, so rerunning `init` is safe.
 
 ### `doctor [--github none|gh-cli] [--json]`
 
@@ -62,7 +62,7 @@ task-loop-orchestrator doctor --github gh-cli --json
 
 JSON: supported with `--json`.
 
-Behavior: read-only. With `--github gh-cli`, it performs read-only GitHub CLI diagnostics and reports missing `gh`, auth failures, or unavailable checks as warnings instead of writing repository state.
+Behavior: read-only. It checks Node.js, Git repository presence, config loading, `.gitignore`, store path access, and optional read-only GitHub CLI diagnostics instead of writing repository state. Warnings and failures include a short recommended action and safe command suggestions where available.
 
 ## Run Loop
 

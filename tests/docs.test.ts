@@ -44,6 +44,9 @@ describe("quickstart documentation", () => {
       "npx task-loop-orchestrator resume <runId> --max-iterations 1 --json",
       "Use the `runId` returned by `run --json` for `resume <runId>`",
       "status <runId> --json",
+      "It is safe to rerun",
+      "Before `init`, config and gitignore checks normally warn",
+      "suggest `task-loop-orchestrator init`",
       "npx task-loop-orchestrator checks HEAD --json",
       "npx task-loop-orchestrator checkpoint --json",
       "npx task-loop-orchestrator checkpoint --github gh-cli --json",
@@ -648,7 +651,9 @@ describe("documentation role boundaries", () => {
       "npx task-loop-orchestrator status --json",
       "npx task-loop-orchestrator resume <runId> --max-iterations 1 --json",
       "npx task-loop-orchestrator checks HEAD --json",
-      "Use the `runId` returned by `run --json` for the `resume <runId>` command"
+      "Use the `runId` returned by `run --json` for the `resume <runId>` command",
+      "`init` is safe to rerun",
+      "Run `doctor --json` before or after `init`"
     ]);
     expect(readme).not.toContain("npx task-loop-orchestrator write-runner --intent intent_xxx --preflight readiness-preflight.json --simulate --json");
     expect(readme).not.toContain("npx task-loop-orchestrator execution-audit --all");
@@ -1039,6 +1044,11 @@ describe("command reference documentation", () => {
     expectContainsAll(smokeScript, [
       '"init", "--json"',
       '"doctor", "--json"',
+      "git_repository",
+      "config",
+      "gitignore",
+      "store_path",
+      '"task-loop-orchestrator", "init"',
       '"run", "Smoke task", "--max-iterations", "1", "--json"',
       '"resume", loopReport.runId, "--max-iterations", "1", "--json"',
       '"status", "--json"',

@@ -85,7 +85,9 @@ Use the `runId` returned by `run --json` for `resume <runId>`. After resuming, r
 - `orchestrator.config.json`
 - `.gitignore`, adding `.orchestrator/` when missing
 
-It does not overwrite an existing `orchestrator.config.json` unless `--force` is provided.
+It is safe to rerun. Existing config is skipped unless `--force` is provided, and an existing `.gitignore` is only updated when `.orchestrator/` is missing.
+
+`doctor --json` reports setup checks with `pass`, `warn`, or `fail`. Before `init`, config and gitignore checks normally warn and suggest `task-loop-orchestrator init`. After `init`, rerun `doctor --json` to confirm the project is ready.
 
 Run a read-only GitHub check refresh when the project has a GitHub remote and readable check-runs:
 

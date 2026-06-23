@@ -43,6 +43,7 @@ npx task-loop-orchestrator checks HEAD --json
 ```
 
 Use the `runId` returned by `run --json` for the `resume <runId>` command.
+`init` is safe to rerun: it skips an existing `orchestrator.config.json` unless `--force` is used and keeps `.orchestrator/` ignored. Run `doctor --json` before or after `init` when setup looks wrong; warning checks include recommended next commands.
 `checks HEAD --json` requires a GitHub remote and readable check-runs to report live CI status; otherwise it returns a graceful JSON fallback.
 Advanced read-only audit and dry-run surfaces such as `execution-audit`, `write-readiness`, and `write-runner` are documented in [docs/commands.md](docs/commands.md). They are not required for the first install/run/status/resume flow. `write-runner` remains a dry-run/simulation boundary and does not execute shell, git, or GitHub commands or create branches, commits, pushes, or PRs.
 

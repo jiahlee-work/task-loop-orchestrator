@@ -60,7 +60,19 @@ async function main() {
 
     await runStep("pre-init doctor", async () => {
       const preInitDoctor = await run(bin, ["doctor", "--json"], { cwd: projectDir });
-      assertDoctorReport(parseJson(preInitDoctor), "warn", "doctor before init should warn");
+      assertDoctorReport(parseJson(preInitDoctor), "warn", "doctor before init should warn", {
+        checks: {
+          git_repository: "warn",
+          config: "warn",
+          gitignore: "warn",
+          store_path: "pass",
+          github: "pass"
+        },
+        suggestions: {
+          config: ["task-loop-orchestrator", "init"],
+          gitignore: ["task-loop-orchestrator", "init"]
+        }
+      });
     });
 
     await runStep("init idempotency", async () => {
@@ -76,13 +88,23 @@ async function main() {
       assertInitReport(parseJson(secondInit), {
         configStatus: "skipped",
         gitignoreStatus: "skipped",
-        label: "second init"
+        label: "second init",
+        configReasonIncludes: "already exists",
+        gitignoreReasonIncludes: "already ignored"
       });
     });
 
     await runStep("post-init doctor", async () => {
       const postInitDoctor = await run(bin, ["doctor", "--json"], { cwd: projectDir });
-      assertDoctorReport(parseJson(postInitDoctor), "pass", "doctor after init should pass");
+      assertDoctorReport(parseJson(postInitDoctor), "pass", "doctor after init should pass", {
+        checks: {
+          git_repository: "pass",
+          config: "pass",
+          gitignore: "pass",
+          store_path: "pass",
+          github: "pass"
+        }
+      });
     });
 
     await runStep("mvp first-run json", async () => {
@@ -712,15 +734,51 @@ function truncate(value, maxLength = 2000) {
   return `${value.slice(0, maxLength)}\n... truncated ${value.length - maxLength} chars`;
 }
 
-function assertDoctorReport(report, expectedStatus, message) {
+function assertDoctorReport(report, expectedStatus, message, expected = {}) {
   assertEnvelope(report, "doctor");
   assertEqual(report.status, expectedStatus, message);
+  assertArray(report.checks, "doctor JSON should include checks");
+
+  for (const [id, status] of Object.entries(expected.checks ?? {})) {
+    const check = findDoctorCheck(report, id);
+    assertEqual(check.status, status, `doctor JSON should mark ${id} as ${status}`);
+    assertString(check.summary, `doctor JSON should include ${id} summary`);
+  }
+
+  for (const [id, command] of Object.entries(expected.suggestions ?? {})) {
+    const check = findDoctorCheck(report, id);
+    const commands = (check.suggestions ?? []).map((suggestion) => JSON.stringify(suggestion.command));
+    if (!commands.includes(JSON.stringify(command))) {
+      throw new Error(`doctor JSON should suggest ${command.join(" ")} for ${id}`);
+    }
+  }
 }
 
 function assertInitReport(report, expected) {
   assertEnvelope(report, "init");
   assertEqual(report.files.config.status, expected.configStatus, `${expected.label} should set config status`);
   assertEqual(report.files.gitignore.status, expected.gitignoreStatus, `${expected.label} should set gitignore status`);
+
+  if (expected.configReasonIncludes) {
+    assertIncludes(report.files.config.reason, expected.configReasonIncludes, `${expected.label} should explain config status`);
+  }
+
+  if (expected.gitignoreReasonIncludes) {
+    assertIncludes(
+      report.files.gitignore.reason,
+      expected.gitignoreReasonIncludes,
+      `${expected.label} should explain gitignore status`
+    );
+  }
+}
+
+function findDoctorCheck(report, id) {
+  const check = report.checks.find((item) => item.id === id);
+  if (!check) {
+    throw new Error(`doctor JSON should include ${id} check`);
+  }
+
+  return check;
 }
 
 function assertRunReport(report, command, expected) {

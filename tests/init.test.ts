@@ -31,6 +31,7 @@ describe("project init", () => {
       const report = await initProject(root);
 
       expect(report.files.config.status).toBe("skipped");
+      expect(report.files.config.reason).toContain("already exists");
       await expect(readFile(configPath, "utf8")).resolves.toBe(customConfig);
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -76,6 +77,7 @@ describe("project init", () => {
       const report = await initProject(root);
 
       expect(report.files.gitignore.status).toBe("skipped");
+      expect(report.files.gitignore.reason).toContain("already ignored");
       await expect(readFile(gitignorePath, "utf8")).resolves.toBe("node_modules/\n.orchestrator/\n");
     } finally {
       await rm(root, { recursive: true, force: true });
