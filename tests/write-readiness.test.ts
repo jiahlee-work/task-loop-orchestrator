@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createPullRequestApproval } from "../src/approval.js";
@@ -11,6 +12,7 @@ import {
 import {
   formatWriteExecutionReadiness,
   formatWriteReadinessError,
+  loadWriteReadinessPreflightInput,
   parseWriteReadinessPreflightInput,
   summarizeWriteExecutionReadiness
 } from "../src/write-readiness.js";
@@ -348,6 +350,156 @@ describe("write execution readiness helper", () => {
       ...(details ? { details } : {})
     });
     expectNoUnsafeReadinessOutput(result);
+  });
+
+  it("loads a valid preflight file without exposing path or raw content", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "write-readiness-preflight-"));
+    try {
+      const preflightPath = join(tempRoot, "preflight.json");
+      await writeFile(preflightPath, JSON.stringify(passingPreflightFileFixture()), "utf8");
+
+      const loaded = await loadWriteReadinessPreflightInput(preflightPath);
+      const report = summarizeWriteExecutionReadiness(
+        executionAuditBundle("2026-06-22T00:00:00.000Z", {
+          commandSecret: "top-secret-readiness"
+        }),
+        expectLoadedPreflight(loaded)
+      );
+      const output = formatWriteExecutionReadiness(report);
+
+      expect(loaded).toEqual({
+        ok: true,
+        preflight: passingPreflight(),
+        recognizedCheckCount: 10,
+        ignoredCheckCount: 0
+      });
+      expect(report.readinessStatus).toBe("ready");
+      expect(report.inputs.preflight).toBe("available");
+      expectNoUnsafeReadinessOutput(loaded);
+      expectNoUnsafeReadinessOutput(report);
+      expectNoUnsafeReadinessOutput(output);
+      expect(JSON.stringify(loaded)).not.toContain(preflightPath);
+      expect(output).not.toContain(preflightPath);
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("loads a blocked preflight file into blocked readiness", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "write-readiness-preflight-"));
+    try {
+      const preflightPath = join(tempRoot, "blocked-preflight.json");
+      const fixture = {
+        ...passingPreflightFileFixture(),
+        checks: passingPreflightFileFixture().checks.map((check) =>
+          check.code === "repo_cleanliness_passed"
+            ? {
+                ...check,
+                status: "blocked" as const,
+                code: "repo_cleanliness_blocked",
+                message: "Repository state does not satisfy cleanliness policy."
+              }
+            : check
+        )
+      };
+      await writeFile(preflightPath, JSON.stringify(fixture), "utf8");
+
+      const loaded = await loadWriteReadinessPreflightInput(preflightPath);
+      const report = summarizeWriteExecutionReadiness(
+        executionAuditBundle("2026-06-22T00:00:00.000Z"),
+        expectLoadedPreflight(loaded)
+      );
+
+      expect(loaded).toEqual({
+        ok: true,
+        preflight: {
+          ...passingPreflight(),
+          repoClean: false
+        },
+        recognizedCheckCount: 10,
+        ignoredCheckCount: 0
+      });
+      expect(report.readinessStatus).toBe("blocked");
+      expect(report.blockers).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            category: "repo_state",
+            code: "repo_cleanliness_blocked",
+            source: "preflight"
+          })
+        ])
+      );
+      expectNoUnsafeReadinessOutput(loaded);
+      expectNoUnsafeReadinessOutput(report);
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("returns safe preflight file load errors", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "write-readiness-preflight-"));
+    try {
+      const invalidJsonPath = join(tempRoot, "invalid-json.json");
+      const invalidSchemaPath = join(tempRoot, "invalid-schema.json");
+      const missingPath = join(tempRoot, "missing-raw-preflight-secret.json");
+      await writeFile(invalidJsonPath, "{ raw-preflight-secret", "utf8");
+      await writeFile(
+        invalidSchemaPath,
+        JSON.stringify({
+          schemaVersion: 1,
+          metadata: {
+            tool: "raw-preflight-secret",
+            path: "/tmp/preflight.json"
+          },
+          checks: [
+            {
+              category: "ci",
+              status: "unexpected",
+              code: "ci_policy_passed",
+              message: "raw-preflight-secret should not be echoed",
+              source: "preflight",
+              stdout: "raw-preflight-secret",
+              stderr: "raw-preflight-secret",
+              exitCode: 1,
+              executedCommands: ["git", "push"],
+              stack: "raw-preflight-secret",
+              argv: ["git", "push"]
+            }
+          ]
+        }),
+        "utf8"
+      );
+
+      const invalidJson = await loadWriteReadinessPreflightInput(invalidJsonPath);
+      const invalidSchema = await loadWriteReadinessPreflightInput(invalidSchemaPath);
+      const missing = await loadWriteReadinessPreflightInput(missingPath);
+
+      expect(invalidJson).toEqual({
+        ok: false,
+        errorCode: "preflight_invalid_json",
+        message: "Preflight input file must contain valid JSON."
+      });
+      expect(invalidSchema).toEqual({
+        ok: false,
+        errorCode: "preflight_invalid_check",
+        message: "Preflight input check item is invalid.",
+        details: {
+          field: "checks",
+          index: 0
+        }
+      });
+      expect(missing).toEqual({
+        ok: false,
+        errorCode: "preflight_file_not_found",
+        message: "Preflight input file was not found."
+      });
+      expectNoUnsafeReadinessOutput(invalidJson);
+      expectNoUnsafeReadinessOutput(invalidSchema);
+      expectNoUnsafeReadinessOutput(missing);
+      expect(JSON.stringify(missing)).not.toContain(missingPath);
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
   });
 
   it("keeps blocked readiness report contract stable as a plain JSON object", () => {
@@ -743,6 +895,17 @@ function preflightFixtureCheck(
 
 function expectParsedPreflight(
   result: ReturnType<typeof parseWriteReadinessPreflightInput>
+): WriteExecutionReadinessPreflightInput {
+  expect(result.ok).toBe(true);
+  if (!result.ok) {
+    throw new Error(result.message);
+  }
+
+  return result.preflight;
+}
+
+function expectLoadedPreflight(
+  result: ReturnType<typeof loadWriteReadinessPreflightInput> extends Promise<infer T> ? T : never
 ): WriteExecutionReadinessPreflightInput {
   expect(result.ok).toBe(true);
   if (!result.ok) {

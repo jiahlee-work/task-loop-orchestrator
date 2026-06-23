@@ -118,7 +118,7 @@ Error payloads fix `status`, `errorCode`, `message`, `intent`, `executionEnabled
 
 The `writeReadinessPayload` fixes `readinessStatus`, `ready`, `intentId`, `runId`, `planId`, `approvalId`, `blockers`, `checks`, `inputs`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`, with optional `checkpointId`.
 
-Each `writeReadinessBlocker` fixes `category`, `code`, `message`, and `source`. Each `writeReadinessCheck` fixes `category`, `status`, `code`, `message`, and `source`. The `writeReadinessInputs` object fixes `auditBundle` and `preflight`; `preflight` is currently `missing` in production CLI output unless a future read-only preflight evidence file is explicitly supported. A value-level parser exists for the future preflight contract, but the CLI does not read `--preflight <path>` yet.
+Each `writeReadinessBlocker` fixes `category`, `code`, `message`, and `source`. Each `writeReadinessCheck` fixes `category`, `status`, `code`, `message`, and `source`. The `writeReadinessInputs` object fixes `auditBundle` and `preflight`; `preflight` is currently `missing` in production CLI output unless a future read-only preflight evidence file is explicitly supported. Value-level parser and file loader helpers exist for the future preflight contract, but the CLI does not read `--preflight <path>` yet.
 
 The `writeReadinessResponsePayload` allows either a success `writeReadinessPayload` or a `writeReadinessErrorPayload`. Error payloads fix `status`, `errorCode`, `message`, `readiness`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`, with optional `intentId` and `details`. Error payloads keep `readiness: null`, `executionEnabled: false`, `writeExecution: "disabled"`, and `hasExecutionResults: false`.
 

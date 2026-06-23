@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import type {
   ExecutionAuditBundle,
   WriteExecutionReadinessBlocker,
@@ -28,6 +29,24 @@ export type WriteReadinessPreflightParseResult =
   | {
       ok: false;
       errorCode: WriteReadinessPreflightParseErrorCode;
+      message: string;
+      details?: {
+        field?: "schemaVersion" | "checks" | "metadata";
+        index?: number;
+      };
+    };
+
+export type WriteReadinessPreflightLoadErrorCode =
+  | "preflight_file_not_found"
+  | "preflight_file_not_readable"
+  | "preflight_invalid_json"
+  | WriteReadinessPreflightParseErrorCode;
+
+export type WriteReadinessPreflightLoadResult =
+  | Extract<WriteReadinessPreflightParseResult, { ok: true }>
+  | {
+      ok: false;
+      errorCode: WriteReadinessPreflightLoadErrorCode;
       message: string;
       details?: {
         field?: "schemaVersion" | "checks" | "metadata";
@@ -257,6 +276,28 @@ export function parseWriteReadinessPreflightInput(value: unknown): WriteReadines
   };
 }
 
+export async function loadWriteReadinessPreflightInput(path: string): Promise<WriteReadinessPreflightLoadResult> {
+  let content: string;
+  try {
+    content = await readFile(path, "utf8");
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      return loadError("preflight_file_not_found", "Preflight input file was not found.");
+    }
+
+    return loadError("preflight_file_not_readable", "Preflight input file could not be read.");
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content) as unknown;
+  } catch {
+    return loadError("preflight_invalid_json", "Preflight input file must contain valid JSON.");
+  }
+
+  return parseWriteReadinessPreflightInput(parsed);
+}
+
 export function formatWriteExecutionReadiness(report: WriteExecutionReadinessReport): string {
   const lines = [
     `Write execution readiness: ${report.intentId}`,
@@ -408,6 +449,28 @@ function parseError(
     message,
     ...(details ? { details } : {})
   };
+}
+
+function loadError(
+  errorCode: WriteReadinessPreflightLoadErrorCode,
+  message: string,
+  details?: { field?: "schemaVersion" | "checks" | "metadata"; index?: number }
+): WriteReadinessPreflightLoadResult {
+  return {
+    ok: false,
+    errorCode,
+    message,
+    ...(details ? { details } : {})
+  };
+}
+
+function isMissingFileError(error: unknown): error is { code: "ENOENT" } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "ENOENT"
+  );
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {

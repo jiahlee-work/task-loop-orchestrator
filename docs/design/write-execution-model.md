@@ -16,7 +16,7 @@ This document describes the model that should exist before `task-loop-orchestrat
 - The audit bundle JSON contract is covered by internal tests before any CLI read surface is enabled.
 - A read-only CLI surface for audit bundle lookup is enabled for `execution-audit --intent <intentId>` and `execution-audit --all` in both plain and JSON modes, as documented in [`execution-audit-cli.md`](execution-audit-cli.md).
 - A pure write execution readiness helper can summarize an audit bundle plus optional future preflight input without enabling CLI/schema output or command execution.
-- `write-readiness --intent <intentId>` is enabled as a read-only plain readiness surface, and `--json` is enabled for automation. A pure preflight value parser exists, but the production `--preflight` CLI option remains deferred.
+- `write-readiness --intent <intentId>` is enabled as a read-only plain readiness surface, and `--json` is enabled for automation. Pure preflight value parser and file loader helpers exist, but the production `--preflight` CLI option remains deferred.
 - `pr-exec` is dry-run/preflight oriented.
 - `pr-exec --execute` requires approval data, checks stale approvals, and still returns a blocked report before branch, commit, push, or `gh pr create`.
 - `executedCommands` remains empty in the current implementation.
@@ -137,7 +137,7 @@ Needed from a future preflight, but not queried by this design draft:
 
 ### Future Preflight Input File Contract
 
-Status: value parser implemented; production CLI option not enabled. The production CLI does not accept `--preflight` yet and no file reader is implemented.
+Status: value parser and file loader implemented; production CLI option not enabled. The production CLI does not accept `--preflight` yet.
 
 The proposed future CLI surface is:
 
@@ -161,9 +161,9 @@ Each `checks[]` item should use the same stable fields as readiness checks:
 - `message`: short human-readable summary
 - `source`: `preflight`
 
-The value parser maps recognized preflight evidence into the existing `WriteExecutionReadinessPreflightInput` booleans. A complete all-pass value can produce `inputs.preflight: "available"` and `readinessStatus: "ready"` only when the audit bundle has no blockers. Missing or unrecognized checks remain `unknown` rather than implying approval.
+The file loader reads a JSON file, parses it, and passes the parsed value to the value parser. The value parser maps recognized preflight evidence into the existing `WriteExecutionReadinessPreflightInput` booleans. A complete all-pass value can produce `inputs.preflight: "available"` and `readinessStatus: "ready"` only when the audit bundle has no blockers. Missing or unrecognized checks remain `unknown` rather than implying approval.
 
-Preflight files must not contain raw command args, raw stdout, raw stderr, exit codes, `executedCommands`, stack traces, secrets, tokens, raw persisted file content, or full command output. Plain and JSON readiness output must also avoid echoing the raw preflight file path or raw file contents.
+Preflight files must not contain raw command args, raw stdout, raw stderr, exit codes, `executedCommands`, stack traces, secrets, tokens, raw persisted file content, or full command output. Parser and loader errors must not echo the raw preflight file path, raw file contents, or stack traces.
 
 ### JSON Surface Proposal
 
@@ -211,8 +211,9 @@ The current implementation includes pure helpers:
 - `summarizeWriteExecutionReadiness(bundle, preflight?)`
 - `formatWriteExecutionReadiness(report)`
 - `parseWriteReadinessPreflightInput(value)`
+- `loadWriteReadinessPreflightInput(path)`
 
-The helper reuses `ExecutionAuditBundle` rather than re-reading files. The CLI layer loads the audit bundle first, then passes it to the readiness helper without preflight input. The helper treats missing future preflight inputs as `unknown` checks, not as permission to execute. The formatter only reads a readiness report and does not parse files, write files, spawn commands, or mutate domain state. The preflight parser accepts an already parsed `unknown` value, validates the contract, and translates safe evidence into `WriteExecutionReadinessPreflightInput`; it does not read files, echo raw content, write files, spawn commands, or mutate domain state.
+The helper reuses `ExecutionAuditBundle` rather than re-reading files. The CLI layer loads the audit bundle first, then passes it to the readiness helper without preflight input. The helper treats missing future preflight inputs as `unknown` checks, not as permission to execute. The formatter only reads a readiness report and does not parse files, write files, spawn commands, or mutate domain state. The preflight parser accepts an already parsed `unknown` value, validates the contract, and translates safe evidence into `WriteExecutionReadinessPreflightInput`; it does not read files, echo raw content, write files, spawn commands, or mutate domain state. The file loader is read-only: it reads one JSON file, returns safe typed load or parse errors, and does not echo paths, raw file contents, stacks, stdout/stderr, exit codes, command args, or execution results.
 
 Tests should cover:
 
@@ -220,7 +221,7 @@ Tests should cover:
 - unknown readiness when approval freshness, CI, repo state, or fingerprint checks have no preflight input
 - disabled markers on every report
 - contract fixture coverage for blocked and ready JSON-like report shapes
-- future preflight value parser and contract fixture coverage without enabling the production `--preflight` option
+- future preflight value parser, file loader, and contract fixture coverage without enabling the production `--preflight` option
 - no execution result fields such as `executedCommands`, raw stdout, raw stderr, or exit code
 - plain formatter safety and command-specific JSON schema branch only when the CLI surface is explicitly enabled
 
@@ -250,7 +251,7 @@ Initial options:
 Deferred options:
 
 - `--all`: defer list output until single-intent readiness is stable.
-- `--preflight <path>`: defer until file reading, CLI error handling, safe fixture tests, and no-write policy are ready.
+- `--preflight <path>`: defer until CLI error handling, docs/schema updates, package smoke, and no-write policy are ready.
 - preflight query flags such as `--with-repo-state` or `--with-checks`: defer until each input source has a read-only policy and test fixture.
 - `--root <path>`: defer unless the broader CLI adopts root override semantics.
 
@@ -306,7 +307,7 @@ Error payloads should keep `executionEnabled: false`, `writeExecution: "disabled
 ### Rollout Plan For CLI And Schema
 
 1. Keep `write-readiness --intent <intentId> [--json]` under schema/docs/package smoke coverage.
-2. Add optional read-only `--preflight <path>` support only after file reading, CLI error handling, no raw output echoing, and no-write policy are ready.
+2. Add optional read-only `--preflight <path>` support only after CLI error handling, docs/schema updates, package smoke, no raw output echoing, and no-write policy are ready.
 3. Treat actual write execution unlock as a separate milestone that must first test approval freshness, clean worktree policy, diff verification, CI policy, and remote/ref policy.
 
 ## Rollout Slices
@@ -325,7 +326,7 @@ Error payloads should keep `executionEnabled: false`, `writeExecution: "disabled
 12. Draft the readiness CLI/schema surface without enabling the production command or active schema branch.
 13. Enable the read-only `write-readiness --intent <intentId> --json` path and command-specific schema branch.
 14. Enable plain readiness output using the pure formatter after JSON behavior is stable.
-15. Add the read-only `--preflight <path>` CLI option only after file reading and safe error handling are covered.
+15. Add the read-only `--preflight <path>` CLI option only after CLI error handling and package smoke are covered.
 16. Add a single local-only command behind tests and explicit approval, such as branch creation in a temporary fixture repository.
 17. Add commit execution only after staged-file policy and diff verification exist.
 18. Add push only after remote/ref policy and CI handling are documented and tested.
