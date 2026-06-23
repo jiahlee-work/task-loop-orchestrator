@@ -495,6 +495,96 @@ describe("execution intent persistence", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it("loads execution audit bundles from stored intent and trace records", async () => {
+    const root = await mkdtemp(join(tmpdir(), "task-loop-audit-bundle-"));
+    const store = new FileRunStore(root);
+    const intent = executionIntent("2026-06-22T00:00:00.000Z");
+    const traces = createExecutionDryRunTraces(intent, {
+      createdAt: "2026-06-22T01:00:00.000Z"
+    });
+
+    try {
+      await store.saveExecutionIntent(intent);
+      await Promise.all(traces.map((trace) => store.saveExecutionTrace(trace)));
+
+      const bundle = await store.loadExecutionAuditBundle(intent.id);
+
+      expect(bundle.intent.id).toBe(intent.id);
+      expect(bundle.traceCount).toBe(2);
+      expect(bundle.traces.map((trace) => trace.id).sort()).toEqual(traces.map((trace) => trace.id).sort());
+      expect(bundle.mismatchedTraceCount).toBe(0);
+      expect(bundle.executionEnabled).toBe(false);
+      expect(bundle.writeExecution).toBe("disabled");
+      expect(bundle.hasExecutionResults).toBe(false);
+      expect("executedCommands" in bundle).toBe(false);
+      expect("stdout" in bundle).toBe(false);
+      expect("stderr" in bundle).toBe(false);
+      expect("exitCode" in bundle).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("lists execution audit bundles from stored intents and reports unrelated traces as mismatches", async () => {
+    const root = await mkdtemp(join(tmpdir(), "task-loop-audit-bundle-"));
+    const store = new FileRunStore(root);
+    const firstIntent = executionIntent("2026-06-22T00:00:00.000Z");
+    const secondIntent = executionIntent("2026-06-23T00:00:00.000Z");
+    const [firstTrace] = createExecutionDryRunTraces(firstIntent, {
+      createdAt: "2026-06-22T01:00:00.000Z"
+    });
+    const [secondTrace] = createExecutionDryRunTraces(secondIntent, {
+      createdAt: "2026-06-23T01:00:00.000Z"
+    });
+
+    try {
+      await store.saveExecutionIntent(firstIntent);
+      await store.saveExecutionIntent(secondIntent);
+      await store.saveExecutionTrace(firstTrace);
+      await store.saveExecutionTrace(secondTrace);
+
+      const bundles = await store.listExecutionAuditBundles();
+
+      expect(bundles.map((bundle) => bundle.intent.id)).toEqual([secondIntent.id, firstIntent.id]);
+      expect(bundles[0].traceCount).toBe(1);
+      expect(bundles[0].traces.map((trace) => trace.id)).toEqual([secondTrace.id]);
+      expect(bundles[0].mismatchedTraceCount).toBe(1);
+      expect(bundles[0].mismatchedTraceIds).toEqual([firstTrace.id]);
+      expect(bundles[1].traceCount).toBe(1);
+      expect(bundles[1].traces.map((trace) => trace.id)).toEqual([firstTrace.id]);
+      expect(bundles[1].mismatchedTraceCount).toBe(1);
+      expect(bundles[1].mismatchedTraceIds).toEqual([secondTrace.id]);
+      expect(bundles.every((bundle) => bundle.executionEnabled === false)).toBe(true);
+      expect(bundles.every((bundle) => bundle.hasExecutionResults === false)).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("loads stable execution audit bundles when no traces are stored", async () => {
+    const root = await mkdtemp(join(tmpdir(), "task-loop-audit-bundle-"));
+    const store = new FileRunStore(root);
+    const intent = executionIntent("2026-06-22T00:00:00.000Z");
+
+    try {
+      await store.saveExecutionIntent(intent);
+
+      const bundle = await store.loadExecutionAuditBundle(intent.id);
+
+      expect(bundle.intent.id).toBe(intent.id);
+      expect(bundle.traces).toEqual([]);
+      expect(bundle.traceCount).toBe(0);
+      expect(bundle.plannedTraceCount).toBe(0);
+      expect(bundle.blockedTraceCount).toBe(0);
+      expect(bundle.traceActionSummary).toEqual([]);
+      expect(bundle.mismatchedTraceCount).toBe(0);
+      expect(bundle.executionEnabled).toBe(false);
+      expect(bundle.hasExecutionResults).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 
 function executionIntent(createdAt: string) {

@@ -2,12 +2,18 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   ApprovalRecord,
+  ExecutionAuditBundle,
   ExecutionIntent,
   ExecutionTraceRecord,
   IntegrationCheckpointReport,
   LoopRun
 } from "./domain.js";
-import { parseExecutionIntent, parseExecutionTraceRecord } from "./execution-intents.js";
+import {
+  parseExecutionIntent,
+  parseExecutionTraceRecord,
+  summarizeExecutionAuditBundle,
+  summarizeExecutionAuditBundles
+} from "./execution-intents.js";
 
 export class FileRunStore {
   private readonly runsDir: string;
@@ -167,6 +173,17 @@ export class FileRunStore {
     );
 
     return traces.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  }
+
+  async loadExecutionAuditBundle(intentId: string): Promise<ExecutionAuditBundle> {
+    const intent = await this.loadExecutionIntent(intentId);
+    const traces = await this.listExecutionTraces();
+    return summarizeExecutionAuditBundle(intent, traces);
+  }
+
+  async listExecutionAuditBundles(): Promise<ExecutionAuditBundle[]> {
+    const [intents, traces] = await Promise.all([this.listExecutionIntents(), this.listExecutionTraces()]);
+    return summarizeExecutionAuditBundles(intents, traces);
   }
 
   pathForCheckpoint(checkpointId: string): string {
