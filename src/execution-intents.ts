@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type {
   ApprovalRecord,
+  ExecutionAuditBundle,
   ExecutionIntent,
   ExecutionIntentCommandCandidate,
   ExecutionIntentCommandActionSummary,
@@ -9,6 +10,7 @@ import type {
   ExecutionTraceCommandCandidate,
   ExecutionTracePolicyDecision,
   ExecutionTraceRecord,
+  ExecutionTraceReport,
   ExecutionTraceStatus,
   PermissionMode,
   PullRequestCommandCandidate,
@@ -200,6 +202,66 @@ export function summarizeExecutionIntents(intents: ExecutionIntent[]): Execution
   return intents.map(summarizeExecutionIntent);
 }
 
+export function summarizeExecutionTrace(trace: ExecutionTraceRecord): ExecutionTraceReport {
+  return {
+    id: trace.id,
+    intentId: trace.intentId,
+    runId: trace.runId,
+    planId: trace.planId,
+    approvalId: trace.approvalId,
+    checkpointId: trace.checkpointId,
+    action: trace.commandCandidate.action,
+    argv: [...trace.commandCandidate.argv],
+    reason: trace.commandCandidate.reason,
+    status: trace.status,
+    policyVersion: trace.policyVersion,
+    policyDecision: trace.policyDecision,
+    blockedReasonCount: trace.blockedReasons.length,
+    blockedReasons: [...trace.blockedReasons],
+    createdAt: trace.createdAt,
+    executionEnabled: false,
+    writeExecution: "disabled",
+    hasExecutionResults: false
+  };
+}
+
+export function summarizeExecutionAuditBundle(
+  intent: ExecutionIntent,
+  traces: ExecutionTraceRecord[]
+): ExecutionAuditBundle {
+  const matchingTraces = traces.filter((trace) => trace.intentId === intent.id);
+  const mismatchedTraces = traces.filter((trace) => trace.intentId !== intent.id);
+  const traceReports = matchingTraces.map(summarizeExecutionTrace);
+  const traceActions = traceReports.map((trace) => trace.action);
+  const blockedReasons = uniqueStrings([
+    ...intent.blockedReasons,
+    ...traceReports.flatMap((trace) => trace.blockedReasons)
+  ]);
+
+  return {
+    intent: summarizeExecutionIntent(intent),
+    traces: traceReports,
+    traceCount: traceReports.length,
+    plannedTraceCount: traceReports.filter((trace) => trace.status === "planned").length,
+    blockedTraceCount: traceReports.filter((trace) => trace.status === "blocked").length,
+    traceActionSummary: summarizeCommandActions(traceActions),
+    blockedReasonCount: blockedReasons.length,
+    blockedReasons,
+    mismatchedTraceCount: mismatchedTraces.length,
+    mismatchedTraceIds: mismatchedTraces.map((trace) => trace.id),
+    executionEnabled: false,
+    writeExecution: "disabled",
+    hasExecutionResults: false
+  };
+}
+
+export function summarizeExecutionAuditBundles(
+  intents: ExecutionIntent[],
+  traces: ExecutionTraceRecord[]
+): ExecutionAuditBundle[] {
+  return intents.map((intent) => summarizeExecutionAuditBundle(intent, traces));
+}
+
 function dryRunTraceBlockedReasons(intent: ExecutionIntent): string[] {
   const reasons = [...intent.blockedReasons];
 
@@ -238,6 +300,10 @@ function executionIntentBlockedReasons(plan: PullRequestPlan, approval: Approval
   }
 
   return reasons;
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values));
 }
 
 function summarizeCommandActions(

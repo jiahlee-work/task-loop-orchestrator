@@ -11,6 +11,7 @@ This document describes the model that should exist before `task-loop-orchestrat
 - Execution intents can be persisted under `.orchestrator/execution-intents/` for future audited write execution.
 - Execution intent read-only reports summarize stored intents for audit without running commands.
 - Execution dry-run trace records can be persisted under `.orchestrator/execution-traces/` to model future command-runner audit entries without spawning commands.
+- Execution audit bundles can group an intent with matching dry-run traces for read-only review while excluding unrelated trace records.
 - `pr-exec` is dry-run/preflight oriented.
 - `pr-exec --execute` requires approval data, checks stale approvals, and still returns a blocked report before branch, commit, push, or `gh pr create`.
 - `executedCommands` remains empty in the current implementation.
@@ -101,10 +102,11 @@ Audit logs must avoid recording secrets. Full stdout/stderr should not be persis
 1. Persist execution intents without running commands.
 2. Add read-only execution intent reports for audit before any command runner exists.
 3. Add command runner dry-run trace records that mirror the future audit shape without spawning commands.
-4. Add a single local-only command behind tests and explicit approval, such as branch creation in a temporary fixture repository.
-5. Add commit execution only after staged-file policy and diff verification exist.
-6. Add push only after remote/ref policy and CI handling are documented and tested.
-7. Add GitHub PR creation only after push policy, approval freshness, and `gh pr create` argument construction are covered.
+4. Add read-only audit bundles that group intents with matching dry-run traces.
+5. Add a single local-only command behind tests and explicit approval, such as branch creation in a temporary fixture repository.
+6. Add commit execution only after staged-file policy and diff verification exist.
+7. Add push only after remote/ref policy and CI handling are documented and tested.
+8. Add GitHub PR creation only after push policy, approval freshness, and `gh pr create` argument construction are covered.
 
 ## Hard Non-Goals
 

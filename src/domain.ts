@@ -379,6 +379,43 @@ export interface ExecutionTraceRecord {
   writeExecution: "disabled";
 }
 
+export interface ExecutionTraceReport {
+  id: string;
+  intentId: string;
+  runId: string;
+  planId: string;
+  approvalId: string;
+  checkpointId?: string;
+  action: PullRequestCommandCandidate["action"];
+  argv: string[];
+  reason: string;
+  status: ExecutionTraceStatus;
+  policyVersion: string;
+  policyDecision: ExecutionTracePolicyDecision;
+  blockedReasonCount: number;
+  blockedReasons: string[];
+  createdAt: string;
+  executionEnabled: false;
+  writeExecution: "disabled";
+  hasExecutionResults: false;
+}
+
+export interface ExecutionAuditBundle {
+  intent: ExecutionIntentReport;
+  traces: ExecutionTraceReport[];
+  traceCount: number;
+  plannedTraceCount: number;
+  blockedTraceCount: number;
+  traceActionSummary: ExecutionIntentCommandActionSummary[];
+  blockedReasonCount: number;
+  blockedReasons: string[];
+  mismatchedTraceCount: number;
+  mismatchedTraceIds: string[];
+  executionEnabled: false;
+  writeExecution: "disabled";
+  hasExecutionResults: false;
+}
+
 export type ProposedSubtask = Omit<Subtask, "status" | "createdAt" | "updatedAt"> &
   Partial<Pick<Subtask, "createdAt" | "updatedAt">>;
 

@@ -11,6 +11,8 @@ import {
   executionIntentPolicyVersion,
   parseExecutionIntent,
   parseExecutionTraceRecord,
+  summarizeExecutionAuditBundle,
+  summarizeExecutionAuditBundles,
   summarizeExecutionIntent,
   summarizeExecutionIntents
 } from "../src/execution-intents.js";
@@ -366,6 +368,132 @@ describe("execution intent persistence", () => {
         executionEnabled: true
       })
     ).toThrow("executionEnabled must be false");
+  });
+
+  it("summarizes execution audit bundles from an intent and matching traces", () => {
+    const intent = executionIntent("2026-06-22T00:00:00.000Z");
+    const traces = createExecutionDryRunTraces(intent, {
+      createdAt: "2026-06-22T01:00:00.000Z"
+    });
+
+    const bundle = summarizeExecutionAuditBundle(intent, traces);
+
+    expect(bundle.intent.id).toBe(intent.id);
+    expect(bundle.traces).toHaveLength(2);
+    expect(bundle.traceCount).toBe(2);
+    expect(bundle.plannedTraceCount).toBe(2);
+    expect(bundle.blockedTraceCount).toBe(0);
+    expect(bundle.traceActionSummary).toEqual([
+      { action: "create_branch", count: 1 },
+      { action: "create_pr", count: 1 }
+    ]);
+    expect(bundle.blockedReasonCount).toBe(0);
+    expect(bundle.blockedReasons).toEqual([]);
+    expect(bundle.mismatchedTraceCount).toBe(0);
+    expect(bundle.mismatchedTraceIds).toEqual([]);
+    expect(bundle.executionEnabled).toBe(false);
+    expect(bundle.writeExecution).toBe("disabled");
+    expect(bundle.hasExecutionResults).toBe(false);
+    expect(bundle.traces[0]).toMatchObject({
+      intentId: intent.id,
+      runId: intent.runId,
+      planId: intent.planId,
+      approvalId: intent.approvalId,
+      checkpointId: intent.checkpointId,
+      action: "create_branch",
+      argv: ["git", "switch", "-c", "orchestrator/run1"],
+      reason: "Create branch.",
+      status: "planned",
+      policyVersion: executionIntentPolicyVersion,
+      policyDecision: "dry_run_planned",
+      executionEnabled: false,
+      writeExecution: "disabled",
+      hasExecutionResults: false
+    });
+    expect("executedCommands" in bundle).toBe(false);
+    expect("stdout" in bundle).toBe(false);
+    expect("stderr" in bundle).toBe(false);
+    expect("exitCode" in bundle).toBe(false);
+    expect(bundle.traces.every((trace) => !("executedCommands" in trace))).toBe(true);
+    expect(bundle.traces.every((trace) => !("stdout" in trace))).toBe(true);
+    expect(bundle.traces.every((trace) => !("stderr" in trace))).toBe(true);
+    expect(bundle.traces.every((trace) => !("exitCode" in trace))).toBe(true);
+  });
+
+  it("keeps mismatched traces out of execution audit bundles and exposes mismatch counts", () => {
+    const intent = executionIntent("2026-06-22T00:00:00.000Z");
+    const [matchingTrace] = createExecutionDryRunTraces(intent, {
+      createdAt: "2026-06-22T01:00:00.000Z"
+    });
+    const otherIntent = executionIntent("2026-06-22T02:00:00.000Z");
+    const [mismatchedTrace] = createExecutionDryRunTraces(otherIntent, {
+      createdAt: "2026-06-22T03:00:00.000Z"
+    });
+
+    const bundle = summarizeExecutionAuditBundle(intent, [matchingTrace, mismatchedTrace]);
+
+    expect(bundle.traceCount).toBe(1);
+    expect(bundle.traces.map((trace) => trace.id)).toEqual([matchingTrace.id]);
+    expect(bundle.mismatchedTraceCount).toBe(1);
+    expect(bundle.mismatchedTraceIds).toEqual([mismatchedTrace.id]);
+    expect(bundle.executionEnabled).toBe(false);
+    expect(bundle.hasExecutionResults).toBe(false);
+  });
+
+  it("summarizes blocked execution audit bundles with unique blocked reasons", () => {
+    const approvedPlan = prPlan("checkpoint-old");
+    const currentPlan = prPlan("checkpoint-current", ["Repository status is not clean."]);
+    const approval = createPullRequestApproval(approvedPlan, {
+      approvedBy: "maintainer"
+    });
+    const intent = createExecutionIntent({
+      plan: currentPlan,
+      approval,
+      actor: "maintainer",
+      createdAt: "2026-06-22T00:00:00.000Z",
+      expiresAt: "2026-06-23T00:00:00.000Z",
+      permissionMode: "maintainer"
+    });
+    const traces = createExecutionDryRunTraces(intent, {
+      createdAt: "2026-06-22T01:00:00.000Z"
+    });
+
+    const bundle = summarizeExecutionAuditBundle(intent, traces);
+
+    expect(bundle.plannedTraceCount).toBe(0);
+    expect(bundle.blockedTraceCount).toBe(2);
+    expect(bundle.blockedReasons).toEqual(intent.blockedReasons);
+    expect(bundle.blockedReasonCount).toBe(intent.blockedReasons.length);
+    expect(bundle.traces.every((trace) => trace.status === "blocked")).toBe(true);
+    expect(bundle.executionEnabled).toBe(false);
+    expect("executedCommands" in bundle).toBe(false);
+  });
+
+  it("summarizes audit bundle lists from stored intent and trace records", async () => {
+    const root = await mkdtemp(join(tmpdir(), "task-loop-audit-bundle-"));
+    const store = new FileRunStore(root);
+    const intent = executionIntent("2026-06-22T00:00:00.000Z");
+    const traces = createExecutionDryRunTraces(intent, {
+      createdAt: "2026-06-22T01:00:00.000Z"
+    });
+
+    try {
+      await store.saveExecutionIntent(intent);
+      await Promise.all(traces.map((trace) => store.saveExecutionTrace(trace)));
+
+      const bundles = summarizeExecutionAuditBundles(
+        await store.listExecutionIntents(),
+        await store.listExecutionTraces()
+      );
+
+      expect(bundles).toHaveLength(1);
+      expect(bundles[0].intent.id).toBe(intent.id);
+      expect(bundles[0].traceCount).toBe(2);
+      expect(bundles[0].executionEnabled).toBe(false);
+      expect(bundles[0].hasExecutionResults).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
 
