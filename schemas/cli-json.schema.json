@@ -24,7 +24,8 @@
         "pr-exec",
         "approve-pr",
         "execution-audit",
-        "write-readiness"
+        "write-readiness",
+        "write-runner"
       ],
       "description": "CLI command that produced the response."
     },
@@ -996,6 +997,221 @@
       ],
       "additionalProperties": true
     },
+    "writeRunnerStatus": {
+      "type": "string",
+      "enum": ["planned", "blocked"]
+    },
+    "writeRunnerPlanItem": {
+      "type": "object",
+      "required": ["action", "summary"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["create_branch", "commit", "push", "create_pr"]
+        },
+        "summary": {
+          "type": "string"
+        },
+        "branchNameCandidate": {
+          "type": "string"
+        },
+        "baseBranch": {
+          "type": "string"
+        },
+        "sourceBranch": {
+          "type": "string"
+        },
+        "targetRef": {
+          "type": "string"
+        },
+        "commitMessageCandidate": {
+          "type": "string"
+        },
+        "prTitleCandidate": {
+          "type": "string"
+        },
+        "prBodyCandidate": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "writeRunnerDryRunPayload": {
+      "type": "object",
+      "required": [
+        "status",
+        "intentId",
+        "runId",
+        "planId",
+        "approvalId",
+        "readinessStatus",
+        "ready",
+        "planItemCount",
+        "planItems",
+        "traceCount",
+        "traceIds",
+        "localTracePersistence",
+        "blockedReasonCount",
+        "blockedReasons",
+        "createdAt",
+        "executionEnabled",
+        "writeExecution",
+        "hasExecutionResults"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/writeRunnerStatus"
+        },
+        "intentId": {
+          "type": "string"
+        },
+        "runId": {
+          "type": "string"
+        },
+        "planId": {
+          "type": "string"
+        },
+        "approvalId": {
+          "type": "string"
+        },
+        "checkpointId": {
+          "type": "string"
+        },
+        "readinessStatus": {
+          "$ref": "#/$defs/writeReadinessStatus"
+        },
+        "ready": {
+          "type": "boolean"
+        },
+        "planItemCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "planItems": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/writeRunnerPlanItem"
+          }
+        },
+        "traceCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "traceIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "localTracePersistence": {
+          "type": "string",
+          "enum": ["saved", "skipped"]
+        },
+        "blockedReasonCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "blockedReasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "executionEnabled": {
+          "const": false
+        },
+        "writeExecution": {
+          "const": "disabled"
+        },
+        "hasExecutionResults": {
+          "const": false
+        }
+      },
+      "additionalProperties": true
+    },
+    "writeRunnerErrorPayload": {
+      "type": "object",
+      "required": ["status", "errorCode", "message", "dryRun", "executionEnabled", "writeExecution", "hasExecutionResults"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["not_found", "error"]
+        },
+        "errorCode": {
+          "type": "string",
+          "enum": [
+            "write_runner_missing_intent",
+            "write_runner_requires_json",
+            "write_runner_intent_not_found",
+            "invalid_execution_intent_file",
+            "invalid_execution_trace_file",
+            "write_runner_preflight_missing_path",
+            "write_runner_preflight_file_not_found",
+            "write_runner_preflight_file_not_readable",
+            "write_runner_preflight_invalid_json",
+            "write_runner_preflight_invalid_schema"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "intentId": {
+          "type": "string"
+        },
+        "dryRun": {
+          "const": null
+        },
+        "details": {
+          "type": "object",
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["execution_intent", "execution_trace", "preflight"]
+            }
+          },
+          "additionalProperties": true
+        },
+        "executionEnabled": {
+          "const": false
+        },
+        "writeExecution": {
+          "const": "disabled"
+        },
+        "hasExecutionResults": {
+          "const": false
+        }
+      },
+      "additionalProperties": true
+    },
+    "writeRunnerResponsePayload": {
+      "type": "object",
+      "required": ["executionEnabled", "writeExecution", "hasExecutionResults"],
+      "properties": {
+        "executionEnabled": {
+          "const": false
+        },
+        "writeExecution": {
+          "const": "disabled"
+        },
+        "hasExecutionResults": {
+          "const": false
+        }
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/writeRunnerDryRunPayload"
+        },
+        {
+          "$ref": "#/$defs/writeRunnerErrorPayload"
+        }
+      ],
+      "additionalProperties": true
+    },
     "ownerDecisionItem": {
       "type": "object",
       "required": ["source", "reason"],
@@ -1433,6 +1649,19 @@
       },
       "then": {
         "$ref": "#/$defs/writeReadinessResponsePayload"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "write-runner"
+          }
+        },
+        "required": ["command"]
+      },
+      "then": {
+        "$ref": "#/$defs/writeRunnerResponsePayload"
       }
     },
     {

@@ -14,7 +14,8 @@ export const cliJsonCommands = [
   "pr-exec",
   "approve-pr",
   "execution-audit",
-  "write-readiness"
+  "write-readiness",
+  "write-runner"
 ] as const;
 
 export type CliJsonCommand = (typeof cliJsonCommands)[number];

@@ -16,7 +16,8 @@ import type {
   GitHubProviderMode,
   PermissionMode,
   ReviewerMode,
-  WriteReadinessErrorReport
+  WriteReadinessErrorReport,
+  WriteRunnerErrorReport
 } from "./domain.js";
 import { runDoctor, type DoctorReport } from "./doctor.js";
 import { CodexCliExecutor } from "./executors.js";
@@ -47,6 +48,12 @@ import {
   type WriteReadinessPreflightLoadErrorCode,
   summarizeWriteExecutionReadiness
 } from "./write-readiness.js";
+import {
+  createWriteRunnerDryRunTraces,
+  createWriteRunnerErrorReport,
+  formatWriteRunnerError,
+  summarizeWriteRunnerDryRun
+} from "./write-runner.js";
 
 interface ParsedArgs {
   command?: string;
@@ -124,6 +131,7 @@ function printUsage(): void {
   task-loop-orchestrator pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]
   task-loop-orchestrator execution-audit (--intent intentId|--all) [--json]
   task-loop-orchestrator write-readiness --intent intentId [--preflight path] [--json]
+  task-loop-orchestrator write-runner --intent intentId [--preflight path] --json
   task-loop-orchestrator checks [ref] [--json]`);
 }
 
@@ -240,6 +248,33 @@ function createWriteReadinessErrorReport(
     writeExecution: "disabled",
     hasExecutionResults: false
   };
+}
+
+type WriteRunnerErrorCode = WriteRunnerErrorReport["errorCode"];
+
+function printWriteRunnerError(
+  errorCode: WriteRunnerErrorCode,
+  message: string,
+  options: {
+    status?: WriteRunnerErrorReport["status"];
+    intentId?: string;
+    details?: WriteRunnerErrorReport["details"];
+  } = {}
+): void {
+  printJson("write-runner", createWriteRunnerErrorReport(errorCode, message, options));
+}
+
+function printPlainWriteRunnerError(
+  errorCode: WriteRunnerErrorCode,
+  message: string,
+  options: {
+    status?: WriteRunnerErrorReport["status"];
+    intentId?: string;
+    details?: WriteRunnerErrorReport["details"];
+  } = {}
+): void {
+  process.stdout.write(formatWriteRunnerError(createWriteRunnerErrorReport(errorCode, message, options)));
+  process.exitCode = 1;
 }
 
 async function doctorCommand(args: ParsedArgs): Promise<void> {
@@ -808,6 +843,115 @@ async function writeReadinessCommand(args: ParsedArgs): Promise<void> {
   }
 }
 
+async function writeRunnerCommand(args: ParsedArgs): Promise<void> {
+  const jsonOutput = args.flags.json === true;
+  const preflightFlagPresent = Object.hasOwn(args.flags, "preflight");
+  const preflightPath = stringFlag(args.flags, "preflight");
+
+  if (!jsonOutput) {
+    printPlainWriteRunnerError(
+      "write_runner_requires_json",
+      "write-runner dry-run output requires --json in this boundary milestone."
+    );
+    return;
+  }
+
+  const intentId = stringFlag(args.flags, "intent");
+  if (!intentId?.trim()) {
+    printWriteRunnerError("write_runner_missing_intent", "write-runner requires --intent <intentId>.");
+    return;
+  }
+
+  if (preflightFlagPresent && !preflightPath?.trim()) {
+    printWriteRunnerError("write_runner_preflight_missing_path", "write-runner --preflight requires a path.", {
+      intentId,
+      details: { kind: "preflight" }
+    });
+    return;
+  }
+
+  const store = new FileRunStore(process.cwd());
+  let intent: Awaited<ReturnType<FileRunStore["loadExecutionIntent"]>>;
+  try {
+    intent = await store.loadExecutionIntent(intentId);
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      printWriteRunnerError("write_runner_intent_not_found", "Execution intent was not found.", {
+        status: "not_found",
+        intentId
+      });
+      return;
+    }
+    if (isInvalidExecutionIntentFileError(error)) {
+      printWriteRunnerError("invalid_execution_intent_file", "Execution intent file is invalid.", {
+        intentId,
+        details: { kind: "execution_intent" }
+      });
+      return;
+    }
+    throw error;
+  }
+
+  let traces: Awaited<ReturnType<FileRunStore["listExecutionTraces"]>>;
+  try {
+    traces = await store.listExecutionTraces();
+  } catch (error) {
+    if (isInvalidExecutionTraceFileError(error)) {
+      printWriteRunnerError("invalid_execution_trace_file", "Execution trace file is invalid.", {
+        intentId,
+        details: { kind: "execution_trace" }
+      });
+      return;
+    }
+    throw error;
+  }
+
+  const bundle = summarizeExecutionAuditBundle(intent, traces);
+  let preflight: Parameters<typeof summarizeWriteExecutionReadiness>[1];
+  if (preflightPath?.trim()) {
+    const loadedPreflight = await loadWriteReadinessPreflightInput(preflightPath);
+    if (!loadedPreflight.ok) {
+      printWriteRunnerError(
+        writeRunnerPreflightErrorCode(loadedPreflight.errorCode),
+        writeReadinessPreflightErrorMessage(loadedPreflight.errorCode),
+        {
+          intentId,
+          details: { kind: "preflight" }
+        }
+      );
+      return;
+    }
+    preflight = loadedPreflight.preflight;
+  }
+
+  const readiness = summarizeWriteExecutionReadiness(bundle, preflight);
+  const dryRunTraces = createWriteRunnerDryRunTraces(intent, readiness);
+  for (const trace of dryRunTraces) {
+    await store.saveExecutionTrace(trace);
+  }
+
+  printJson(
+    "write-runner",
+    summarizeWriteRunnerDryRun(intent, readiness, dryRunTraces, {
+      localTracePersistence: dryRunTraces.length > 0 ? "saved" : "skipped"
+    })
+  );
+}
+
+function writeRunnerPreflightErrorCode(errorCode: WriteReadinessPreflightLoadErrorCode): WriteRunnerErrorCode {
+  if (errorCode === "preflight_file_not_found") {
+    return "write_runner_preflight_file_not_found";
+  }
+  if (errorCode === "preflight_file_not_readable") {
+    return "write_runner_preflight_file_not_readable";
+  }
+  if (errorCode === "preflight_invalid_json") {
+    return "write_runner_preflight_invalid_json";
+  }
+
+  return "write_runner_preflight_invalid_schema";
+}
+
 function writeReadinessPreflightErrorCode(errorCode: WriteReadinessPreflightLoadErrorCode): WriteReadinessErrorCode {
   if (errorCode === "preflight_file_not_found") {
     return "write_readiness_preflight_file_not_found";
@@ -967,6 +1111,11 @@ async function main(): Promise<void> {
 
   if (args.command === "write-readiness") {
     await writeReadinessCommand(args);
+    return;
+  }
+
+  if (args.command === "write-runner") {
+    await writeRunnerCommand(args);
     return;
   }
 

@@ -46,6 +46,8 @@ The envelope applies to every current JSON-capable command:
 - `execution-audit --intent <intentId> --json`
 - `write-readiness --intent <intentId> --json`
 - `write-readiness --intent <intentId> --preflight <path> --json`
+- `write-runner --intent <intentId> --json`
+- `write-runner --intent <intentId> --preflight <path> --json`
 
 ## Raw Status
 
@@ -127,6 +129,18 @@ The JSON path handles missing `--intent`, missing execution intents, invalid per
 
 When `--preflight <path>` is supplied, loader/parser failures return safe errors rather than partial readiness success. JSON envelopes keep `readiness: null`, disabled execution markers, and no raw path or raw file content; plain errors use short human-readable messages with the same safety boundary.
 
+## Write Runner Schema
+
+`write-runner --intent <intentId> --json` and `write-runner --intent <intentId> --preflight <path> --json` have a command-specific schema branch for the audited write runner dry-run boundary. The command computes the same readiness gate as `write-readiness`; when readiness is `ready`, it saves local dry-run trace records under `.orchestrator/execution-traces/` and returns a plan report. When readiness is `blocked` or `unknown`, it returns a blocked dry-run report without saving new traces.
+
+The `writeRunnerDryRunPayload` fixes `status`, `intentId`, `runId`, `planId`, `approvalId`, `readinessStatus`, `ready`, `planItemCount`, `planItems`, `traceCount`, `traceIds`, `localTracePersistence`, `blockedReasonCount`, `blockedReasons`, `createdAt`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`, with optional `checkpointId`.
+
+Each `writeRunnerPlanItem` fixes `action` and `summary`, with optional safe candidates such as `branchNameCandidate`, `baseBranch`, `sourceBranch`, `targetRef`, `commitMessageCandidate`, `prTitleCandidate`, and `prBodyCandidate`. Plan items intentionally omit raw command `argv`. The top-level `localTracePersistence` is `saved` when dry-run trace artifacts were written and `skipped` when readiness prevented trace persistence.
+
+The `writeRunnerResponsePayload` allows either a success `writeRunnerDryRunPayload` or a `writeRunnerErrorPayload`. Error payloads fix `status`, `errorCode`, `message`, `dryRun`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`, with optional `intentId` and `details`. Error payloads keep `dryRun: null`, `executionEnabled: false`, `writeExecution: "disabled"`, and `hasExecutionResults: false`.
+
+The JSON path handles missing `--intent`, missing execution intents, invalid persisted execution intent files, invalid persisted execution trace files, missing preflight paths, file-not-found/read failures, invalid JSON, and invalid preflight schema with safe error envelopes. This dry-run boundary does not execute commands, create branches, commits, pushes, pull requests, merges, releases, or tags, and it does not expose raw command args, stdout, stderr, exit codes, `executedCommands`, stack traces, or secrets.
+
 ## Doctor Schema
 
 `doctor --json` has a command-specific schema branch for installation and project readiness diagnostics. Consumers can rely on top-level `status`, `rootDir`, `githubMode`, and `checks`.
@@ -141,7 +155,7 @@ The `files` object currently reports `config` and `gitignore`. Each file result 
 
 ## Coverage and Exceptions
 
-Every current JSON-capable command is tracked by `schemas/cli-json.schema.json` with a command-specific branch: `init`, `doctor`, `run`, `resume`, `status`, `checkpoint`, `checks`, `pr-plan`, `pr-exec`, `approve-pr`, `execution-audit`, and `write-readiness`.
+Every current JSON-capable command is tracked by `schemas/cli-json.schema.json` with a command-specific branch: `init`, `doctor`, `run`, `resume`, `status`, `checkpoint`, `checks`, `pr-plan`, `pr-exec`, `approve-pr`, `execution-audit`, `write-readiness`, and `write-runner`.
 
 Two response families intentionally stay on the flexible common envelope path:
 
@@ -166,6 +180,6 @@ Commands that need an existing run return an enveloped not-found response when `
 
 The machine-readable schema artifact is available at [`../schemas/cli-json.schema.json`](../schemas/cli-json.schema.json). The schema validates the common envelope and command enum while allowing command-specific payload fields to remain flexible.
 
-Command-specific branches are implemented with `allOf` conditions that reference `$defs` payload definitions such as `runReportPayload`, `checksPayload`, `checkpointPayload`, `prPlanPayload`, `prExecPayload`, `approvePrPayload`, `executionAuditResponsePayload`, `executionAuditPayload`, `executionAuditErrorPayload`, `writeReadinessResponsePayload`, `writeReadinessPayload`, `writeReadinessErrorPayload`, `doctorPayload`, and `initPayload`.
+Command-specific branches are implemented with `allOf` conditions that reference `$defs` payload definitions such as `runReportPayload`, `checksPayload`, `checkpointPayload`, `prPlanPayload`, `prExecPayload`, `approvePrPayload`, `executionAuditResponsePayload`, `executionAuditPayload`, `executionAuditErrorPayload`, `writeReadinessResponsePayload`, `writeReadinessPayload`, `writeReadinessErrorPayload`, `writeRunnerResponsePayload`, `writeRunnerDryRunPayload`, `writeRunnerErrorPayload`, `doctorPayload`, and `initPayload`.
 
 Representative JSON outputs are also covered by the lightweight sample smoke in [`../tests/json-schema-samples.test.ts`](../tests/json-schema-samples.test.ts). Those samples are built from test-only fixtures and checked against the schema envelope, command enum, command-specific branch, and required top-level fields without introducing a full JSON Schema validator.

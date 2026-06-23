@@ -502,6 +502,102 @@ describe("CLI JSON schema artifact", () => {
     expect(writeReadinessResponsePayload?.additionalProperties).toBe(true);
   });
 
+  it("defines write runner dry-run payload schemas and response branch contract", async () => {
+    const schema = await readSchema();
+    const writeRunnerDryRunPayload = schema.$defs?.writeRunnerDryRunPayload;
+    const writeRunnerPlanItem = schema.$defs?.writeRunnerPlanItem;
+    const writeRunnerErrorPayload = schema.$defs?.writeRunnerErrorPayload;
+    const writeRunnerResponsePayload = schema.$defs?.writeRunnerResponsePayload;
+
+    expect(schema.properties?.command?.enum).toContain("write-runner");
+    expect(branchRefsForCommand(schema, "write-runner")).toEqual(["#/$defs/writeRunnerResponsePayload"]);
+    expect(schema.$defs?.writeRunnerStatus).toEqual({
+      type: "string",
+      enum: ["planned", "blocked"]
+    });
+    expect(writeRunnerDryRunPayload?.required).toEqual(
+      expect.arrayContaining([
+        "status",
+        "intentId",
+        "runId",
+        "planId",
+        "approvalId",
+        "readinessStatus",
+        "ready",
+        "planItemCount",
+        "planItems",
+        "traceCount",
+        "traceIds",
+        "localTracePersistence",
+        "blockedReasonCount",
+        "blockedReasons",
+        "createdAt",
+        "executionEnabled",
+        "writeExecution",
+        "hasExecutionResults"
+      ])
+    );
+    expect(writeRunnerDryRunPayload?.required).not.toContain("checkpointId");
+    expect(writeRunnerDryRunPayload?.properties?.status).toEqual({ $ref: "#/$defs/writeRunnerStatus" });
+    expect(writeRunnerDryRunPayload?.properties?.readinessStatus).toEqual({ $ref: "#/$defs/writeReadinessStatus" });
+    expect(writeRunnerDryRunPayload?.properties?.planItems).toEqual({
+      type: "array",
+      items: {
+        $ref: "#/$defs/writeRunnerPlanItem"
+      }
+    });
+    expect(writeRunnerDryRunPayload?.properties?.traceIds).toEqual({
+      type: "array",
+      items: {
+        type: "string"
+      }
+    });
+    expect(writeRunnerDryRunPayload?.properties?.localTracePersistence).toEqual({
+      type: "string",
+      enum: ["saved", "skipped"]
+    });
+    expect(writeRunnerDryRunPayload?.properties?.executionEnabled).toEqual({ const: false });
+    expect(writeRunnerDryRunPayload?.properties?.writeExecution).toEqual({ const: "disabled" });
+    expect(writeRunnerDryRunPayload?.properties?.hasExecutionResults).toEqual({ const: false });
+    expect(writeRunnerDryRunPayload?.additionalProperties).toBe(true);
+    expect(writeRunnerPlanItem?.required).toEqual(expect.arrayContaining(["action", "summary"]));
+    expect(writeRunnerPlanItem?.properties?.action).toEqual({
+      type: "string",
+      enum: ["create_branch", "commit", "push", "create_pr"]
+    });
+    expect(writeRunnerPlanItem?.properties).not.toHaveProperty("argv");
+    expect(writeRunnerErrorPayload?.required).toEqual(
+      expect.arrayContaining(["status", "errorCode", "message", "dryRun", "executionEnabled", "writeExecution", "hasExecutionResults"])
+    );
+    expect(writeRunnerErrorPayload?.properties?.errorCode).toEqual({
+      type: "string",
+      enum: [
+        "write_runner_missing_intent",
+        "write_runner_requires_json",
+        "write_runner_intent_not_found",
+        "invalid_execution_intent_file",
+        "invalid_execution_trace_file",
+        "write_runner_preflight_missing_path",
+        "write_runner_preflight_file_not_found",
+        "write_runner_preflight_file_not_readable",
+        "write_runner_preflight_invalid_json",
+        "write_runner_preflight_invalid_schema"
+      ]
+    });
+    expect(writeRunnerErrorPayload?.properties?.dryRun).toEqual({ const: null });
+    expect(writeRunnerErrorPayload?.properties?.executionEnabled).toEqual({ const: false });
+    expect(writeRunnerErrorPayload?.properties?.writeExecution).toEqual({ const: "disabled" });
+    expect(writeRunnerErrorPayload?.properties?.hasExecutionResults).toEqual({ const: false });
+    expect(writeRunnerResponsePayload?.required).toEqual(
+      expect.arrayContaining(["executionEnabled", "writeExecution", "hasExecutionResults"])
+    );
+    expect(writeRunnerResponsePayload?.oneOf).toEqual([
+      { $ref: "#/$defs/writeRunnerDryRunPayload" },
+      { $ref: "#/$defs/writeRunnerErrorPayload" }
+    ]);
+    expect(writeRunnerResponsePayload?.additionalProperties).toBe(true);
+  });
+
   it("defines a focused doctor payload schema", async () => {
     const schema = await readSchema();
     const doctorPayload = schema.$defs?.doctorPayload;
@@ -583,7 +679,8 @@ describe("CLI JSON schema artifact", () => {
       "pr-exec": "#/$defs/prExecPayload",
       "approve-pr": "#/$defs/approvePrPayload",
       "execution-audit": "#/$defs/executionAuditResponsePayload",
-      "write-readiness": "#/$defs/writeReadinessResponsePayload"
+      "write-readiness": "#/$defs/writeReadinessResponsePayload",
+      "write-runner": "#/$defs/writeRunnerResponsePayload"
     };
 
     for (const command of cliJsonCommands) {
@@ -868,6 +965,7 @@ describe("CLI JSON schema artifact", () => {
     expect(docs).toContain("PR Approval Schema");
     expect(docs).toContain("Execution Audit Schema");
     expect(docs).toContain("Write Readiness Schema");
+    expect(docs).toContain("Write Runner Schema");
     expect(docs).toContain("Doctor Schema");
     expect(docs).toContain("Init Schema");
     expect(docs).toContain("Coverage and Exceptions");
@@ -894,7 +992,10 @@ describe("CLI JSON schema artifact", () => {
       { heading: "Execution Audit Schema", required: requiredFields(schema.$defs?.executionAuditResponsePayload) },
       { heading: "Write Readiness Schema", required: requiredFields(schema.$defs?.writeReadinessPayload) },
       { heading: "Write Readiness Schema", required: requiredFields(schema.$defs?.writeReadinessErrorPayload) },
-      { heading: "Write Readiness Schema", required: requiredFields(schema.$defs?.writeReadinessResponsePayload) }
+      { heading: "Write Readiness Schema", required: requiredFields(schema.$defs?.writeReadinessResponsePayload) },
+      { heading: "Write Runner Schema", required: requiredFields(schema.$defs?.writeRunnerDryRunPayload) },
+      { heading: "Write Runner Schema", required: requiredFields(schema.$defs?.writeRunnerErrorPayload) },
+      { heading: "Write Runner Schema", required: requiredFields(schema.$defs?.writeRunnerResponsePayload) }
     ];
 
     for (const section of sections) {
@@ -1111,6 +1212,31 @@ async function readSchema(): Promise<{
       oneOf?: unknown[];
       additionalProperties?: boolean;
     };
+    writeRunnerStatus?: {
+      type?: string;
+      enum?: string[];
+    };
+    writeRunnerDryRunPayload?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
+    };
+    writeRunnerPlanItem?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
+    };
+    writeRunnerErrorPayload?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
+    };
+    writeRunnerResponsePayload?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      oneOf?: unknown[];
+      additionalProperties?: boolean;
+    };
     approvalPlanSnapshot?: {
       required?: string[];
     };
@@ -1297,6 +1423,31 @@ async function readSchema(): Promise<{
         additionalProperties?: boolean;
       };
       writeReadinessResponsePayload?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        oneOf?: unknown[];
+        additionalProperties?: boolean;
+      };
+      writeRunnerStatus?: {
+        type?: string;
+        enum?: string[];
+      };
+      writeRunnerDryRunPayload?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
+      writeRunnerPlanItem?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
+      writeRunnerErrorPayload?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
+      writeRunnerResponsePayload?: {
         required?: string[];
         properties?: Record<string, unknown>;
         oneOf?: unknown[];

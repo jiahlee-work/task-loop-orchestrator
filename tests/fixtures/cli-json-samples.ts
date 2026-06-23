@@ -10,6 +10,7 @@ import { createPullRequestPlan } from "../../src/pr-plan.js";
 import { MockRepoProvider } from "../../src/providers.js";
 import { createRunCliReport } from "../../src/run-report.js";
 import { summarizeWriteExecutionReadiness } from "../../src/write-readiness.js";
+import { summarizeWriteRunnerDryRun } from "../../src/write-runner.js";
 
 export interface BuildCliJsonSamplesInput {
   initRoot: string;
@@ -39,6 +40,7 @@ export async function buildCliJsonSamples(input: BuildCliJsonSamplesInput): Prom
   });
   const executionTraces = createExecutionDryRunTraces(executionIntent, { createdAt });
   const executionAuditBundle = summarizeExecutionAuditBundle(executionIntent, executionTraces);
+  const writeReadiness = summarizeWriteExecutionReadiness(executionAuditBundle, passingPreflight());
   const runReport = createRunCliReport(run, {
     pathForRun: (runId) => join(run.context.runId, ".orchestrator", "runs", `${runId}.json`)
   });
@@ -55,8 +57,33 @@ export async function buildCliJsonSamples(input: BuildCliJsonSamplesInput): Prom
     toJsonObject(createCliJsonReport("pr-exec", prExec, createdAt)),
     toJsonObject(createCliJsonReport("approve-pr", approval, createdAt)),
     toJsonObject(createCliJsonReport("execution-audit", executionAuditBundle, createdAt)),
-    toJsonObject(createCliJsonReport("write-readiness", summarizeWriteExecutionReadiness(executionAuditBundle), createdAt))
+    toJsonObject(createCliJsonReport("write-readiness", summarizeWriteExecutionReadiness(executionAuditBundle), createdAt)),
+    toJsonObject(
+      createCliJsonReport(
+        "write-runner",
+        summarizeWriteRunnerDryRun(executionIntent, writeReadiness, executionTraces, {
+          createdAt,
+          localTracePersistence: "saved"
+        }),
+        createdAt
+      )
+    )
   ];
+}
+
+function passingPreflight() {
+  return {
+    approvalFresh: true,
+    approvalNotExpired: true,
+    planFingerprintMatches: true,
+    checkpointMatches: true,
+    repoClean: true,
+    diffVerified: true,
+    refPolicySatisfied: true,
+    ciPolicySatisfied: true,
+    permissionAllowed: true,
+    commandRunnerConfigured: true
+  };
 }
 
 function checksSummary(): GitHubCheckSummary {

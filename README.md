@@ -40,10 +40,11 @@ npx task-loop-orchestrator status --json
 npx task-loop-orchestrator checks HEAD --json
 npx task-loop-orchestrator execution-audit --all
 npx task-loop-orchestrator execution-audit --all --json
+npx task-loop-orchestrator write-runner --intent intent_xxx --preflight readiness-preflight.json --json
 ```
 
 `checks HEAD --json` requires a GitHub remote and readable check-runs to report live CI status; otherwise it returns a graceful JSON fallback.
-`execution-audit` is read-only and useful when `.orchestrator/execution-intents/` records exist. Plain output is for humans; use `--json` for automation and scripts.
+`execution-audit` is read-only and useful when `.orchestrator/execution-intents/` records exist. Plain output is for humans; use `--json` for automation and scripts. `write-runner` is still dry-run only: it may save local trace artifacts when readiness is ready, but it does not execute commands or create branches, commits, pushes, or PRs.
 
 ## Local Development
 
@@ -82,6 +83,7 @@ node dist/cli.js execution-audit --all
 node dist/cli.js execution-audit --all --json
 node dist/cli.js execution-audit --intent intent_xxx
 node dist/cli.js execution-audit --intent intent_xxx --json
+node dist/cli.js write-runner --intent intent_xxx --preflight readiness-preflight.json --json
 ```
 
 Runs are stored as JSON files under `.orchestrator/runs/<runId>.json`.
@@ -231,6 +233,8 @@ Stored approvals are tied to the checkpoint that was current when approval was r
 `execution-audit --all` and `execution-audit --intent <intentId>` inspect persisted execution intents and dry-run traces when those records exist. Plain output is the human-readable terminal view; add `--json` for the stable automation contract.
 
 The command is read-only. It does not write files, execute commands, create branches, commit, push, create PRs, merge, publish, create tags, or create GitHub releases.
+
+`write-runner --intent <intentId> [--preflight <path>] --json` is the audited dry-run runner boundary. It can write local dry-run trace records under `.orchestrator/execution-traces/` only when readiness is ready; it still never runs shell commands, creates branches, commits, pushes, PRs, merges, releases, or tags.
 
 Current approval model:
 

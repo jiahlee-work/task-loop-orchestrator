@@ -52,9 +52,12 @@ describe("quickstart documentation", () => {
       "npx task-loop-orchestrator write-readiness --intent intent_xxx --json",
       "npx task-loop-orchestrator write-readiness --intent intent_xxx --preflight readiness-preflight.json",
       "npx task-loop-orchestrator write-readiness --intent intent_xxx --preflight readiness-preflight.json --json",
+      "npx task-loop-orchestrator write-runner --intent intent_xxx --json",
+      "npx task-loop-orchestrator write-runner --intent intent_xxx --preflight readiness-preflight.json --json",
       "Plain output is for people reading terminal summaries",
       "Use `--json` for automation, scripts, or UI integrations",
       "does not write files",
+      "write local dry-run trace records",
       "execute external commands",
       "create branches",
       "commit",
@@ -309,7 +312,7 @@ describe("release readiness documentation", () => {
     expect(design).toContain("[`execution-audit-cli.md`](execution-audit-cli.md)");
     expectContainsAll(design, [
       "# Approval-Gated Write Execution Model",
-      "Status: design draft, not enabled.",
+      "Status: design draft with staged read-only and dry-run surfaces implemented; actual write execution is not enabled.",
       "does not enable write execution",
       "current CLI must continue to block before write-side command execution",
       "`pr-exec --execute` requires approval data",
@@ -383,6 +386,7 @@ describe("release readiness documentation", () => {
       "contract fixture coverage for blocked and ready JSON-like report shapes",
       "preflight value parser, file loader, plain/JSON CLI, and contract fixture coverage",
       "Package smoke covers the installed binary JSON, plain, and preflight readiness paths",
+      "`write-runner --intent <intentId> [--preflight <path>] --json` is enabled as an audited dry-run boundary",
       "Write Readiness CLI And Schema Surface Draft",
       "Status: plain and JSON paths enabled for `write-readiness --intent <intentId> [--json]`; preflight input is enabled with `--preflight <path>` in both modes.",
       "does not unlock write execution",
@@ -467,6 +471,17 @@ describe("release readiness documentation", () => {
       "invalid preflight schema returns a safe plain error",
       "no smoke path runs command execution",
       "Keep `write-readiness --intent <intentId> [--json]` and `--preflight <path> [--json]` under schema/docs/package smoke coverage",
+      "Keep `write-runner --intent <intentId> [--preflight <path>] --json` under schema/docs/package smoke coverage as a dry-run boundary that only saves local trace artifacts",
+      "Audited Write Runner Dry-Run Boundary",
+      "Status: JSON path enabled for `write-runner --intent <intentId> [--preflight <path>] --json`; plain output and actual command execution remain disabled.",
+      "task-loop-orchestrator write-runner --intent <intentId> --json",
+      "task-loop-orchestrator write-runner --intent <intentId> --preflight <path> --json",
+      "If readiness is `ready`, the CLI persists local dry-run trace records under `.orchestrator/execution-traces/` as audit artifacts",
+      "If readiness is `blocked` or `unknown`, the CLI returns a blocked dry-run report and does not save new traces",
+      "`localTracePersistence`",
+      "they do not expose raw command args",
+      "This boundary is not an execution engine",
+      "must not use `child_process`, shell execution, GitHub write APIs",
       "actual write execution unlock as a separate milestone",
       "Persist execution intents without running commands",
       "Add a read-only write execution readiness report helper",
@@ -475,6 +490,7 @@ describe("release readiness documentation", () => {
       "Enable the read-only `write-readiness --intent <intentId> --json` path and command-specific schema branch",
       "Enable plain readiness output using the pure formatter after JSON behavior is stable",
       "Complete the read-only `--preflight <path> [--json]` surface after CLI error handling and package smoke are covered",
+      "Enable the audited `write-runner --intent <intentId> [--preflight <path>] --json` dry-run boundary",
       "npm publish",
       "git tag creation",
       "GitHub release creation",
@@ -713,7 +729,8 @@ describe("command json documentation boundaries", () => {
       "pr-exec",
       "approve-pr",
       "execution-audit",
-      "write-readiness"
+      "write-readiness",
+      "write-runner"
     ]);
   });
 
@@ -747,7 +764,8 @@ describe("command json documentation boundaries", () => {
       ["pr-exec", "#/$defs/prExecPayload"],
       ["approve-pr", "#/$defs/approvePrPayload"],
       ["execution-audit", "#/$defs/executionAuditResponsePayload"],
-      ["write-readiness", "#/$defs/writeReadinessResponsePayload"]
+      ["write-readiness", "#/$defs/writeReadinessResponsePayload"],
+      ["write-runner", "#/$defs/writeRunnerResponsePayload"]
     ]);
 
     expect([...branchRefs.keys()].sort()).toEqual([...cliJsonCommands].sort());
@@ -805,6 +823,7 @@ describe("command reference documentation", () => {
       "pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]",
       "execution-audit (--intent intentId|--all) [--json]",
       "write-readiness --intent intentId [--preflight path] [--json]",
+      "write-runner --intent intentId [--preflight path] --json",
       "checks [ref] [--json]"
     ]);
     expect(commandHeadings).toEqual([
@@ -821,7 +840,8 @@ describe("command reference documentation", () => {
       "approve-pr",
       "pr-exec",
       "execution-audit",
-      "write-readiness"
+      "write-readiness",
+      "write-runner"
     ]);
 
     const documentedCommands = new Set(commandHeadings);
@@ -846,6 +866,7 @@ describe("command reference documentation", () => {
       "saves checkpoint JSON under `.orchestrator/checkpoints/`",
       "writes an approval record under `.orchestrator/approvals/`",
       "reads `.orchestrator/execution-intents/` and `.orchestrator/execution-traces/`",
+      "writes local dry-run trace records under `.orchestrator/execution-traces/`",
       "dry-run by default",
       "executedCommands` remains empty",
       "does not create GitHub PRs",
@@ -906,6 +927,18 @@ describe("command reference documentation", () => {
       "does not write files",
       "does not execute commands",
       "does not query GitHub"
+    ]);
+    expectSectionContains(sections, "write-runner", [
+      "dry-run",
+      ".orchestrator/execution-intents/",
+      ".orchestrator/execution-traces/",
+      "writes local dry-run trace records under `.orchestrator/execution-traces/` as audit artifacts",
+      "`--json` is required",
+      "does not execute commands",
+      "does not create branches",
+      "commits",
+      "pushes",
+      "GitHub PRs"
     ]);
 
     expectSectionContains(sections, "init", ["writes local bootstrap files only", "orchestrator.config.json", ".gitignore"]);
@@ -977,6 +1010,7 @@ describe("command reference documentation", () => {
       "approve-pr",
       "execution-audit",
       "write-readiness",
+      "write-runner",
       "checks"
     ]) {
       expect(examples.has(command), `Missing command reference example for ${command}`).toBe(true);
@@ -994,6 +1028,8 @@ describe("command reference documentation", () => {
       '"execution-audit", "--intent", fixture.intentId, "--json"',
       '"write-readiness", "--intent", fixture.intentId, "--json"',
       '"write-readiness", "--intent", fixture.intentId, "--preflight", preflight.validPath, "--json"',
+      '"write-runner", "--intent", fixture.intentId, "--preflight", preflight.validPath, "--json"',
+      '"write-runner", "--intent", fixture.intentId, "--json"',
       '"write-readiness", "--intent", fixture.intentId, "--preflight", preflight.validPath]',
       '"write-readiness", "--intent", fixture.intentId]',
       '"execution-audit", "--intent", fixture.intentId]',

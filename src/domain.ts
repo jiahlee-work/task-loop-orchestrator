@@ -525,6 +525,66 @@ export interface WriteReadinessErrorReport {
   hasExecutionResults: false;
 }
 
+export type WriteRunnerDryRunStatus = "planned" | "blocked";
+
+export interface WriteRunnerDryRunPlanItem {
+  action: PullRequestCommandCandidate["action"];
+  summary: string;
+  branchNameCandidate?: string;
+  baseBranch?: string;
+  sourceBranch?: string;
+  targetRef?: string;
+  commitMessageCandidate?: string;
+  prTitleCandidate?: string;
+  prBodyCandidate?: string;
+}
+
+export interface WriteRunnerDryRunReport {
+  status: WriteRunnerDryRunStatus;
+  intentId: string;
+  runId: string;
+  planId: string;
+  approvalId: string;
+  checkpointId?: string;
+  readinessStatus: WriteExecutionReadinessStatus;
+  ready: boolean;
+  planItemCount: number;
+  planItems: WriteRunnerDryRunPlanItem[];
+  traceCount: number;
+  traceIds: string[];
+  localTracePersistence: "saved" | "skipped";
+  blockedReasonCount: number;
+  blockedReasons: string[];
+  createdAt: string;
+  executionEnabled: false;
+  writeExecution: "disabled";
+  hasExecutionResults: false;
+}
+
+export interface WriteRunnerErrorReport {
+  status: "not_found" | "error";
+  errorCode:
+    | "write_runner_missing_intent"
+    | "write_runner_requires_json"
+    | "write_runner_intent_not_found"
+    | "invalid_execution_intent_file"
+    | "invalid_execution_trace_file"
+    | "write_runner_preflight_missing_path"
+    | "write_runner_preflight_file_not_found"
+    | "write_runner_preflight_file_not_readable"
+    | "write_runner_preflight_invalid_json"
+    | "write_runner_preflight_invalid_schema";
+  message: string;
+  intentId?: string;
+  dryRun: null;
+  details?: {
+    kind: "execution_intent" | "execution_trace" | "preflight";
+  };
+  executionEnabled: false;
+  writeExecution: "disabled";
+  hasExecutionResults: false;
+}
+
 export type ProposedSubtask = Omit<Subtask, "status" | "createdAt" | "updatedAt"> &
   Partial<Pick<Subtask, "createdAt" | "updatedAt">>;
 

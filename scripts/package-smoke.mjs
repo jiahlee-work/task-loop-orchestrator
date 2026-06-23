@@ -42,6 +42,7 @@ async function main() {
       assertIncludes(help.stdout, "task-loop-orchestrator doctor", "help output should include doctor usage");
       assertIncludes(help.stdout, "task-loop-orchestrator execution-audit", "help output should include execution-audit usage");
       assertIncludes(help.stdout, "task-loop-orchestrator write-readiness", "help output should include write-readiness usage");
+      assertIncludes(help.stdout, "task-loop-orchestrator write-runner", "help output should include write-runner usage");
       assertIncludes(help.stdout, "task-loop-orchestrator --version", "help output should include version usage");
     });
 
@@ -242,6 +243,26 @@ async function main() {
         intentIds: [fixture.intentId]
       });
 
+      const blockedDryRun = await run(bin, ["write-runner", "--intent", fixture.intentId, "--json"], { cwd: projectDir });
+      assertWriteRunnerDryRunReport(parseJson(blockedDryRun), fixture.intentId, {
+        status: "blocked",
+        readinessStatus: "unknown",
+        ready: false,
+        localTracePersistence: "skipped"
+      });
+
+      const readyDryRun = await run(
+        bin,
+        ["write-runner", "--intent", fixture.intentId, "--preflight", preflight.validPath, "--json"],
+        { cwd: projectDir }
+      );
+      assertWriteRunnerDryRunReport(parseJson(readyDryRun), fixture.intentId, {
+        status: "planned",
+        readinessStatus: "ready",
+        ready: true,
+        localTracePersistence: "saved"
+      });
+
       const missingAudit = await run(bin, ["execution-audit", "--intent", "intent_missing", "--json"], {
         cwd: projectDir
       });
@@ -381,6 +402,7 @@ async function main() {
     console.log(
       "- write-readiness JSON and plain output read audit fixtures, preflight evidence, and return safe errors through the installed binary"
     );
+    console.log("- write-runner JSON dry-run output blocks unknown readiness and saves local trace artifacts for ready preflight");
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
@@ -830,6 +852,33 @@ function assertWriteReadinessErrorReport(report, expected) {
   assertNoExecutionResultFields(report);
 }
 
+function assertWriteRunnerDryRunReport(report, intentId, expected) {
+  assertEnvelope(report, "write-runner");
+  assertEqual(report.intentId, intentId, "write-runner JSON should preserve intent id");
+  assertString(report.runId, "write-runner JSON should include run id");
+  assertString(report.planId, "write-runner JSON should include plan id");
+  assertString(report.approvalId, "write-runner JSON should include approval id");
+  assertEqual(report.status, expected.status, "write-runner JSON should include expected dry-run status");
+  assertEqual(report.readinessStatus, expected.readinessStatus, "write-runner JSON should include readiness status");
+  assertEqual(report.ready, expected.ready, "write-runner JSON should include ready boolean");
+  assertNumber(report.planItemCount, "write-runner JSON should include plan item count");
+  assertArray(report.planItems, "write-runner JSON should include plan items");
+  assertNumber(report.traceCount, "write-runner JSON should include trace count");
+  assertArray(report.traceIds, "write-runner JSON should include trace ids");
+  assertEqual(
+    report.localTracePersistence,
+    expected.localTracePersistence,
+    "write-runner JSON should include expected local trace persistence"
+  );
+  assertNumber(report.blockedReasonCount, "write-runner JSON should include blocked reason count");
+  assertArray(report.blockedReasons, "write-runner JSON should include blocked reasons");
+  assertEqual(report.executionEnabled, false, "write-runner JSON should keep execution disabled");
+  assertEqual(report.writeExecution, "disabled", "write-runner JSON should keep write execution disabled");
+  assertEqual(report.hasExecutionResults, false, "write-runner JSON should not expose execution results");
+  assertNoExecutionResultFields(report);
+  assertNotIncludes(JSON.stringify(report), "\"argv\"", "write-runner JSON should not expose raw command argv");
+}
+
 function assertWriteReadinessPlainOutput(
   output,
   intentId,
@@ -976,6 +1025,12 @@ function assertEqual(actual, expected, message) {
 function assertString(value, message) {
   if (typeof value !== "string" || value.length === 0) {
     throw new Error(`${message}. Expected a non-empty string, got ${JSON.stringify(value)}.`);
+  }
+}
+
+function assertNumber(value, message) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${message}. Expected a finite number, got ${JSON.stringify(value)}.`);
   }
 }
 

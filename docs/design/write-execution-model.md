@@ -1,6 +1,6 @@
 # Approval-Gated Write Execution Model
 
-Status: design draft, not enabled.
+Status: design draft with staged read-only and dry-run surfaces implemented; actual write execution is not enabled.
 
 This document describes the model that should exist before `task-loop-orchestrator` can execute branch, commit, push, or PR creation commands. It is not an implementation plan approval and does not enable write execution. The current CLI must continue to block before write-side command execution.
 
@@ -17,6 +17,7 @@ This document describes the model that should exist before `task-loop-orchestrat
 - A read-only CLI surface for audit bundle lookup is enabled for `execution-audit --intent <intentId>` and `execution-audit --all` in both plain and JSON modes, as documented in [`execution-audit-cli.md`](execution-audit-cli.md).
 - A pure write execution readiness helper can summarize an audit bundle plus optional preflight input without enabling write execution.
 - `write-readiness --intent <intentId>` is enabled as a read-only plain readiness surface, `--json` is enabled for automation, and `--preflight <path>` can load a read-only evidence file in both plain and JSON modes.
+- `write-runner --intent <intentId> [--preflight <path>] --json` is enabled as an audited dry-run boundary. It can save local dry-run trace records only when readiness is `ready`; it still never spawns commands or performs branch, commit, push, PR, merge, release, or tag actions.
 - `pr-exec` is dry-run/preflight oriented.
 - `pr-exec --execute` requires approval data, checks stale approvals, and still returns a blocked report before branch, commit, push, or `gh pr create`.
 - `executedCommands` remains empty in the current implementation.
@@ -349,7 +350,25 @@ Package smoke covers installed-binary checks for:
 ### Rollout Plan For CLI And Schema
 
 1. Keep `write-readiness --intent <intentId> [--json]` and `--preflight <path> [--json]` under schema/docs/package smoke coverage.
-2. Treat actual write execution unlock as a separate milestone that must first test approval freshness, clean worktree policy, diff verification, CI policy, and remote/ref policy.
+2. Keep `write-runner --intent <intentId> [--preflight <path>] --json` under schema/docs/package smoke coverage as a dry-run boundary that only saves local trace artifacts.
+3. Treat actual write execution unlock as a separate milestone that must first test approval freshness, clean worktree policy, diff verification, CI policy, and remote/ref policy.
+
+## Audited Write Runner Dry-Run Boundary
+
+Status: JSON path enabled for `write-runner --intent <intentId> [--preflight <path>] --json`; plain output and actual command execution remain disabled.
+
+```bash
+task-loop-orchestrator write-runner --intent <intentId> --json
+task-loop-orchestrator write-runner --intent <intentId> --preflight <path> --json
+```
+
+The runner boundary loads the persisted execution intent and matching dry-run traces, computes readiness with the same audit bundle and optional preflight evidence used by `write-readiness`, and then returns a dry-run plan report. If readiness is `ready`, the CLI persists local dry-run trace records under `.orchestrator/execution-traces/` as audit artifacts. If readiness is `blocked` or `unknown`, the CLI returns a blocked dry-run report and does not save new traces.
+
+The dry-run payload reports `status`, `intentId`, `runId`, `planId`, `approvalId`, optional `checkpointId`, `readinessStatus`, `ready`, `planItemCount`, `planItems`, `traceCount`, `traceIds`, `localTracePersistence`, `blockedReasonCount`, `blockedReasons`, `createdAt`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`. Plan items derive safe candidates such as branch names, commit message candidates, and PR title/body candidates from persisted intent metadata; they do not expose raw command args.
+
+Errors use the `write-runner` JSON envelope with `dryRun: null`, disabled execution markers, and safe codes for missing intents, invalid persisted intent/trace files, missing preflight paths, missing/unreadable preflight files, invalid JSON, and invalid preflight schema. Error details are limited to a `kind` value such as `execution_intent`, `execution_trace`, or `preflight`.
+
+This boundary is not an execution engine. It must not use `child_process`, shell execution, GitHub write APIs, branch creation, commit, push, PR creation, merge, release, tag creation, issue transitions, raw stdout/stderr capture, exit codes, stack traces, or `executedCommands`.
 
 ## Rollout Slices
 
@@ -368,10 +387,11 @@ Package smoke covers installed-binary checks for:
 13. Enable the read-only `write-readiness --intent <intentId> --json` path and command-specific schema branch.
 14. Enable plain readiness output using the pure formatter after JSON behavior is stable.
 15. Complete the read-only `--preflight <path> [--json]` surface after CLI error handling and package smoke are covered.
-16. Add a single local-only command behind tests and explicit approval, such as branch creation in a temporary fixture repository.
-17. Add commit execution only after staged-file policy and diff verification exist.
-18. Add push only after remote/ref policy and CI handling are documented and tested.
-19. Add GitHub PR creation only after push policy, approval freshness, and `gh pr create` argument construction are covered.
+16. Enable the audited `write-runner --intent <intentId> [--preflight <path>] --json` dry-run boundary that saves only local trace artifacts when readiness is `ready`.
+17. Add a single local-only command behind tests and explicit approval, such as branch creation in a temporary fixture repository.
+18. Add commit execution only after staged-file policy and diff verification exist.
+19. Add push only after remote/ref policy and CI handling are documented and tested.
+20. Add GitHub PR creation only after push policy, approval freshness, and `gh pr create` argument construction are covered.
 
 ## Hard Non-Goals
 
