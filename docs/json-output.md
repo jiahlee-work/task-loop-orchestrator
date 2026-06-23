@@ -45,6 +45,7 @@ The envelope applies to every current JSON-capable command:
 - `approve-pr [runId] --approved-by <name> --json`
 - `execution-audit --intent <intentId> --json`
 - `write-readiness --intent <intentId> --json`
+- `write-readiness --intent <intentId> --preflight <path> --json`
 
 ## Raw Status
 
@@ -114,17 +115,17 @@ Error payloads fix `status`, `errorCode`, `message`, `intent`, `executionEnabled
 
 ## Write Readiness Schema
 
-`write-readiness --intent <intentId> --json` has a command-specific schema branch for read-only write execution readiness review. It loads the existing execution audit bundle and summarizes only known audit-bundle facts plus missing future preflight checks. It does not accept preflight input yet, so a clean audit bundle without preflight data is normally `unknown`.
+`write-readiness --intent <intentId> --json` has a command-specific schema branch for read-only write execution readiness review. It loads the existing execution audit bundle and summarizes known audit-bundle facts plus preflight check state. Without a preflight file, a clean audit bundle is normally `unknown`.
 
 The `writeReadinessPayload` fixes `readinessStatus`, `ready`, `intentId`, `runId`, `planId`, `approvalId`, `blockers`, `checks`, `inputs`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`, with optional `checkpointId`.
 
-Each `writeReadinessBlocker` fixes `category`, `code`, `message`, and `source`. Each `writeReadinessCheck` fixes `category`, `status`, `code`, `message`, and `source`. The `writeReadinessInputs` object fixes `auditBundle` and `preflight`; `preflight` is currently `missing` in production CLI output unless a future read-only preflight evidence file is explicitly supported. Value-level parser and file loader helpers exist for the future preflight contract, but the CLI does not read `--preflight <path>` yet.
+Each `writeReadinessBlocker` fixes `category`, `code`, `message`, and `source`. Each `writeReadinessCheck` fixes `category`, `status`, `code`, `message`, and `source`. The `writeReadinessInputs` object fixes `auditBundle` and `preflight`; `preflight` is `missing` when no evidence file is supplied, `partial` when only some recognized checks are present, and `available` when every recognized preflight check is present. JSON mode supports `--preflight <path>` as a read-only evidence file input.
 
 The `writeReadinessResponsePayload` allows either a success `writeReadinessPayload` or a `writeReadinessErrorPayload`. Error payloads fix `status`, `errorCode`, `message`, `readiness`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`, with optional `intentId` and `details`. Error payloads keep `readiness: null`, `executionEnabled: false`, `writeExecution: "disabled"`, and `hasExecutionResults: false`.
 
-The JSON path handles missing `--intent`, missing execution intents, invalid persisted execution intent files, and invalid persisted execution trace files with safe error envelopes. Plain output is available for human terminal review, but automation should use `--json`. Future preflight evidence must not echo raw file paths, raw file contents, raw command args, stdout, stderr, exit codes, `executedCommands`, stack traces, or secrets. This command does not permit command execution, file writes, GitHub lookup, branch creation, commits, pushes, pull request creation, merges, releases, or tags.
+The JSON path handles missing `--intent`, missing execution intents, invalid persisted execution intent files, invalid persisted execution trace files, missing preflight paths, file-not-found/read failures, invalid JSON, and invalid preflight schema with safe error envelopes. Plain output is available for human terminal review, but automation should use `--json`. Plain `--preflight <path>` output is still deferred. Preflight error envelopes must not echo raw file paths, raw file contents, raw command args, stdout, stderr, exit codes, `executedCommands`, stack traces, or secrets. This command does not permit command execution, file writes, GitHub lookup, branch creation, commits, pushes, pull request creation, merges, releases, or tags.
 
-Future `--preflight <path>` CLI support is not active yet. When it is enabled, missing preflight paths, file-not-found/read failures, invalid JSON, and invalid preflight schema should return safe `write-readiness` JSON error envelopes rather than partial readiness success. Those future envelopes should keep `readiness: null`, disabled execution markers, and no raw path or raw file content.
+When `--preflight <path>` is supplied with `--json`, loader/parser failures return safe `write-readiness` JSON error envelopes rather than partial readiness success. Those envelopes keep `readiness: null`, disabled execution markers, and no raw path or raw file content.
 
 ## Doctor Schema
 

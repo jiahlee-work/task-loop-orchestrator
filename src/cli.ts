@@ -43,6 +43,8 @@ import { FileRunStore } from "./store.js";
 import {
   formatWriteExecutionReadiness,
   formatWriteReadinessError,
+  loadWriteReadinessPreflightInput,
+  type WriteReadinessPreflightLoadErrorCode,
   summarizeWriteExecutionReadiness
 } from "./write-readiness.js";
 
@@ -121,7 +123,7 @@ function printUsage(): void {
   task-loop-orchestrator approve-pr [runId] --approved-by name [--reason text] [--json]
   task-loop-orchestrator pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]
   task-loop-orchestrator execution-audit (--intent intentId|--all) [--json]
-  task-loop-orchestrator write-readiness --intent intentId [--json]
+  task-loop-orchestrator write-readiness --intent intentId [--preflight path] [--json]
   task-loop-orchestrator checks [ref] [--json]`);
 }
 
@@ -717,6 +719,8 @@ async function executionAuditCommand(args: ParsedArgs): Promise<void> {
 
 async function writeReadinessCommand(args: ParsedArgs): Promise<void> {
   const jsonOutput = args.flags.json === true;
+  const preflightFlagPresent = Object.hasOwn(args.flags, "preflight");
+  const preflightPath = stringFlag(args.flags, "preflight");
 
   const intentId = stringFlag(args.flags, "intent");
   if (!intentId?.trim()) {
@@ -725,6 +729,26 @@ async function writeReadinessCommand(args: ParsedArgs): Promise<void> {
       "write_readiness_missing_intent",
       "write-readiness requires --intent <intentId>."
     );
+    return;
+  }
+
+  if (preflightFlagPresent && !jsonOutput) {
+    printPlainWriteReadinessError(
+      "write_readiness_preflight_unsupported",
+      "write-readiness --preflight currently requires --json.",
+      {
+        intentId,
+        details: { kind: "preflight" }
+      }
+    );
+    return;
+  }
+
+  if (preflightFlagPresent && !preflightPath?.trim()) {
+    printWriteReadinessError("write_readiness_preflight_missing_path", "write-readiness --preflight requires a path.", {
+      intentId,
+      details: { kind: "preflight" }
+    });
     return;
   }
 
@@ -765,12 +789,57 @@ async function writeReadinessCommand(args: ParsedArgs): Promise<void> {
   }
 
   const bundle = summarizeExecutionAuditBundle(intent, traces);
-  const report = summarizeWriteExecutionReadiness(bundle);
+  let preflight: Parameters<typeof summarizeWriteExecutionReadiness>[1];
+  if (preflightPath?.trim()) {
+    const loadedPreflight = await loadWriteReadinessPreflightInput(preflightPath);
+    if (!loadedPreflight.ok) {
+      printWriteReadinessError(
+        writeReadinessPreflightErrorCode(loadedPreflight.errorCode),
+        writeReadinessPreflightErrorMessage(loadedPreflight.errorCode),
+        {
+          intentId,
+          details: { kind: "preflight" }
+        }
+      );
+      return;
+    }
+    preflight = loadedPreflight.preflight;
+  }
+
+  const report = summarizeWriteExecutionReadiness(bundle, preflight);
   if (jsonOutput) {
     printJson("write-readiness", report);
   } else {
     process.stdout.write(formatWriteExecutionReadiness(report));
   }
+}
+
+function writeReadinessPreflightErrorCode(errorCode: WriteReadinessPreflightLoadErrorCode): WriteReadinessErrorCode {
+  if (errorCode === "preflight_file_not_found") {
+    return "write_readiness_preflight_file_not_found";
+  }
+  if (errorCode === "preflight_file_not_readable") {
+    return "write_readiness_preflight_file_not_readable";
+  }
+  if (errorCode === "preflight_invalid_json") {
+    return "write_readiness_preflight_invalid_json";
+  }
+
+  return "write_readiness_preflight_invalid_schema";
+}
+
+function writeReadinessPreflightErrorMessage(errorCode: WriteReadinessPreflightLoadErrorCode): string {
+  if (errorCode === "preflight_file_not_found") {
+    return "Preflight input file was not found.";
+  }
+  if (errorCode === "preflight_file_not_readable") {
+    return "Preflight input file could not be read.";
+  }
+  if (errorCode === "preflight_invalid_json") {
+    return "Preflight input file must contain valid JSON.";
+  }
+
+  return "Preflight input file does not match the write-readiness preflight contract.";
 }
 
 function printWriteReadinessErrorForMode(

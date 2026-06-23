@@ -15,8 +15,8 @@ This document describes the model that should exist before `task-loop-orchestrat
 - The file store can assemble execution audit bundles from persisted intents and traces without writing files or running commands.
 - The audit bundle JSON contract is covered by internal tests before any CLI read surface is enabled.
 - A read-only CLI surface for audit bundle lookup is enabled for `execution-audit --intent <intentId>` and `execution-audit --all` in both plain and JSON modes, as documented in [`execution-audit-cli.md`](execution-audit-cli.md).
-- A pure write execution readiness helper can summarize an audit bundle plus optional future preflight input without enabling CLI/schema output or command execution.
-- `write-readiness --intent <intentId>` is enabled as a read-only plain readiness surface, and `--json` is enabled for automation. Pure preflight value parser and file loader helpers exist, but the production `--preflight` CLI option remains deferred.
+- A pure write execution readiness helper can summarize an audit bundle plus optional preflight input without enabling write execution.
+- `write-readiness --intent <intentId>` is enabled as a read-only plain readiness surface, `--json` is enabled for automation, and `--preflight <path> --json` can load a read-only evidence file. Plain `--preflight` output remains deferred.
 - `pr-exec` is dry-run/preflight oriented.
 - `pr-exec --execute` requires approval data, checks stale approvals, and still returns a blocked report before branch, commit, push, or `gh pr create`.
 - `executedCommands` remains empty in the current implementation.
@@ -104,7 +104,7 @@ Audit logs must avoid recording secrets. Full stdout/stderr should not be persis
 
 ## Write Execution Readiness Report Contract
 
-Status: helper, formatter, CLI, and schema are enabled for audit-bundle-only readiness. File-based preflight input is not enabled.
+Status: helper, formatter, CLI, and schema are enabled for audit-bundle readiness. File-based preflight input is enabled for JSON mode only; plain preflight output remains deferred.
 
 Before any write runner is enabled, the system should be able to explain whether a persisted execution intent is ready for write execution. A readiness report answers three questions:
 
@@ -125,7 +125,7 @@ Known from the existing `ExecutionAuditBundle`:
 - dry-run trace count, planned trace count, blocked trace count, action summary, blocked reasons, and mismatched trace ids
 - disabled markers: `executionEnabled: false`, `writeExecution: "disabled"`, and `hasExecutionResults: false`
 
-Needed from a future preflight, but not queried by this design draft:
+Needed from a preflight evidence file or a future read-only preflight query:
 
 - approval freshness and expiration
 - current plan fingerprint and approved plan fingerprint match
@@ -137,12 +137,12 @@ Needed from a future preflight, but not queried by this design draft:
 
 ### Future Preflight Input File Contract
 
-Status: value parser and file loader implemented; production CLI option not enabled. The production CLI does not accept `--preflight` yet.
+Status: value parser, file loader, and JSON CLI path implemented. Plain `--preflight` output remains deferred.
 
-The proposed future CLI surface is:
+The JSON CLI surface is:
 
 ```bash
-task-loop-orchestrator write-readiness --intent <intentId> --preflight <path> [--json]
+task-loop-orchestrator write-readiness --intent <intentId> --preflight <path> --json
 ```
 
 The preflight file is a read-only evidence input. Loading it must not run checks, spawn commands, query GitHub, write files, mutate approvals, transition run state, create branches, commit, push, create or mutate PRs, merge, publish, create tags, or create GitHub releases. Supplying preflight evidence only changes the readiness summary; it does not grant permission to execute write-side actions.
@@ -174,7 +174,7 @@ The JSON CLI path uses the existing CLI envelope and a command-specific payload.
 - `intentId`, `runId`, `planId`, `approvalId`, and `checkpointId`
 - `blockers`: `{ category, code, message, source }[]`
 - `checks`: `{ category, status, message, source }[]`
-- `inputs`: `{ auditBundle: "available", preflight: "missing" | "available" }`
+- `inputs`: `{ auditBundle: "available", preflight: "missing" | "partial" | "available" }`
 - `executionEnabled: false`
 - `writeExecution: "disabled"`
 - `hasExecutionResults: false`
@@ -213,7 +213,7 @@ The current implementation includes pure helpers:
 - `parseWriteReadinessPreflightInput(value)`
 - `loadWriteReadinessPreflightInput(path)`
 
-The helper reuses `ExecutionAuditBundle` rather than re-reading files. The CLI layer loads the audit bundle first, then passes it to the readiness helper without preflight input. The helper treats missing future preflight inputs as `unknown` checks, not as permission to execute. The formatter only reads a readiness report and does not parse files, write files, spawn commands, or mutate domain state. The preflight parser accepts an already parsed `unknown` value, validates the contract, and translates safe evidence into `WriteExecutionReadinessPreflightInput`; it does not read files, echo raw content, write files, spawn commands, or mutate domain state. The file loader is read-only: it reads one JSON file, returns safe typed load or parse errors, and does not echo paths, raw file contents, stacks, stdout/stderr, exit codes, command args, or execution results.
+The helper reuses `ExecutionAuditBundle` rather than re-reading files. The CLI layer loads the audit bundle first, then either passes no preflight input or, in JSON mode with `--preflight <path>`, passes safe parsed preflight evidence to the readiness helper. The helper treats missing preflight inputs as `unknown` checks, not as permission to execute. The formatter only reads a readiness report and does not parse files, write files, spawn commands, or mutate domain state. The preflight parser accepts an already parsed `unknown` value, validates the contract, and translates safe evidence into `WriteExecutionReadinessPreflightInput`; it does not read files, echo raw content, write files, spawn commands, or mutate domain state. The file loader is read-only: it reads one JSON file, returns safe typed load or parse errors, and does not echo paths, raw file contents, stacks, stdout/stderr, exit codes, command args, or execution results.
 
 Tests should cover:
 
@@ -221,15 +221,15 @@ Tests should cover:
 - unknown readiness when approval freshness, CI, repo state, or fingerprint checks have no preflight input
 - disabled markers on every report
 - contract fixture coverage for blocked and ready JSON-like report shapes
-- future preflight value parser, file loader, and contract fixture coverage without enabling the production `--preflight` option
+- preflight value parser, file loader, JSON CLI, and contract fixture coverage without enabling plain `--preflight` output
 - no execution result fields such as `executedCommands`, raw stdout, raw stderr, or exit code
 - plain formatter safety and command-specific JSON schema branch only when the CLI surface is explicitly enabled
 
-Package smoke covers the installed binary JSON and plain readiness paths.
+Package smoke covers the installed binary JSON, JSON preflight, and plain readiness paths.
 
 ## Write Readiness CLI And Schema Surface Draft
 
-Status: plain and JSON paths enabled for `write-readiness --intent <intentId> [--json]`; preflight inputs are not enabled. This section documents the read-only surface only; it does not unlock write execution.
+Status: plain and JSON paths enabled for `write-readiness --intent <intentId> [--json]`; JSON preflight input is enabled with `--preflight <path> --json`. Plain preflight output remains deferred. This section documents the read-only surface only; it does not unlock write execution.
 
 ### Recommended CLI Surface
 
@@ -237,25 +237,27 @@ The recommended first command is:
 
 ```bash
 task-loop-orchestrator write-readiness --intent <intentId> [--json]
+task-loop-orchestrator write-readiness --intent <intentId> --preflight <path> --json
 ```
 
 This is preferred over `execution-audit --intent <intentId> --readiness [--json]` because readiness answers a distinct question from audit review: whether an existing execution intent is ready, blocked, or unknown. A top-level `write-readiness` command keeps the automation contract discoverable, avoids overloading `execution-audit`, and still reuses the audit bundle internally.
 
-The first CLI implementation is read-only and loads the existing audit bundle for the intent before calling `summarizeWriteExecutionReadiness(bundle)`. It does not run a preflight query yet. Without explicit preflight input, approval freshness, CI, repository state, fingerprint, and remote/ref checks remain `unknown`.
+The CLI implementation is read-only and loads the existing audit bundle for the intent before calling `summarizeWriteExecutionReadiness(bundle, preflight?)`. It does not run a preflight query. Without explicit preflight file input, approval freshness, CI, repository state, fingerprint, and remote/ref checks remain `unknown`.
 
 Initial options:
 
 - `--intent <intentId>`: required selector for the persisted execution intent to evaluate.
 - `--json`: optional; use it for automation, UI integrations, scripts, and schema validation.
+- `--preflight <path>`: optional in JSON mode only; read one preflight evidence JSON file through the safe loader/parser.
 
 Deferred options:
 
 - `--all`: defer list output until single-intent readiness is stable.
-- `--preflight <path>`: defer until CLI error handling, docs/schema updates, package smoke, and no-write policy are ready.
+- plain `--preflight <path>` output: defer until human-readable preflight error and success formatting is explicitly covered.
 - preflight query flags such as `--with-repo-state` or `--with-checks`: defer until each input source has a read-only policy and test fixture.
 - `--root <path>`: defer unless the broader CLI adopts root override semantics.
 
-Plain output uses `formatWriteExecutionReadiness(report)` for human terminal review. JSON is the stable automation contract. Both modes must preserve the same read-only safety boundary: no file writes, no external command execution, no GitHub lookup, no branch creation, no commit, no push, no pull request creation or mutation, no merge, no release, no tag, no approval mutation, and no run status transition. Future `--preflight <path>` support must read evidence only and must not echo raw file paths or raw file contents.
+Plain output uses `formatWriteExecutionReadiness(report)` for human terminal review. JSON is the stable automation contract. Both modes must preserve the same read-only safety boundary: no file writes, no external command execution, no GitHub lookup, no branch creation, no commit, no push, no pull request creation or mutation, no merge, no release, no tag, no approval mutation, and no run status transition. `--preflight <path> --json` reads evidence only and must not echo raw file paths or raw file contents.
 
 ### Future JSON Schema Surface
 
@@ -301,22 +303,27 @@ The implementation should reuse the execution-audit loading path, but expose rea
 - invalid persisted execution intent file: `status: "error"`, `errorCode: "invalid_execution_intent_file"`, with safe `details.kind`
 - invalid persisted execution trace file: `status: "error"`, `errorCode: "invalid_execution_trace_file"`, with safe `details.kind`
 - unsupported future preflight input: `status: "error"`, `errorCode: "write_readiness_preflight_unsupported"`
+- missing preflight path: `status: "error"`, `errorCode: "write_readiness_preflight_missing_path"`
+- preflight file not found: `status: "error"`, `errorCode: "write_readiness_preflight_file_not_found"`
+- preflight file not readable: `status: "error"`, `errorCode: "write_readiness_preflight_file_not_readable"`
+- invalid preflight JSON: `status: "error"`, `errorCode: "write_readiness_preflight_invalid_json"`
+- invalid preflight schema: `status: "error"`, `errorCode: "write_readiness_preflight_invalid_schema"`
 
 Error payloads should keep `executionEnabled: false`, `writeExecution: "disabled"`, and `hasExecutionResults: false`. They must not expose raw persisted file contents, stack traces, secrets, raw stdout, raw stderr, exit codes, raw command argv, or execution results.
 
-### Future Preflight CLI Success And Error Contract
+### Preflight CLI Success And Error Contract
 
-Status: design draft, not enabled. The production CLI does not accept `--preflight <path>` yet.
+Status: JSON path enabled for `write-readiness --intent <intentId> --preflight <path> --json`; plain `--preflight` output remains deferred.
 
-Future success mode:
+Success mode:
 
 ```bash
-task-loop-orchestrator write-readiness --intent <intentId> --preflight <path> [--json]
+task-loop-orchestrator write-readiness --intent <intentId> --preflight <path> --json
 ```
 
-The CLI should load the audit bundle, load the preflight file with `loadWriteReadinessPreflightInput(path)`, and pass the parsed preflight input to `summarizeWriteExecutionReadiness(bundle, preflight)`. The preflight file remains read-only evidence. Valid preflight evidence can change `inputs.preflight` from `missing` to `partial` or `available`, and it can change readiness from `unknown` to `ready` only when every required preflight check is recognized and passing and the audit bundle has no blockers. It must never unlock write execution.
+The CLI loads the audit bundle, loads the preflight file with `loadWriteReadinessPreflightInput(path)`, and passes the parsed preflight input to `summarizeWriteExecutionReadiness(bundle, preflight)`. The preflight file remains read-only evidence. Valid preflight evidence can change `inputs.preflight` from `missing` to `partial` or `available`, and it can change readiness from `unknown` to `ready` only when every required preflight check is recognized and passing and the audit bundle has no blockers. It must never unlock write execution.
 
-Future JSON error envelopes should use the existing `write-readiness` command envelope and a readiness error payload with `readiness: null`, `executionEnabled: false`, `writeExecution: "disabled"`, and `hasExecutionResults: false`. Candidate preflight error codes:
+JSON error envelopes use the existing `write-readiness` command envelope and a readiness error payload with `readiness: null`, `executionEnabled: false`, `writeExecution: "disabled"`, and `hasExecutionResults: false`. Active preflight error codes:
 
 - missing `--preflight` value/path: `write_readiness_preflight_missing_path`
 - file not found: `write_readiness_preflight_file_not_found`
@@ -326,20 +333,19 @@ Future JSON error envelopes should use the existing `write-readiness` command en
 
 Invalid preflight files should fail with an error envelope, not partial readiness success. Loader/parser failure must not fall back to `inputs.preflight: "missing"` because that could hide a broken evidence input from automation.
 
-Future plain errors should use short human-readable messages through the same safety policy as JSON errors. Plain and JSON errors must not include the raw preflight path, raw file contents, stack traces, raw stdout, raw stderr, exit codes, raw command args, `executedCommands`, secrets, or tokens. If a detail object is needed, keep it minimal, such as `{ kind: "preflight" }` plus a stable code; do not include path or content excerpts.
+Plain `--preflight` output remains deferred and returns a short safe unsupported-preflight error. Plain and JSON errors must not include the raw preflight path, raw file contents, stack traces, raw stdout, raw stderr, exit codes, raw command args, `executedCommands`, secrets, or tokens. If a detail object is needed, keep it minimal, such as `{ kind: "preflight" }` plus a stable code; do not include path or content excerpts.
 
-Future package smoke coverage should add installed-binary checks only when the CLI option is implemented:
+Package smoke covers installed-binary checks for:
 
 - valid preflight JSON success path sets `inputs.preflight` to `available` or `partial`
-- valid preflight plain success path shows the preflight input state without raw path echoing
-- invalid JSON returns a safe JSON error envelope and safe plain error
-- invalid preflight schema returns a safe JSON error envelope and safe plain error
+- invalid JSON returns a safe JSON error envelope
+- invalid preflight schema returns a safe JSON error envelope
 - no smoke path runs command execution, branch creation, commit, push, PR creation, merge, release, tag, or GitHub write actions
 
 ### Rollout Plan For CLI And Schema
 
-1. Keep `write-readiness --intent <intentId> [--json]` under schema/docs/package smoke coverage.
-2. Add optional read-only `--preflight <path>` support only after CLI error handling, docs/schema updates, package smoke, no raw output echoing, and no-write policy are ready.
+1. Keep `write-readiness --intent <intentId> [--json]` and `--preflight <path> --json` under schema/docs/package smoke coverage.
+2. Add optional plain `--preflight <path>` support only after human-readable error handling, docs updates, package smoke, no raw output echoing, and no-write policy are ready.
 3. Treat actual write execution unlock as a separate milestone that must first test approval freshness, clean worktree policy, diff verification, CI policy, and remote/ref policy.
 
 ## Rollout Slices
@@ -358,7 +364,7 @@ Future package smoke coverage should add installed-binary checks only when the C
 12. Draft the readiness CLI/schema surface without enabling the production command or active schema branch.
 13. Enable the read-only `write-readiness --intent <intentId> --json` path and command-specific schema branch.
 14. Enable plain readiness output using the pure formatter after JSON behavior is stable.
-15. Add the read-only `--preflight <path>` CLI option only after CLI error handling and package smoke are covered.
+15. Enable the read-only `--preflight <path> --json` CLI option after CLI error handling and package smoke are covered.
 16. Add a single local-only command behind tests and explicit approval, such as branch creation in a temporary fixture repository.
 17. Add commit execution only after staged-file policy and diff verification exist.
 18. Add push only after remote/ref policy and CI handling are documented and tested.

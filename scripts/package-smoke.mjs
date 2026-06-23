@@ -138,6 +138,70 @@ async function main() {
       const readiness = await run(bin, ["write-readiness", "--intent", fixture.intentId, "--json"], { cwd: projectDir });
       assertWriteReadinessReport(parseJson(readiness), fixture.intentId);
 
+      const preflight = await writeReadinessPreflightFixtures(projectDir);
+      const readinessWithPreflight = await run(
+        bin,
+        ["write-readiness", "--intent", fixture.intentId, "--preflight", preflight.validPath, "--json"],
+        { cwd: projectDir }
+      );
+      assertWriteReadinessReport(parseJson(readinessWithPreflight), fixture.intentId, {
+        readinessStatus: "ready",
+        ready: true,
+        preflight: "available"
+      });
+
+      const invalidPreflightJson = await run(
+        bin,
+        ["write-readiness", "--intent", fixture.intentId, "--preflight", preflight.invalidJsonPath, "--json"],
+        { cwd: projectDir }
+      );
+      assertWriteReadinessErrorReport(parseJson(invalidPreflightJson), {
+        status: "error",
+        errorCode: "write_readiness_preflight_invalid_json",
+        intentId: fixture.intentId,
+        detailsKind: "preflight",
+        forbiddenText: preflight.secret
+      });
+
+      const invalidPreflightSchema = await run(
+        bin,
+        ["write-readiness", "--intent", fixture.intentId, "--preflight", preflight.invalidSchemaPath, "--json"],
+        { cwd: projectDir }
+      );
+      assertWriteReadinessErrorReport(parseJson(invalidPreflightSchema), {
+        status: "error",
+        errorCode: "write_readiness_preflight_invalid_schema",
+        intentId: fixture.intentId,
+        detailsKind: "preflight",
+        forbiddenText: preflight.secret
+      });
+
+      const missingPreflightValue = await run(
+        bin,
+        ["write-readiness", "--intent", fixture.intentId, "--preflight", "--json"],
+        { cwd: projectDir }
+      );
+      assertWriteReadinessErrorReport(parseJson(missingPreflightValue), {
+        status: "error",
+        errorCode: "write_readiness_preflight_missing_path",
+        intentId: fixture.intentId,
+        detailsKind: "preflight"
+      });
+
+      const missingPreflightFilePath = join(projectDir, ".orchestrator", "preflight-fixtures", "missing-preflight-secret.json");
+      const missingPreflightFile = await run(
+        bin,
+        ["write-readiness", "--intent", fixture.intentId, "--preflight", missingPreflightFilePath, "--json"],
+        { cwd: projectDir }
+      );
+      assertWriteReadinessErrorReport(parseJson(missingPreflightFile), {
+        status: "error",
+        errorCode: "write_readiness_preflight_file_not_found",
+        intentId: fixture.intentId,
+        detailsKind: "preflight",
+        forbiddenText: missingPreflightFilePath
+      });
+
       const plainReadiness = await run(bin, ["write-readiness", "--intent", fixture.intentId], { cwd: projectDir });
       assertWriteReadinessPlainOutput(plainReadiness.stdout, fixture.intentId);
 
@@ -292,7 +356,9 @@ async function main() {
     console.log(
       "- execution-audit JSON and plain output read fixtures, list bundles, and return safe errors through the installed binary"
     );
-    console.log("- write-readiness JSON and plain output read audit fixtures and return safe errors through the installed binary");
+    console.log(
+      "- write-readiness JSON and plain output read audit fixtures, JSON preflight evidence, and return safe errors through the installed binary"
+    );
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
@@ -377,6 +443,77 @@ async function writeExecutionAuditFixture(projectDir) {
   await writeFile(join(traceDir, `${trace.id}.json`), `${JSON.stringify(trace, null, 2)}\n`);
 
   return { intentId };
+}
+
+async function writeReadinessPreflightFixtures(projectDir) {
+  const secret = "top-secret-preflight-fixture";
+  const preflightDir = join(projectDir, ".orchestrator", "preflight-fixtures");
+  const validPath = join(preflightDir, "passing-preflight.json");
+  const invalidJsonPath = join(preflightDir, "invalid-json.json");
+  const invalidSchemaPath = join(preflightDir, "invalid-schema.json");
+
+  await mkdir(preflightDir, { recursive: true });
+  await writeFile(validPath, `${JSON.stringify(passingWriteReadinessPreflightFixture(), null, 2)}\n`);
+  await writeFile(invalidJsonPath, `{ "${secret}": `);
+  await writeFile(
+    invalidSchemaPath,
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        checks: [
+          {
+            category: "ci",
+            status: "unexpected",
+            code: "ci_policy_passed",
+            message: secret,
+            source: "preflight",
+            stdout: secret,
+            stderr: secret,
+            exitCode: 1,
+            executedCommands: ["git", "push"],
+            stack: secret,
+            argv: ["git", "push"]
+          }
+        ]
+      },
+      null,
+      2
+    )}\n`
+  );
+
+  return { validPath, invalidJsonPath, invalidSchemaPath, secret };
+}
+
+function passingWriteReadinessPreflightFixture() {
+  return {
+    schemaVersion: 1,
+    metadata: {
+      createdAt: "2026-06-22T02:00:00.000Z",
+      tool: "package-smoke"
+    },
+    checks: [
+      preflightCheck("approval", "approval_freshness_passed", "Approval freshness is verified."),
+      preflightCheck("approval", "approval_expiration_passed", "Approval is not expired."),
+      preflightCheck("policy", "plan_fingerprint_passed", "Plan fingerprint matches the approved plan."),
+      preflightCheck("precondition", "checkpoint_match_passed", "Latest checkpoint matches the approved checkpoint."),
+      preflightCheck("repo_state", "repo_cleanliness_passed", "Repository cleanliness satisfies policy."),
+      preflightCheck("repo_state", "diff_verification_passed", "Diff verification passed."),
+      preflightCheck("policy", "ref_policy_passed", "Target ref and branch policy are satisfied."),
+      preflightCheck("ci", "ci_policy_passed", "CI/check policy is satisfied."),
+      preflightCheck("permission", "permission_gate_passed", "Permission gate allows the approved action."),
+      preflightCheck("policy", "command_runner_passed", "Command runner write configuration is available.")
+    ]
+  };
+}
+
+function preflightCheck(category, code, message) {
+  return {
+    category,
+    status: "pass",
+    code,
+    message,
+    source: "preflight"
+  };
 }
 
 async function writeInvalidExecutionIntentFixture(projectDir) {
@@ -623,19 +760,27 @@ function assertExecutionAuditErrorReport(report, expected) {
   assertNoExecutionResultFields(report);
 }
 
-function assertWriteReadinessReport(report, intentId) {
+function assertWriteReadinessReport(
+  report,
+  intentId,
+  expected = {
+    readinessStatus: "unknown",
+    ready: false,
+    preflight: "missing"
+  }
+) {
   assertEnvelope(report, "write-readiness");
   assertEqual(report.intentId, intentId, "write-readiness JSON should preserve intent id");
   assertString(report.runId, "write-readiness JSON should include run id");
   assertString(report.planId, "write-readiness JSON should include plan id");
   assertString(report.approvalId, "write-readiness JSON should include approval id");
-  assertEqual(report.readinessStatus, "unknown", "write-readiness JSON should be unknown without preflight input");
-  assertEqual(report.ready, false, "write-readiness JSON should not be ready without preflight input");
+  assertEqual(report.readinessStatus, expected.readinessStatus, "write-readiness JSON should include expected readiness status");
+  assertEqual(report.ready, expected.ready, "write-readiness JSON should include expected readiness boolean");
   assertArray(report.blockers, "write-readiness JSON should include blockers");
   assertArray(report.checks, "write-readiness JSON should include checks");
   assertObject(report.inputs, "write-readiness JSON should include inputs");
   assertEqual(report.inputs.auditBundle, "available", "write-readiness JSON should include audit bundle input status");
-  assertEqual(report.inputs.preflight, "missing", "write-readiness JSON should show missing preflight input");
+  assertEqual(report.inputs.preflight, expected.preflight, "write-readiness JSON should include expected preflight input status");
   assertEqual(report.executionEnabled, false, "write-readiness JSON should keep execution disabled");
   assertEqual(report.writeExecution, "disabled", "write-readiness JSON should keep write execution disabled");
   assertEqual(report.hasExecutionResults, false, "write-readiness JSON should not expose execution results");

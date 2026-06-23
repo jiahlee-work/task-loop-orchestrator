@@ -480,7 +480,12 @@ describe("CLI JSON schema artifact", () => {
         "write_readiness_intent_not_found",
         "invalid_execution_intent_file",
         "invalid_execution_trace_file",
-        "write_readiness_preflight_unsupported"
+        "write_readiness_preflight_unsupported",
+        "write_readiness_preflight_missing_path",
+        "write_readiness_preflight_file_not_found",
+        "write_readiness_preflight_file_not_readable",
+        "write_readiness_preflight_invalid_json",
+        "write_readiness_preflight_invalid_schema"
       ]
     });
     expect(writeReadinessErrorPayload?.properties?.readiness).toEqual({ const: null });
