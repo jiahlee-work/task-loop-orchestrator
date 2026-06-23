@@ -44,6 +44,18 @@ describe("quickstart documentation", () => {
       "npx task-loop-orchestrator checks HEAD --json",
       "npx task-loop-orchestrator checkpoint --json",
       "npx task-loop-orchestrator checkpoint --github gh-cli --json",
+      "npx task-loop-orchestrator execution-audit --all",
+      "npx task-loop-orchestrator execution-audit --all --json",
+      "npx task-loop-orchestrator execution-audit --intent intent_xxx",
+      "npx task-loop-orchestrator execution-audit --intent intent_xxx --json",
+      "Plain output is for people reading terminal summaries",
+      "Use `--json` for automation, scripts, or UI integrations",
+      "does not write files",
+      "execute external commands",
+      "create branches",
+      "commit",
+      "push",
+      "create PRs",
       "GitHub remote",
       "readable check-runs",
       "graceful JSON status",
@@ -449,7 +461,9 @@ describe("documentation role boundaries", () => {
       "npx task-loop-orchestrator init",
       'npx task-loop-orchestrator run "Quickstart smoke" --max-iterations 1 --json',
       "npx task-loop-orchestrator status --json",
-      "npx task-loop-orchestrator checks HEAD --json"
+      "npx task-loop-orchestrator checks HEAD --json",
+      "npx task-loop-orchestrator execution-audit --all",
+      "npx task-loop-orchestrator execution-audit --all --json"
     ]);
     expect(readme).not.toContain("mktemp -d");
     expect(readme).not.toContain("npm install --prefix");

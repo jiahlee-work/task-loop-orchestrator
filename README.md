@@ -38,9 +38,12 @@ npx task-loop-orchestrator init
 npx task-loop-orchestrator run "Quickstart smoke" --max-iterations 1 --json
 npx task-loop-orchestrator status --json
 npx task-loop-orchestrator checks HEAD --json
+npx task-loop-orchestrator execution-audit --all
+npx task-loop-orchestrator execution-audit --all --json
 ```
 
 `checks HEAD --json` requires a GitHub remote and readable check-runs to report live CI status; otherwise it returns a graceful JSON fallback.
+`execution-audit` is read-only and useful when `.orchestrator/execution-intents/` records exist. Plain output is for humans; use `--json` for automation and scripts.
 
 ## Local Development
 
@@ -75,6 +78,10 @@ node dist/cli.js approve-pr --approved-by maintainer --reason "Reviewed checkpoi
 node dist/cli.js pr-exec --json
 node dist/cli.js pr-exec --execute --approval approval_xxx --json
 node dist/cli.js pr-exec --execute --approved-by maintainer --json
+node dist/cli.js execution-audit --all
+node dist/cli.js execution-audit --all --json
+node dist/cli.js execution-audit --intent intent_xxx
+node dist/cli.js execution-audit --intent intent_xxx --json
 ```
 
 Runs are stored as JSON files under `.orchestrator/runs/<runId>.json`.
@@ -218,6 +225,12 @@ A non-clean checkpoint or dirty repository is reported in `blockedReasons`; user
 `pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]` creates an approval-aware execution preflight report from the PR plan. The default mode is dry-run and never executes commands. `--execute` requires approval data, but write execution is still blocked at the boundary until a later implementation adds an explicit, audited command runner. If `--approval` is omitted, `pr-exec` tries the latest stored approval for the run; `--approved-by` can still create an in-memory approval for one-off preflight checks.
 
 Stored approvals are tied to the checkpoint that was current when approval was recorded. During `pr-exec --execute`, both explicit `--approval approvalId` and latest-approval lookup are checked against the current latest checkpoint for the run. If the checkpoint changed, the approval is treated as stale and execution preflight is blocked before any write command can run. In-memory approvals from `--approved-by` are created from the current plan and are not stale.
+
+## Execution Audit
+
+`execution-audit --all` and `execution-audit --intent <intentId>` inspect persisted execution intents and dry-run traces when those records exist. Plain output is the human-readable terminal view; add `--json` for the stable automation contract.
+
+The command is read-only. It does not write files, execute commands, create branches, commit, push, create PRs, merge, publish, create tags, or create GitHub releases.
 
 Current approval model:
 

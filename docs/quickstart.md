@@ -96,6 +96,23 @@ npx task-loop-orchestrator checkpoint --github gh-cli --json
 
 The `--github gh-cli` form uses read-only GitHub CLI calls and falls back to an `unknown` or `not_found` check summary when GitHub data is unavailable.
 
+## Read-Only Execution Audit
+
+When a project already has persisted execution intent records under `.orchestrator/execution-intents/`, inspect them without enabling write execution:
+
+```bash
+npx task-loop-orchestrator execution-audit --all
+npx task-loop-orchestrator execution-audit --all --json
+npx task-loop-orchestrator execution-audit --intent intent_xxx
+npx task-loop-orchestrator execution-audit --intent intent_xxx --json
+```
+
+Plain output is for people reading terminal summaries. Use `--json` for automation, scripts, or UI integrations that need the stable JSON envelope.
+
+`execution-audit` is read-only. It reads persisted intent and trace records, but it does not write files, execute external commands, create branches, commit, push, create PRs, merge, publish, create tags, or create GitHub releases.
+
+`pr-exec` remains a dry-run/preflight and approval-intent surface. Even with `--execute`, current write execution is blocked before branch creation, commit, push, or PR creation.
+
 ## Local Verification
 
 Before handing off a tarball or preparing a release candidate, run:
