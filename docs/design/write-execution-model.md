@@ -10,6 +10,7 @@ This document describes the model that should exist before `task-loop-orchestrat
 - `approve-pr` stores approval records under `.orchestrator/approvals/`.
 - Execution intents can be persisted under `.orchestrator/execution-intents/` for future audited write execution.
 - Execution intent read-only reports summarize stored intents for audit without running commands.
+- Execution dry-run trace records can be persisted under `.orchestrator/execution-traces/` to model future command-runner audit entries without spawning commands.
 - `pr-exec` is dry-run/preflight oriented.
 - `pr-exec --execute` requires approval data, checks stale approvals, and still returns a blocked report before branch, commit, push, or `gh pr create`.
 - `executedCommands` remains empty in the current implementation.
@@ -99,7 +100,7 @@ Audit logs must avoid recording secrets. Full stdout/stderr should not be persis
 
 1. Persist execution intents without running commands.
 2. Add read-only execution intent reports for audit before any command runner exists.
-3. Add command runner dry-run trace records that mirror the future audit shape.
+3. Add command runner dry-run trace records that mirror the future audit shape without spawning commands.
 4. Add a single local-only command behind tests and explicit approval, such as branch creation in a temporary fixture repository.
 5. Add commit execution only after staged-file policy and diff verification exist.
 6. Add push only after remote/ref policy and CI handling are documented and tested.

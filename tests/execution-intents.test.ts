@@ -5,9 +5,12 @@ import { describe, expect, it } from "vitest";
 import { createPullRequestApproval } from "../src/approval.js";
 import {
   createExecutionIntent,
+  createExecutionDryRunTrace,
+  createExecutionDryRunTraces,
   createPlanFingerprint,
   executionIntentPolicyVersion,
   parseExecutionIntent,
+  parseExecutionTraceRecord,
   summarizeExecutionIntent,
   summarizeExecutionIntents
 } from "../src/execution-intents.js";
@@ -223,6 +226,146 @@ describe("execution intent persistence", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+
+  it("creates non-executing dry-run traces from intent command candidates", () => {
+    const intent = executionIntent("2026-06-22T00:00:00.000Z");
+
+    const trace = createExecutionDryRunTrace({
+      intent,
+      candidate: intent.commandCandidates[0],
+      createdAt: "2026-06-22T01:00:00.000Z"
+    });
+
+    expect(trace.id).toMatch(/^trace_/);
+    expect(trace).toMatchObject({
+      intentId: intent.id,
+      runId: intent.runId,
+      planId: intent.planId,
+      approvalId: intent.approvalId,
+      checkpointId: intent.checkpointId,
+      commandCandidate: {
+        action: "create_branch",
+        argv: ["git", "switch", "-c", "orchestrator/run1"],
+        reason: "Create branch."
+      },
+      status: "planned",
+      policyVersion: executionIntentPolicyVersion,
+      policyDecision: "dry_run_planned",
+      blockedReasons: [],
+      createdAt: "2026-06-22T01:00:00.000Z",
+      executionEnabled: false,
+      writeExecution: "disabled"
+    });
+    expect("executedCommands" in trace).toBe(false);
+    expect("stdout" in trace).toBe(false);
+    expect("stderr" in trace).toBe(false);
+    expect("exitCode" in trace).toBe(false);
+  });
+
+  it("creates blocked dry-run traces that preserve intent blocked reasons", () => {
+    const approvedPlan = prPlan("checkpoint-old");
+    const currentPlan = prPlan("checkpoint-current", ["Repository status is not clean."]);
+    const approval = createPullRequestApproval(approvedPlan, {
+      approvedBy: "maintainer"
+    });
+    const intent = createExecutionIntent({
+      plan: currentPlan,
+      approval,
+      actor: "maintainer",
+      createdAt: "2026-06-22T00:00:00.000Z",
+      expiresAt: "2026-06-23T00:00:00.000Z",
+      permissionMode: "maintainer"
+    });
+
+    const [trace] = createExecutionDryRunTraces(intent, {
+      createdAt: "2026-06-22T01:00:00.000Z"
+    });
+
+    expect(trace.status).toBe("blocked");
+    expect(trace.policyDecision).toBe("blocked");
+    expect(trace.blockedReasons).toEqual(intent.blockedReasons);
+    expect(trace.executionEnabled).toBe(false);
+    expect("executedCommands" in trace).toBe(false);
+    expect("stdout" in trace).toBe(false);
+    expect("stderr" in trace).toBe(false);
+  });
+
+  it("persists execution dry-run traces under .orchestrator/execution-traces", async () => {
+    const root = await mkdtemp(join(tmpdir(), "task-loop-trace-"));
+    const store = new FileRunStore(root);
+    const intent = executionIntent("2026-06-22T00:00:00.000Z");
+    const trace = createExecutionDryRunTrace({
+      intent,
+      candidate: intent.commandCandidates[0],
+      createdAt: "2026-06-22T01:00:00.000Z"
+    });
+
+    try {
+      await store.saveExecutionTrace(trace);
+
+      await expect(store.loadExecutionTrace(trace.id)).resolves.toEqual(trace);
+      expect(store.pathForExecutionTrace(trace.id)).toBe(
+        join(root, ".orchestrator", "execution-traces", `${trace.id}.json`)
+      );
+      const persisted = JSON.parse(await readFile(store.pathForExecutionTrace(trace.id), "utf8"));
+      expect(persisted.id).toBe(trace.id);
+      expect("executedCommands" in persisted).toBe(false);
+      expect("stdout" in persisted).toBe(false);
+      expect("stderr" in persisted).toBe(false);
+      expect("exitCode" in persisted).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("lists execution traces by newest createdAt first", async () => {
+    const root = await mkdtemp(join(tmpdir(), "task-loop-trace-"));
+    const store = new FileRunStore(root);
+    const intent = executionIntent("2026-06-22T00:00:00.000Z");
+    const older = createExecutionDryRunTrace({
+      intent,
+      candidate: intent.commandCandidates[0],
+      createdAt: "2026-06-22T01:00:00.000Z"
+    });
+    const newer = createExecutionDryRunTrace({
+      intent,
+      candidate: intent.commandCandidates[1],
+      createdAt: "2026-06-22T02:00:00.000Z"
+    });
+
+    try {
+      await store.saveExecutionTrace(older);
+      await store.saveExecutionTrace(newer);
+
+      const traces = await store.listExecutionTraces();
+
+      expect(traces.map((trace) => trace.id)).toEqual([newer.id, older.id]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects invalid persisted execution trace shape", () => {
+    const intent = executionIntent("2026-06-22T00:00:00.000Z");
+    const trace = createExecutionDryRunTrace({
+      intent,
+      candidate: intent.commandCandidates[0],
+      createdAt: "2026-06-22T01:00:00.000Z"
+    });
+
+    expect(() =>
+      parseExecutionTraceRecord({
+        ...trace,
+        status: "executed"
+      })
+    ).toThrow("Invalid execution trace status");
+    expect(() =>
+      parseExecutionTraceRecord({
+        ...trace,
+        executionEnabled: true
+      })
+    ).toThrow("executionEnabled must be false");
   });
 });
 

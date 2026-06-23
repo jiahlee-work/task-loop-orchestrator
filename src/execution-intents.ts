@@ -6,6 +6,10 @@ import type {
   ExecutionIntentCommandActionSummary,
   ExecutionIntentReport,
   ExecutionIntentStatus,
+  ExecutionTraceCommandCandidate,
+  ExecutionTracePolicyDecision,
+  ExecutionTraceRecord,
+  ExecutionTraceStatus,
   PermissionMode,
   PullRequestCommandCandidate,
   PullRequestPlan
@@ -25,6 +29,12 @@ export interface CreateExecutionIntentInput {
   permissionMode: PermissionMode;
   policyVersion?: string;
   status?: ExecutionIntentStatus;
+}
+
+export interface CreateExecutionDryRunTraceInput {
+  intent: ExecutionIntent;
+  candidate: ExecutionIntentCommandCandidate;
+  createdAt?: string;
 }
 
 export function createExecutionIntent(input: CreateExecutionIntentInput): ExecutionIntent {
@@ -99,6 +109,64 @@ export function parseExecutionIntent(value: unknown): ExecutionIntent {
   };
 }
 
+export function createExecutionDryRunTrace(input: CreateExecutionDryRunTraceInput): ExecutionTraceRecord {
+  const blockedReasons = dryRunTraceBlockedReasons(input.intent);
+  const status: ExecutionTraceStatus = blockedReasons.length > 0 ? "blocked" : "planned";
+  const policyDecision: ExecutionTracePolicyDecision = status === "planned" ? "dry_run_planned" : "blocked";
+
+  return {
+    id: createId("trace"),
+    intentId: input.intent.id,
+    runId: input.intent.runId,
+    planId: input.intent.planId,
+    approvalId: input.intent.approvalId,
+    checkpointId: input.intent.checkpointId,
+    commandCandidate: copyTraceCommandCandidate(input.candidate),
+    status,
+    policyVersion: input.intent.policyVersion,
+    policyDecision,
+    blockedReasons,
+    createdAt: input.createdAt ?? nowIso(),
+    executionEnabled: false,
+    writeExecution: "disabled"
+  };
+}
+
+export function createExecutionDryRunTraces(
+  intent: ExecutionIntent,
+  options: { createdAt?: string } = {}
+): ExecutionTraceRecord[] {
+  return intent.commandCandidates.map((candidate) =>
+    createExecutionDryRunTrace({ intent, candidate, createdAt: options.createdAt })
+  );
+}
+
+export function parseExecutionTraceRecord(value: unknown): ExecutionTraceRecord {
+  if (!isRecord(value)) {
+    throw new Error("Invalid execution trace: expected object.");
+  }
+
+  const status = requireExecutionTraceStatus(value.status);
+  const policyDecision = requireExecutionTracePolicyDecision(value.policyDecision);
+
+  return {
+    id: requireString(value.id, "id"),
+    intentId: requireString(value.intentId, "intentId"),
+    runId: requireString(value.runId, "runId"),
+    planId: requireString(value.planId, "planId"),
+    approvalId: requireString(value.approvalId, "approvalId"),
+    checkpointId: optionalString(value.checkpointId, "checkpointId"),
+    commandCandidate: requireTraceCommandCandidate(value.commandCandidate),
+    status,
+    policyVersion: requireString(value.policyVersion, "policyVersion"),
+    policyDecision,
+    blockedReasons: requireStringArray(value.blockedReasons, "blockedReasons"),
+    createdAt: requireString(value.createdAt, "createdAt"),
+    executionEnabled: requireFalse(value.executionEnabled, "executionEnabled"),
+    writeExecution: requireDisabledWriteExecution(value.writeExecution)
+  };
+}
+
 export function summarizeExecutionIntent(intent: ExecutionIntent): ExecutionIntentReport {
   const commandCandidateActions = intent.commandCandidates.map((candidate) => candidate.action);
 
@@ -130,6 +198,16 @@ export function summarizeExecutionIntent(intent: ExecutionIntent): ExecutionInte
 
 export function summarizeExecutionIntents(intents: ExecutionIntent[]): ExecutionIntentReport[] {
   return intents.map(summarizeExecutionIntent);
+}
+
+function dryRunTraceBlockedReasons(intent: ExecutionIntent): string[] {
+  const reasons = [...intent.blockedReasons];
+
+  if (intent.status === "expired" || (intent.status === "blocked" && reasons.length === 0)) {
+    reasons.push(`Execution intent status is ${intent.status}.`);
+  }
+
+  return reasons;
 }
 
 function executionIntentBlockedReasons(plan: PullRequestPlan, approval: ApprovalRecord): string[] {
@@ -183,6 +261,14 @@ function copyCommandCandidate(candidate: ExecutionIntentCommandCandidate): Execu
   };
 }
 
+function copyTraceCommandCandidate(candidate: ExecutionIntentCommandCandidate): ExecutionTraceCommandCandidate {
+  return {
+    action: candidate.action,
+    argv: [...candidate.command],
+    reason: candidate.reason
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -219,6 +305,22 @@ function requireExecutionIntentStatus(value: unknown): ExecutionIntentStatus {
   throw new Error(`Invalid execution intent status: ${String(value)}.`);
 }
 
+function requireExecutionTraceStatus(value: unknown): ExecutionTraceStatus {
+  if (value === "planned" || value === "blocked") {
+    return value;
+  }
+
+  throw new Error(`Invalid execution trace status: ${String(value)}.`);
+}
+
+function requireExecutionTracePolicyDecision(value: unknown): ExecutionTracePolicyDecision {
+  if (value === "dry_run_planned" || value === "blocked") {
+    return value;
+  }
+
+  throw new Error(`Invalid execution trace policyDecision: ${String(value)}.`);
+}
+
 function requirePermissionMode(value: unknown): PermissionMode {
   if (value === "read" || value === "write" || value === "maintainer") {
     return value;
@@ -249,4 +351,37 @@ function requireCommandCandidates(value: unknown): ExecutionIntentCommandCandida
       decisionReady: true
     };
   });
+}
+
+function requireTraceCommandCandidate(value: unknown): ExecutionTraceCommandCandidate {
+  if (!isRecord(value)) {
+    throw new Error("Invalid execution trace: commandCandidate must be an object.");
+  }
+
+  const action = value.action;
+  if (action !== "create_branch" && action !== "commit" && action !== "push" && action !== "create_pr") {
+    throw new Error(`Invalid execution trace command action: ${String(action)}.`);
+  }
+
+  return {
+    action,
+    argv: requireStringArray(value.argv, "commandCandidate.argv"),
+    reason: requireString(value.reason, "commandCandidate.reason")
+  };
+}
+
+function requireFalse(value: unknown, field: string): false {
+  if (value !== false) {
+    throw new Error(`Invalid execution trace: ${field} must be false.`);
+  }
+
+  return false;
+}
+
+function requireDisabledWriteExecution(value: unknown): "disabled" {
+  if (value !== "disabled") {
+    throw new Error("Invalid execution trace: writeExecution must be disabled.");
+  }
+
+  return "disabled";
 }

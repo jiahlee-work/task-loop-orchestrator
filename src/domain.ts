@@ -259,6 +259,10 @@ export type PullRequestExecutionStatus = "dry_run" | "ready" | "blocked";
 
 export type ExecutionIntentStatus = "created" | "blocked" | "expired";
 
+export type ExecutionTraceStatus = "planned" | "blocked";
+
+export type ExecutionTracePolicyDecision = "dry_run_planned" | "blocked";
+
 export interface ApprovalPlanSnapshot {
   planTitle: string;
   baseBranch: string;
@@ -306,6 +310,12 @@ export interface ExecutionIntentCommandActionSummary {
   count: number;
 }
 
+export interface ExecutionTraceCommandCandidate {
+  action: PullRequestCommandCandidate["action"];
+  argv: string[];
+  reason: string;
+}
+
 export interface ExecutionIntent {
   id: string;
   runId: string;
@@ -348,6 +358,23 @@ export interface ExecutionIntentReport {
   commandActionSummary: ExecutionIntentCommandActionSummary[];
   blockedReasonCount: number;
   blockedReasons: string[];
+  executionEnabled: false;
+  writeExecution: "disabled";
+}
+
+export interface ExecutionTraceRecord {
+  id: string;
+  intentId: string;
+  runId: string;
+  planId: string;
+  approvalId: string;
+  checkpointId?: string;
+  commandCandidate: ExecutionTraceCommandCandidate;
+  status: ExecutionTraceStatus;
+  policyVersion: string;
+  policyDecision: ExecutionTracePolicyDecision;
+  blockedReasons: string[];
+  createdAt: string;
   executionEnabled: false;
   writeExecution: "disabled";
 }

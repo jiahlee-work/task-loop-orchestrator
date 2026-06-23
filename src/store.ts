@@ -1,19 +1,27 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ApprovalRecord, ExecutionIntent, IntegrationCheckpointReport, LoopRun } from "./domain.js";
-import { parseExecutionIntent } from "./execution-intents.js";
+import type {
+  ApprovalRecord,
+  ExecutionIntent,
+  ExecutionTraceRecord,
+  IntegrationCheckpointReport,
+  LoopRun
+} from "./domain.js";
+import { parseExecutionIntent, parseExecutionTraceRecord } from "./execution-intents.js";
 
 export class FileRunStore {
   private readonly runsDir: string;
   private readonly checkpointsDir: string;
   private readonly approvalsDir: string;
   private readonly executionIntentsDir: string;
+  private readonly executionTracesDir: string;
 
   constructor(private readonly rootDir: string = process.cwd()) {
     this.runsDir = join(this.rootDir, ".orchestrator", "runs");
     this.checkpointsDir = join(this.rootDir, ".orchestrator", "checkpoints");
     this.approvalsDir = join(this.rootDir, ".orchestrator", "approvals");
     this.executionIntentsDir = join(this.rootDir, ".orchestrator", "execution-intents");
+    this.executionTracesDir = join(this.rootDir, ".orchestrator", "execution-traces");
   }
 
   async save(run: LoopRun): Promise<void> {
@@ -136,6 +144,31 @@ export class FileRunStore {
     return intents.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   }
 
+  async saveExecutionTrace(trace: ExecutionTraceRecord): Promise<void> {
+    await mkdir(this.executionTracesDir, { recursive: true });
+    await writeFile(this.executionTraceFilePath(trace.id), `${JSON.stringify(trace, null, 2)}\n`, "utf8");
+  }
+
+  async loadExecutionTrace(traceId: string): Promise<ExecutionTraceRecord> {
+    const content = await readFile(this.executionTraceFilePath(traceId), "utf8");
+    return parseExecutionTraceRecord(JSON.parse(content));
+  }
+
+  async listExecutionTraces(): Promise<ExecutionTraceRecord[]> {
+    await mkdir(this.executionTracesDir, { recursive: true });
+    const entries = await readdir(this.executionTracesDir);
+    const traces = await Promise.all(
+      entries
+        .filter((entry) => entry.endsWith(".json"))
+        .map(async (entry) => {
+          const content = await readFile(join(this.executionTracesDir, entry), "utf8");
+          return parseExecutionTraceRecord(JSON.parse(content));
+        })
+    );
+
+    return traces.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  }
+
   pathForCheckpoint(checkpointId: string): string {
     return this.checkpointFilePath(checkpointId);
   }
@@ -146,6 +179,10 @@ export class FileRunStore {
 
   pathForExecutionIntent(intentId: string): string {
     return this.executionIntentFilePath(intentId);
+  }
+
+  pathForExecutionTrace(traceId: string): string {
+    return this.executionTraceFilePath(traceId);
   }
 
   pathForRun(runId: string): string {
@@ -166,6 +203,10 @@ export class FileRunStore {
 
   private executionIntentFilePath(intentId: string): string {
     return join(this.executionIntentsDir, `${intentId}.json`);
+  }
+
+  private executionTraceFilePath(traceId: string): string {
+    return join(this.executionTracesDir, `${traceId}.json`);
   }
 }
 
