@@ -42,11 +42,12 @@ npx task-loop-orchestrator execution-audit --all
 npx task-loop-orchestrator execution-audit --all --json
 npx task-loop-orchestrator write-runner --intent intent_xxx --preflight readiness-preflight.json --json
 npx task-loop-orchestrator write-runner --intent intent_xxx --preflight readiness-preflight.json --simulate --json
+npx task-loop-orchestrator write-runner --intent intent_xxx --preflight readiness-preflight.json --execute-local --verification typecheck --json
 npx task-loop-orchestrator write-runner --intent intent_xxx --preflight readiness-preflight.json --execute --json
 ```
 
 `checks HEAD --json` requires a GitHub remote and readable check-runs to report live CI status; otherwise it returns a graceful JSON fallback.
-`execution-audit` is read-only and useful when `.orchestrator/execution-intents/` records exist. Plain output is for humans; use `--json` for automation and scripts. `write-runner` is still a dry-run/simulation boundary: it may save local trace artifacts when readiness is ready, `--simulate` returns symbolic safe executor results, and `--execute` returns an `execute_disabled` report. It does not execute shell, git, or GitHub commands or create branches, commits, pushes, or PRs.
+`execution-audit` is read-only and useful when `.orchestrator/execution-intents/` records exist. Plain output is for humans; use `--json` for automation and scripts. `write-runner` is still a dry-run/simulation/guarded-local boundary: it may save local trace artifacts when readiness is ready, `--simulate` returns symbolic safe executor results, `--execute-local` can run only allowlisted package-script verification actions, and `--execute` returns an `execute_disabled` report. It does not execute git or GitHub write commands or create branches, commits, pushes, or PRs.
 
 ## Local Development
 
@@ -87,6 +88,7 @@ node dist/cli.js execution-audit --intent intent_xxx
 node dist/cli.js execution-audit --intent intent_xxx --json
 node dist/cli.js write-runner --intent intent_xxx --preflight readiness-preflight.json --json
 node dist/cli.js write-runner --intent intent_xxx --preflight readiness-preflight.json --simulate --json
+node dist/cli.js write-runner --intent intent_xxx --preflight readiness-preflight.json --execute-local --verification typecheck --json
 node dist/cli.js write-runner --intent intent_xxx --preflight readiness-preflight.json --execute --json
 ```
 
@@ -238,7 +240,7 @@ Stored approvals are tied to the checkpoint that was current when approval was r
 
 The command is read-only. It does not write files, execute commands, create branches, commit, push, create PRs, merge, publish, create tags, or create GitHub releases.
 
-`write-runner --intent <intentId> [--preflight <path>] [--simulate|--execute] --json` is the audited dry-run and simulation runner boundary. It can write local dry-run trace records under `.orchestrator/execution-traces/` only when readiness is ready. `--simulate` returns deterministic symbolic safe executor results, and `--execute` returns an `execute_disabled` policy/report. It still never runs shell commands, creates branches, commits, pushes, PRs, merges, releases, or tags.
+`write-runner --intent <intentId> [--preflight <path>] [--simulate|--execute|--execute-local] [--verification typecheck|test|build|lint|package:smoke|release:check] --json` is the audited dry-run, simulation, and guarded local verification runner boundary. It can write local dry-run trace records under `.orchestrator/execution-traces/` only when readiness is ready. `--simulate` returns deterministic symbolic safe executor results, `--execute-local` can run only allowlisted verification package scripts through the guarded local executor, and `--execute` returns an `execute_disabled` policy/report. It still never runs branch/commit/push/PR write commands, creates branches, commits, pushes, PRs, merges, releases, or tags.
 
 Current approval model:
 

@@ -1,6 +1,6 @@
 # Approval-Gated Write Execution Model
 
-Status: design draft with staged read-only, dry-run, execution-policy, and simulated-executor surfaces implemented; actual write execution is not enabled.
+Status: design draft with staged read-only, dry-run, execution-policy, simulated-executor, and guarded local verification surfaces implemented; write-side git/GitHub execution is not enabled.
 
 This document describes the model that should exist before `task-loop-orchestrator` can execute branch, commit, push, or PR creation commands. It is not an implementation plan approval and does not enable write execution. The current CLI must continue to block before write-side command execution.
 
@@ -17,7 +17,7 @@ This document describes the model that should exist before `task-loop-orchestrat
 - A read-only CLI surface for audit bundle lookup is enabled for `execution-audit --intent <intentId>` and `execution-audit --all` in both plain and JSON modes, as documented in [`execution-audit-cli.md`](execution-audit-cli.md).
 - A pure write execution readiness helper can summarize an audit bundle plus optional preflight input without enabling write execution.
 - `write-readiness --intent <intentId>` is enabled as a read-only plain readiness surface, `--json` is enabled for automation, and `--preflight <path>` can load a read-only evidence file in both plain and JSON modes.
-- `write-runner --intent <intentId> [--preflight <path>] [--simulate|--execute] --json` is enabled as an audited dry-run, execution-policy, and simulated-executor boundary. It can save local dry-run trace records only when readiness is `ready`; `--simulate` returns symbolic safe executor results, and `--execute` returns an `execute_disabled` policy/report. It still never spawns commands or performs branch, commit, push, PR, merge, release, or tag actions.
+- `write-runner --intent <intentId> [--preflight <path>] [--simulate|--execute|--execute-local] [--verification <action>] --json` is enabled as an audited dry-run, execution-policy, simulated-executor, and guarded local verification boundary. It can save local dry-run trace records only when readiness is `ready`; `--simulate` returns symbolic safe executor results, `--execute-local` can run only allowlisted package-script verification actions, and `--execute` returns an `execute_disabled` policy/report. It still never performs branch, commit, push, PR, merge, release, or tag actions.
 - `pr-exec` is dry-run/preflight oriented.
 - `pr-exec --execute` requires approval data, checks stale approvals, and still returns a blocked report before branch, commit, push, or `gh pr create`.
 - `executedCommands` remains empty in the current implementation.
@@ -350,31 +350,34 @@ Package smoke covers installed-binary checks for:
 ### Rollout Plan For CLI And Schema
 
 1. Keep `write-readiness --intent <intentId> [--json]` and `--preflight <path> [--json]` under schema/docs/package smoke coverage.
-2. Keep `write-runner --intent <intentId> [--preflight <path>] [--simulate|--execute] --json` under schema/docs/package smoke coverage as a dry-run and simulation boundary that only saves local trace artifacts and returns disabled policy reports.
-3. Treat actual write execution unlock as a separate milestone that must first test approval freshness, clean worktree policy, diff verification, CI policy, and remote/ref policy.
+2. Keep `write-runner --intent <intentId> [--preflight <path>] [--simulate|--execute|--execute-local] [--verification <action>] --json` under schema/docs/package smoke coverage as a dry-run, simulation, and guarded verification boundary that only saves local trace artifacts, runs allowlisted verification package scripts, and returns disabled write policy reports.
+3. Treat branch/commit/push/PR write execution unlock as a separate milestone that must first test approval freshness, clean worktree policy, diff verification, CI policy, and remote/ref policy.
 
-## Audited Write Runner Dry-Run And Simulation Boundary
+## Audited Write Runner Dry-Run, Simulation, And Guarded Verification Boundary
 
-Status: JSON path enabled for `write-runner --intent <intentId> [--preflight <path>] [--simulate|--execute] --json`; plain output and actual command execution remain disabled.
+Status: JSON path enabled for `write-runner --intent <intentId> [--preflight <path>] [--simulate|--execute|--execute-local] [--verification <action>] --json`; plain output and write-side git/GitHub command execution remain disabled.
 
 ```bash
 task-loop-orchestrator write-runner --intent <intentId> --json
 task-loop-orchestrator write-runner --intent <intentId> --preflight <path> --json
 task-loop-orchestrator write-runner --intent <intentId> --preflight <path> --simulate --json
+task-loop-orchestrator write-runner --intent <intentId> --preflight <path> --execute-local --verification typecheck --json
 task-loop-orchestrator write-runner --intent <intentId> --preflight <path> --execute --json
 ```
 
-The runner boundary loads the persisted execution intent and matching dry-run traces, computes readiness with the same audit bundle and optional preflight evidence used by `write-readiness`, and then returns a dry-run, simulated, disabled, or blocked plan report. If readiness is `ready`, dry-run and simulate modes persist local dry-run trace records under `.orchestrator/execution-traces/` as audit artifacts. If readiness is `blocked` or `unknown`, the CLI returns a blocked dry-run report and does not save new traces.
+The runner boundary loads the persisted execution intent and matching dry-run traces, computes readiness with the same audit bundle and optional preflight evidence used by `write-readiness`, and then returns a dry-run, simulated, guarded local verification, disabled, or blocked plan report. If readiness is `ready`, dry-run, simulate, and guarded local verification modes persist local dry-run trace records under `.orchestrator/execution-traces/` as audit artifacts. If readiness is `blocked` or `unknown`, the CLI returns a blocked dry-run report and does not save new traces or run verification.
 
-The dry-run payload reports `status`, `intentId`, `runId`, `planId`, `approvalId`, optional `checkpointId`, `readinessStatus`, `ready`, `planItemCount`, `planItems`, `traceCount`, `traceIds`, `localTracePersistence`, `policy`, `simulationResultCount`, `simulationResults`, `blockedReasonCount`, `blockedReasons`, `createdAt`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`. Plan items derive safe candidates such as branch names, commit message candidates, and PR title/body candidates from persisted intent metadata; they do not expose raw command args.
+The dry-run payload reports `status`, `intentId`, `runId`, `planId`, `approvalId`, optional `checkpointId`, `readinessStatus`, `ready`, `planItemCount`, `planItems`, `traceCount`, `traceIds`, `localTracePersistence`, `policy`, `simulationResultCount`, `simulationResults`, `localExecutionResultCount`, `localExecutionResults`, `blockedReasonCount`, `blockedReasons`, `createdAt`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`. Plan items derive safe candidates such as branch names, commit message candidates, and PR title/body candidates from persisted intent metadata; they do not expose raw command args.
 
-The execution policy fixes `mode: "dry_run" | "simulate" | "execute_disabled"`, `requiredReadiness: "ready"`, action categories allowed by the persisted intent, policy blockers, `actualExecutionEnabled: false`, `executionEnabled: false`, and `writeExecution: "disabled"`. Default mode is `dry_run`. `--simulate` uses a deterministic safe executor boundary that returns symbolic action summaries only; it does not call shell, git, or GitHub. `--execute` is accepted only to return an `execute_disabled` policy/report so callers can verify that actual execution remains closed.
+The execution policy fixes `mode: "dry_run" | "simulate" | "execute_disabled" | "execute_local"`, `requiredReadiness: "ready"`, action categories allowed by the persisted intent, allowlisted verification actions, policy blockers, `localExecutionEnabled`, `localExecutionScope`, `actualExecutionEnabled: false`, `executionEnabled: false`, and `writeExecution: "disabled"`. Default mode is `dry_run`. `--simulate` uses a deterministic safe executor boundary that returns symbolic action summaries only; it does not call shell, git, or GitHub. `--execute-local` is explicit opt-in for allowlisted package-script verification actions: `typecheck`, `test`, `build`, `lint`, `package:smoke`, and `release:check`. `--execute` is accepted only to return an `execute_disabled` policy/report so callers can verify that write-side execution remains closed.
 
 Simulation results report only safe symbolic fields: action, simulated/skipped status, summary, and disabled execution markers. They must not include raw command args, stdout, stderr, exit codes, stacks, secrets, `executedCommands`, or command execution output.
 
+Guarded local verification uses Node process spawning with shell execution disabled, a fixed working directory, a sanitized environment, timeout, and bounded output capture. Public local verification results report only the verification action, symbolic status, summary, duration, `outputCaptured: false`, and disabled write markers. They must not include raw command args, raw stdout, raw stderr, exit codes, stacks, secrets, `executedCommands`, or full package script output. Non-allowlisted or write-side command categories are blocked.
+
 Errors use the `write-runner` JSON envelope with `dryRun: null`, disabled execution markers, and safe codes for missing intents, invalid persisted intent/trace files, missing preflight paths, missing/unreadable preflight files, invalid JSON, and invalid preflight schema. Error details are limited to a `kind` value such as `execution_intent`, `execution_trace`, or `preflight`.
 
-This boundary is not an execution engine. It must not use `child_process`, shell execution, GitHub write APIs, branch creation, commit, push, PR creation, merge, release, tag creation, issue transitions, raw stdout/stderr capture, exit codes, stack traces, or `executedCommands`.
+This boundary is not a write-side execution engine. It may run only allowlisted local verification package scripts through the guarded executor. It must not use shell execution, GitHub write APIs, git branch creation, commit, push, PR creation, merge, release, tag creation, issue transitions, raw stdout/stderr disclosure, exit-code disclosure, stack traces, or `executedCommands`.
 
 ## Rollout Slices
 
@@ -395,10 +398,12 @@ This boundary is not an execution engine. It must not use `child_process`, shell
 15. Complete the read-only `--preflight <path> [--json]` surface after CLI error handling and package smoke are covered.
 16. Enable the audited `write-runner --intent <intentId> [--preflight <path>] --json` dry-run boundary that saves only local trace artifacts when readiness is `ready`.
 17. Add an opt-in execution policy and deterministic simulated executor boundary with `--simulate` and disabled `--execute` reports, without actual shell, git, or GitHub execution.
-18. Add a guarded local command executor only after policy, readiness, and safe result redaction tests exist.
-19. Add commit execution only after staged-file policy and diff verification exist.
-20. Add push only after remote/ref policy and CI handling are documented and tested.
-21. Add GitHub PR creation only after push policy, approval freshness, and `gh pr create` argument construction are covered.
+18. Add a guarded local verification executor alpha for allowlisted package scripts only, with timeout, sanitized environment, redacted public results, and no write-side git/GitHub actions.
+19. Strengthen diff, clean-worktree, ref, and approval freshness gates before any local write adapter.
+20. Add a single-action local write adapter only after policy and redaction tests cover the exact side effect.
+21. Add commit execution only after staged-file policy and diff verification exist.
+22. Add push only after remote/ref policy and CI handling are documented and tested.
+23. Add GitHub PR creation only after push policy, approval freshness, and `gh pr create` argument construction are covered.
 
 ## Hard Non-Goals
 

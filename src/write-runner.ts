@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import type {
   ExecutionIntent,
   ExecutionTraceRecord,
@@ -8,10 +9,30 @@ import type {
   WriteRunnerErrorReport,
   WriteRunnerExecutionMode,
   WriteRunnerExecutionPolicy,
-  WriteRunnerSimulationResult
+  WriteRunnerLocalExecutionResult,
+  WriteRunnerSimulationResult,
+  WriteRunnerVerificationAction
 } from "./domain.js";
 import { createExecutionDryRunTraces } from "./execution-intents.js";
 import { nowIso } from "./ids.js";
+
+export const writeRunnerVerificationActions: readonly WriteRunnerVerificationAction[] = [
+  "typecheck",
+  "test",
+  "build",
+  "lint",
+  "package:smoke",
+  "release:check"
+];
+
+const verificationScriptByAction: Record<WriteRunnerVerificationAction, string> = {
+  typecheck: "typecheck",
+  test: "test",
+  build: "build",
+  lint: "lint",
+  "package:smoke": "package:smoke",
+  "release:check": "release:check"
+};
 
 export function createWriteRunnerDryRunTraces(
   intent: ExecutionIntent,
@@ -34,12 +55,14 @@ export function summarizeWriteRunnerDryRun(
     localTracePersistence?: WriteRunnerDryRunReport["localTracePersistence"];
     mode?: WriteRunnerExecutionMode;
     executor?: WriteRunnerExecutor;
+    localExecutionResults?: WriteRunnerLocalExecutionResult[];
   } = {}
 ): WriteRunnerDryRunReport {
   const mode = options.mode ?? "dry_run";
   const policy = createWriteRunnerExecutionPolicy(intent, readiness, mode);
   const blockedReasons = writeRunnerBlockedReasons(intent, readiness, policy);
-  const status = writeRunnerStatus(mode, blockedReasons);
+  const localExecutionResults = options.localExecutionResults ?? [];
+  const status = writeRunnerStatus(mode, blockedReasons, localExecutionResults);
   const planItems =
     status === "planned" || status === "simulated" ? intent.commandCandidates.map((candidate) => planItem(intent, candidate)) : [];
   const simulationResults =
@@ -62,6 +85,8 @@ export function summarizeWriteRunnerDryRun(
     policy,
     simulationResultCount: simulationResults.length,
     simulationResults,
+    localExecutionResultCount: localExecutionResults.length,
+    localExecutionResults,
     blockedReasonCount: blockedReasons.length,
     blockedReasons,
     createdAt: options.createdAt ?? nowIso(),
@@ -73,6 +98,18 @@ export function summarizeWriteRunnerDryRun(
 
 export interface WriteRunnerExecutor {
   simulate(planItems: WriteRunnerDryRunPlanItem[], policy: WriteRunnerExecutionPolicy): WriteRunnerSimulationResult[];
+}
+
+export interface GuardedLocalVerificationExecutorOptions {
+  cwd: string;
+  timeoutMs?: number;
+  maxOutputBytes?: number;
+  now?: () => number;
+}
+
+export interface GuardedLocalVerificationExecutionOptions {
+  timeoutMs?: number;
+  maxOutputBytes?: number;
 }
 
 export class SimulatedWriteRunnerExecutor implements WriteRunnerExecutor {
@@ -92,12 +129,96 @@ export class SimulatedWriteRunnerExecutor implements WriteRunnerExecutor {
   }
 }
 
+export class GuardedLocalVerificationExecutor {
+  private readonly cwd: string;
+  private readonly timeoutMs: number;
+  private readonly maxOutputBytes: number;
+  private readonly now: () => number;
+
+  constructor(options: GuardedLocalVerificationExecutorOptions) {
+    this.cwd = options.cwd;
+    this.timeoutMs = options.timeoutMs ?? 60_000;
+    this.maxOutputBytes = options.maxOutputBytes ?? 64_000;
+    this.now = options.now ?? Date.now;
+  }
+
+  async execute(
+    action: WriteRunnerVerificationAction,
+    policy: WriteRunnerExecutionPolicy,
+    options: GuardedLocalVerificationExecutionOptions = {}
+  ): Promise<WriteRunnerLocalExecutionResult> {
+    if (policy.mode !== "execute_local" || policy.blockers.length > 0 || !policy.localExecutionEnabled) {
+      return localExecutionResult(action, "blocked", "Verification execution was blocked by policy.", 0);
+    }
+
+    if (!isWriteRunnerVerificationAction(action) || !policy.allowedVerificationActions.includes(action)) {
+      return localExecutionResult(action, "blocked", "Verification action is not allowlisted.", 0);
+    }
+
+    const startedAt = this.now();
+    const timeoutMs = options.timeoutMs ?? this.timeoutMs;
+    const maxOutputBytes = options.maxOutputBytes ?? this.maxOutputBytes;
+
+    return new Promise((resolve) => {
+      let settled = false;
+      let observedOutputBytes = 0;
+      const child = spawn("pnpm", ["run", verificationScriptByAction[action]], {
+        cwd: this.cwd,
+        env: sanitizedExecutionEnv(),
+        shell: false,
+        stdio: ["ignore", "pipe", "pipe"]
+      });
+
+      const timer = setTimeout(() => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        child.kill("SIGTERM");
+        resolve(localExecutionResult(action, "timed_out", "Verification script timed out.", this.now() - startedAt));
+      }, timeoutMs);
+
+      const observeOutput = (chunk: Buffer | string) => {
+        if (observedOutputBytes >= maxOutputBytes) {
+          return;
+        }
+        observedOutputBytes = Math.min(maxOutputBytes, observedOutputBytes + Buffer.byteLength(chunk));
+      };
+
+      child.stdout?.on("data", observeOutput);
+      child.stderr?.on("data", observeOutput);
+
+      child.on("error", () => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        resolve(localExecutionResult(action, "failed", "Verification script could not be started.", this.now() - startedAt));
+      });
+
+      child.on("close", (code) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        const durationMs = this.now() - startedAt;
+        const status = code === 0 ? "succeeded" : "failed";
+        const summary = code === 0 ? "Verification script completed successfully." : "Verification script failed.";
+        resolve(localExecutionResult(action, status, summary, durationMs));
+      });
+    });
+  }
+}
+
 export function createWriteRunnerExecutionPolicy(
   intent: ExecutionIntent,
   readiness: WriteExecutionReadinessReport,
   mode: WriteRunnerExecutionMode = "dry_run"
 ): WriteRunnerExecutionPolicy {
   const allowedActions = intent.commandCandidates.map((candidate) => candidate.action);
+  const localExecutionEnabled = readiness.ready && mode === "execute_local";
   const blockers = readiness.ready
     ? mode === "execute_disabled"
       ? ["Actual write execution is disabled; use simulate mode until the guarded executor is implemented."]
@@ -109,7 +230,10 @@ export function createWriteRunnerExecutionPolicy(
     requiredReadiness: "ready",
     allowedActions,
     disallowedActions: [],
+    allowedVerificationActions: [...writeRunnerVerificationActions],
     blockers,
+    localExecutionEnabled,
+    localExecutionScope: localExecutionEnabled ? "verification_only" : "disabled",
     actualExecutionEnabled: false,
     executionEnabled: false,
     writeExecution: "disabled"
@@ -172,7 +296,15 @@ function writeRunnerBlockedReasons(
   return Array.from(new Set(reasons));
 }
 
-function writeRunnerStatus(mode: WriteRunnerExecutionMode, blockedReasons: string[]): WriteRunnerDryRunReport["status"] {
+export function isWriteRunnerVerificationAction(value: string): value is WriteRunnerVerificationAction {
+  return writeRunnerVerificationActions.includes(value as WriteRunnerVerificationAction);
+}
+
+function writeRunnerStatus(
+  mode: WriteRunnerExecutionMode,
+  blockedReasons: string[],
+  localExecutionResults: WriteRunnerLocalExecutionResult[]
+): WriteRunnerDryRunReport["status"] {
   if (mode === "execute_disabled") {
     return "disabled";
   }
@@ -181,7 +313,48 @@ function writeRunnerStatus(mode: WriteRunnerExecutionMode, blockedReasons: strin
     return "blocked";
   }
 
+  if (mode === "execute_local") {
+    return localExecutionResults.length > 0 && localExecutionResults.every((result) => result.status === "succeeded")
+      ? "local_executed"
+      : "local_failed";
+  }
+
   return mode === "simulate" ? "simulated" : "planned";
+}
+
+function localExecutionResult(
+  action: WriteRunnerVerificationAction,
+  status: WriteRunnerLocalExecutionResult["status"],
+  summary: string,
+  durationMs: number
+): WriteRunnerLocalExecutionResult {
+  return {
+    action,
+    status,
+    summary,
+    durationMs: Math.max(0, Math.round(durationMs)),
+    outputCaptured: false,
+    executionEnabled: false,
+    writeExecution: "disabled",
+    hasExecutionResults: false
+  };
+}
+
+function sanitizedExecutionEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  if (process.env.PATH) {
+    env.PATH = process.env.PATH;
+  }
+  if (process.env.HOME) {
+    env.HOME = process.env.HOME;
+  }
+  if (process.env.SystemRoot) {
+    env.SystemRoot = process.env.SystemRoot;
+  }
+  if (process.env.TMPDIR) {
+    env.TMPDIR = process.env.TMPDIR;
+  }
+  return env;
 }
 
 function planItem(intent: ExecutionIntent, candidate: ExecutionIntent["commandCandidates"][number]): WriteRunnerDryRunPlanItem {
