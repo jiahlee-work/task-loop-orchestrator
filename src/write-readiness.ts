@@ -9,6 +9,31 @@ import type {
 } from "./domain.js";
 
 type PreflightKey = keyof WriteExecutionReadinessPreflightInput;
+type PreflightEvidenceCategory = Exclude<WriteExecutionReadinessCategory, "trace" | "unknown">;
+
+export type WriteReadinessPreflightParseErrorCode =
+  | "preflight_not_object"
+  | "preflight_invalid_schema_version"
+  | "preflight_missing_checks"
+  | "preflight_invalid_check"
+  | "preflight_invalid_metadata";
+
+export type WriteReadinessPreflightParseResult =
+  | {
+      ok: true;
+      preflight: WriteExecutionReadinessPreflightInput;
+      recognizedCheckCount: number;
+      ignoredCheckCount: number;
+    }
+  | {
+      ok: false;
+      errorCode: WriteReadinessPreflightParseErrorCode;
+      message: string;
+      details?: {
+        field?: "schemaVersion" | "checks" | "metadata";
+        index?: number;
+      };
+    };
 
 interface PreflightCheckDefinition {
   key: PreflightKey;
@@ -102,6 +127,50 @@ const preflightChecks: PreflightCheckDefinition[] = [
   }
 ];
 
+const preflightCodeToKey: Record<string, PreflightKey> = {
+  approval_freshness_passed: "approvalFresh",
+  approval_freshness_blocked: "approvalFresh",
+  approval_freshness_unverified: "approvalFresh",
+  approval_expiration_passed: "approvalNotExpired",
+  approval_expiration_blocked: "approvalNotExpired",
+  approval_expiration_unverified: "approvalNotExpired",
+  plan_fingerprint_passed: "planFingerprintMatches",
+  plan_fingerprint_blocked: "planFingerprintMatches",
+  plan_fingerprint_unverified: "planFingerprintMatches",
+  checkpoint_match_passed: "checkpointMatches",
+  checkpoint_match_blocked: "checkpointMatches",
+  checkpoint_match_unverified: "checkpointMatches",
+  repo_cleanliness_passed: "repoClean",
+  repo_cleanliness_blocked: "repoClean",
+  repo_cleanliness_unverified: "repoClean",
+  diff_verification_passed: "diffVerified",
+  diff_verification_blocked: "diffVerified",
+  diff_verification_unverified: "diffVerified",
+  ref_policy_passed: "refPolicySatisfied",
+  ref_policy_blocked: "refPolicySatisfied",
+  ref_policy_unverified: "refPolicySatisfied",
+  ci_policy_passed: "ciPolicySatisfied",
+  ci_policy_blocked: "ciPolicySatisfied",
+  ci_policy_unverified: "ciPolicySatisfied",
+  permission_gate_passed: "permissionAllowed",
+  permission_gate_blocked: "permissionAllowed",
+  permission_gate_unverified: "permissionAllowed",
+  command_runner_passed: "commandRunnerConfigured",
+  command_runner_blocked: "commandRunnerConfigured",
+  command_runner_unverified: "commandRunnerConfigured"
+};
+
+const preflightEvidenceCategories = new Set<PreflightEvidenceCategory>([
+  "approval",
+  "precondition",
+  "permission",
+  "policy",
+  "ci",
+  "repo_state"
+]);
+
+const preflightEvidenceStatuses = new Set<WriteExecutionReadinessCheck["status"]>(["pass", "blocked", "unknown"]);
+
 export function summarizeWriteExecutionReadiness(
   bundle: ExecutionAuditBundle,
   preflight?: WriteExecutionReadinessPreflightInput
@@ -132,6 +201,59 @@ export function summarizeWriteExecutionReadiness(
     executionEnabled: false,
     writeExecution: "disabled",
     hasExecutionResults: false
+  };
+}
+
+export function parseWriteReadinessPreflightInput(value: unknown): WriteReadinessPreflightParseResult {
+  const root = asRecord(value);
+  if (!root) {
+    return parseError("preflight_not_object", "Preflight input must be an object.");
+  }
+
+  if (root.schemaVersion !== 1) {
+    return parseError("preflight_invalid_schema_version", "Preflight input schemaVersion must be 1.", {
+      field: "schemaVersion"
+    });
+  }
+
+  if (!Array.isArray(root.checks)) {
+    return parseError("preflight_missing_checks", "Preflight input checks must be an array.", { field: "checks" });
+  }
+
+  const metadata = root.metadata;
+  if (metadata !== undefined && !isValidMetadata(metadata)) {
+    return parseError("preflight_invalid_metadata", "Preflight input metadata is invalid.", { field: "metadata" });
+  }
+
+  const preflight: WriteExecutionReadinessPreflightInput = {};
+  let recognizedCheckCount = 0;
+  let ignoredCheckCount = 0;
+
+  for (const [index, item] of root.checks.entries()) {
+    const check = asRecord(item);
+    if (!check || !isPreflightEvidenceCheck(check)) {
+      return parseError("preflight_invalid_check", "Preflight input check item is invalid.", { field: "checks", index });
+    }
+
+    const key = preflightCodeToKey[check.code];
+    if (!key) {
+      ignoredCheckCount += 1;
+      continue;
+    }
+
+    recognizedCheckCount += 1;
+    if (check.status === "pass") {
+      preflight[key] = true;
+    } else if (check.status === "blocked") {
+      preflight[key] = false;
+    }
+  }
+
+  return {
+    ok: true,
+    preflight,
+    recognizedCheckCount,
+    ignoredCheckCount
   };
 }
 
@@ -273,6 +395,57 @@ function passCode(code: string): string {
 
 function blockedCode(code: string): string {
   return code.replace(/_unverified$/, "_blocked");
+}
+
+function parseError(
+  errorCode: WriteReadinessPreflightParseErrorCode,
+  message: string,
+  details?: { field?: "schemaVersion" | "checks" | "metadata"; index?: number }
+): WriteReadinessPreflightParseResult {
+  return {
+    ok: false,
+    errorCode,
+    message,
+    ...(details ? { details } : {})
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function isValidMetadata(value: unknown): boolean {
+  const metadata = asRecord(value);
+  if (!metadata) {
+    return false;
+  }
+
+  return (
+    (metadata.createdAt === undefined || typeof metadata.createdAt === "string") &&
+    (metadata.tool === undefined || typeof metadata.tool === "string")
+  );
+}
+
+function isPreflightEvidenceCheck(check: Record<string, unknown>): check is {
+  category: PreflightEvidenceCategory;
+  status: WriteExecutionReadinessCheck["status"];
+  code: string;
+  message: string;
+  source: "preflight";
+} {
+  return (
+    typeof check.category === "string" &&
+    preflightEvidenceCategories.has(check.category as PreflightEvidenceCategory) &&
+    typeof check.status === "string" &&
+    preflightEvidenceStatuses.has(check.status as WriteExecutionReadinessCheck["status"]) &&
+    typeof check.code === "string" &&
+    check.code.trim().length > 0 &&
+    typeof check.message === "string" &&
+    check.message.trim().length > 0 &&
+    check.source === "preflight"
+  );
 }
 
 function formatReadyValue(report: WriteExecutionReadinessReport): "yes" | "no" | "unknown" {

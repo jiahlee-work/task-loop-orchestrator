@@ -11,6 +11,7 @@ import {
 import {
   formatWriteExecutionReadiness,
   formatWriteReadinessError,
+  parseWriteReadinessPreflightInput,
   summarizeWriteExecutionReadiness
 } from "../src/write-readiness.js";
 
@@ -128,13 +129,20 @@ describe("write execution readiness helper", () => {
 
   it("keeps the future preflight file contract aligned with all-pass helper input", () => {
     const fixture = passingPreflightFileFixture();
+    const parsed = parseWriteReadinessPreflightInput(fixture);
     const report = summarizeWriteExecutionReadiness(
       executionAuditBundle("2026-06-22T00:00:00.000Z", {
         commandSecret: "top-secret-readiness"
       }),
-      helperInputFromPreflightFixture(fixture)
+      expectParsedPreflight(parsed)
     );
 
+    expect(parsed).toEqual({
+      ok: true,
+      preflight: passingPreflight(),
+      recognizedCheckCount: 10,
+      ignoredCheckCount: 0
+    });
     expect(fixture).toEqual({
       schemaVersion: 1,
       metadata: {
@@ -187,11 +195,21 @@ describe("write execution readiness helper", () => {
           : check
       )
     };
+    const parsed = parseWriteReadinessPreflightInput(fixture);
     const report = summarizeWriteExecutionReadiness(
       executionAuditBundle("2026-06-22T00:00:00.000Z"),
-      helperInputFromPreflightFixture(fixture)
+      expectParsedPreflight(parsed)
     );
 
+    expect(parsed).toEqual({
+      ok: true,
+      preflight: {
+        ...passingPreflight(),
+        ciPolicySatisfied: false
+      },
+      recognizedCheckCount: 10,
+      ignoredCheckCount: 0
+    });
     expect(report.readinessStatus).toBe("blocked");
     expect(report.ready).toBe(false);
     expect(report.inputs.preflight).toBe("available");
@@ -207,6 +225,129 @@ describe("write execution readiness helper", () => {
     );
     expectNoUnsafeReadinessOutput(fixture);
     expectNoUnsafeReadinessOutput(report);
+  });
+
+  it("maps unknown future preflight evidence to partial helper input", () => {
+    const fixture = {
+      ...passingPreflightFileFixture(),
+      checks: passingPreflightFileFixture().checks.map((check) =>
+        check.code === "ci_policy_passed"
+          ? {
+              ...check,
+              status: "unknown" as const,
+              code: "ci_policy_unverified",
+              message: "CI/check policy has not been verified."
+            }
+          : check
+      )
+    };
+    const parsed = parseWriteReadinessPreflightInput(fixture);
+    const report = summarizeWriteExecutionReadiness(
+      executionAuditBundle("2026-06-22T00:00:00.000Z"),
+      expectParsedPreflight(parsed)
+    );
+
+    expect(parsed).toEqual({
+      ok: true,
+      preflight: {
+        approvalFresh: true,
+        approvalNotExpired: true,
+        planFingerprintMatches: true,
+        checkpointMatches: true,
+        repoClean: true,
+        diffVerified: true,
+        refPolicySatisfied: true,
+        permissionAllowed: true,
+        commandRunnerConfigured: true
+      },
+      recognizedCheckCount: 10,
+      ignoredCheckCount: 0
+    });
+    expect(report.readinessStatus).toBe("unknown");
+    expect(report.ready).toBe(false);
+    expect(report.inputs.preflight).toBe("partial");
+    expect(report.checks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ category: "ci", status: "unknown", code: "ci_policy_unverified" })])
+    );
+    expectNoUnsafeReadinessOutput(parsed);
+    expectNoUnsafeReadinessOutput(report);
+  });
+
+  it("returns safe invalid preflight parse errors", () => {
+    const unsafeFixture = {
+      schemaVersion: 1,
+      checks: [
+        {
+          category: "ci",
+          status: "unexpected",
+          code: "ci_policy_passed",
+          message: "raw-preflight-secret should not be echoed",
+          source: "preflight",
+          stdout: "raw-preflight-secret",
+          stderr: "raw-preflight-secret",
+          exitCode: 1,
+          executedCommands: ["git", "push"],
+          stack: "raw-preflight-secret",
+          argv: ["git", "push"]
+        }
+      ],
+      metadata: {
+        createdAt: "2026-06-22T02:00:00.000Z",
+        tool: "raw-preflight-secret",
+        path: "/tmp/preflight.json"
+      }
+    };
+
+    const result = parseWriteReadinessPreflightInput(unsafeFixture);
+
+    expect(result).toEqual({
+      ok: false,
+      errorCode: "preflight_invalid_check",
+      message: "Preflight input check item is invalid.",
+      details: {
+        field: "checks",
+        index: 0
+      }
+    });
+    expectNoUnsafeReadinessOutput(result);
+  });
+
+  it.each([
+    {
+      value: null,
+      errorCode: "preflight_not_object",
+      details: undefined
+    },
+    {
+      value: { schemaVersion: 2, checks: [] },
+      errorCode: "preflight_invalid_schema_version",
+      details: { field: "schemaVersion" }
+    },
+    {
+      value: { schemaVersion: 1 },
+      errorCode: "preflight_missing_checks",
+      details: { field: "checks" }
+    },
+    {
+      value: { schemaVersion: 1, checks: [{}] },
+      errorCode: "preflight_invalid_check",
+      details: { field: "checks", index: 0 }
+    },
+    {
+      value: { schemaVersion: 1, checks: [], metadata: "raw-preflight-secret" },
+      errorCode: "preflight_invalid_metadata",
+      details: { field: "metadata" }
+    }
+  ])("rejects invalid preflight input safely: $errorCode", ({ value, errorCode, details }) => {
+    const result = parseWriteReadinessPreflightInput(value);
+
+    expect(result).toEqual({
+      ok: false,
+      errorCode,
+      message: expect.any(String),
+      ...(details ? { details } : {})
+    });
+    expectNoUnsafeReadinessOutput(result);
   });
 
   it("keeps blocked readiness report contract stable as a plain JSON object", () => {
@@ -600,23 +741,15 @@ function preflightFixtureCheck(
   };
 }
 
-function helperInputFromPreflightFixture(fixture: PreflightFileFixture): WriteExecutionReadinessPreflightInput {
-  const statusByCode = new Map(fixture.checks.map((check) => [check.code, check.status]));
-  const passed = (code: string) => statusByCode.get(code) === "pass";
-  const blocked = (code: string) => statusByCode.get(code) === "blocked";
+function expectParsedPreflight(
+  result: ReturnType<typeof parseWriteReadinessPreflightInput>
+): WriteExecutionReadinessPreflightInput {
+  expect(result.ok).toBe(true);
+  if (!result.ok) {
+    throw new Error(result.message);
+  }
 
-  return {
-    approvalFresh: passed("approval_freshness_passed"),
-    approvalNotExpired: passed("approval_expiration_passed"),
-    planFingerprintMatches: passed("plan_fingerprint_passed"),
-    checkpointMatches: passed("checkpoint_match_passed"),
-    repoClean: passed("repo_cleanliness_passed"),
-    diffVerified: passed("diff_verification_passed"),
-    refPolicySatisfied: passed("ref_policy_passed"),
-    ciPolicySatisfied: blocked("ci_policy_blocked") ? false : passed("ci_policy_passed"),
-    permissionAllowed: passed("permission_gate_passed"),
-    commandRunnerConfigured: passed("command_runner_passed")
-  };
+  return result.preflight;
 }
 
 function expectNoUnsafeReadinessOutput(value: unknown): void {
