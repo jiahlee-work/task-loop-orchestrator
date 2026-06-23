@@ -38,10 +38,11 @@ npx task-loop-orchestrator doctor --json
 npx task-loop-orchestrator init
 npx task-loop-orchestrator run "Quickstart smoke" --max-iterations 1 --json
 npx task-loop-orchestrator status --json
-npx task-loop-orchestrator resume run_xxx --max-iterations 1 --json
+npx task-loop-orchestrator resume <runId> --max-iterations 1 --json
 npx task-loop-orchestrator checks HEAD --json
 ```
 
+Use the `runId` returned by `run --json` for the `resume <runId>` command.
 `checks HEAD --json` requires a GitHub remote and readable check-runs to report live CI status; otherwise it returns a graceful JSON fallback.
 Advanced read-only audit and dry-run surfaces such as `execution-audit`, `write-readiness`, and `write-runner` are documented in [docs/commands.md](docs/commands.md). They are not required for the first install/run/status/resume flow. `write-runner` remains a dry-run/simulation boundary and does not execute shell, git, or GitHub commands or create branches, commits, pushes, or PRs.
 
@@ -65,10 +66,10 @@ node dist/cli.js run "Create MVP scaffold" --description "Exercise the mock clos
 node dist/cli.js run "Prepare executor adapter" --executor codex-cli-dry-run
 node dist/cli.js run "Review evidence" --reviewer local-evidence
 node dist/cli.js run "Machine-readable smoke" --max-iterations 1 --json
-node dist/cli.js resume run_xxx --max-iterations 1 --json
+node dist/cli.js resume <runId> --max-iterations 1 --json
 node dist/cli.js status
 node dist/cli.js status --json
-node dist/cli.js status run_xxx --json --raw
+node dist/cli.js status <runId> --json --raw
 node dist/cli.js checkpoint
 node dist/cli.js checkpoint --json
 node dist/cli.js checkpoint --github gh-cli --json

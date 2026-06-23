@@ -85,7 +85,7 @@ async function main() {
       assertDoctorReport(parseJson(postInitDoctor), "pass", "doctor after init should pass");
     });
 
-    await runStep("run/resume/status json", async () => {
+    await runStep("mvp first-run json", async () => {
       const loop = await run(bin, ["run", "Smoke task", "--max-iterations", "1", "--json"], { cwd: projectDir });
       loopReport = parseJson(loop);
       assertRunReport(loopReport, "run", {
@@ -94,13 +94,13 @@ async function main() {
         runIdIncludes: "run_"
       });
 
+      const statusJson = await run(bin, ["status", "--json"], { cwd: projectDir });
+      assertRunReport(parseJson(statusJson), "status", { runId: loopReport.runId, completedCount: 1 });
+
       const resume = await run(bin, ["resume", loopReport.runId, "--max-iterations", "1", "--json"], {
         cwd: projectDir
       });
       assertRunReport(parseJson(resume), "resume", { runId: loopReport.runId });
-
-      const statusJson = await run(bin, ["status", "--json"], { cwd: projectDir });
-      assertRunReport(parseJson(statusJson), "status", { runId: loopReport.runId, completedCount: 1 });
 
       const explicitStatusJson = await run(bin, ["status", loopReport.runId, "--json"], { cwd: projectDir });
       assertRunReport(parseJson(explicitStatusJson), "status", { runId: loopReport.runId });
@@ -125,7 +125,7 @@ async function main() {
       assertApprovalReport(parseJson(approval), loopReport.runId);
     });
 
-    await runStep("execution audit json", async () => {
+    await runStep("advanced read-only audit/write-runner json", async () => {
       const emptyAuditList = await run(bin, ["execution-audit", "--all", "--json"], { cwd: projectDir });
       assertExecutionAuditListReport(parseJson(emptyAuditList), {
         bundleCount: 0,
@@ -422,7 +422,9 @@ async function main() {
     console.log("- init creates config and .gitignore");
     console.log("- init is idempotent on second run");
     console.log("- all JSON smoke commands include schema metadata");
-    console.log("- run/resume/status JSON and plain status work through the installed binary");
+    console.log(
+      "- MVP first-run flow init/doctor/run/status/resume/status works through the installed binary with the actual runId"
+    );
     console.log("- checkpoint/pr-plan/pr-exec/approve-pr JSON fields work through the installed binary");
     console.log(
       "- execution-audit JSON and plain output read fixtures, list bundles, and return safe errors through the installed binary"

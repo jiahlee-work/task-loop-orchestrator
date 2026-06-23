@@ -95,12 +95,12 @@ Purpose: Continue an existing run for additional iterations.
 Example:
 
 ```bash
-task-loop-orchestrator resume run_xxx --max-iterations 1 --json
+task-loop-orchestrator resume <runId> --max-iterations 1 --json
 ```
 
 JSON: supported with `--json`.
 
-Behavior: reads and updates local run state. `--max-iterations` is interpreted as additional iterations from the loaded run.
+Behavior: reads and updates local run state. Use the `runId` returned by `run --json`. `--max-iterations` is interpreted as additional iterations from the loaded run.
 
 ### `status [runId] [--json] [--raw]`
 
@@ -110,7 +110,7 @@ Example:
 
 ```bash
 task-loop-orchestrator status --json
-task-loop-orchestrator status run_xxx --json --raw
+task-loop-orchestrator status <runId> --json --raw
 ```
 
 JSON: supported with `--json`. Use `--json --raw` to print the stored raw `LoopRun` shape.

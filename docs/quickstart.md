@@ -32,10 +32,11 @@ node dist/cli.js doctor --json
 node dist/cli.js init --json
 node dist/cli.js run "Quickstart smoke" --max-iterations 1 --json
 node dist/cli.js status --json
-node dist/cli.js resume run_xxx --max-iterations 1 --json
+node dist/cli.js resume <runId> --max-iterations 1 --json
 node dist/cli.js checks HEAD --json
 ```
 
+Use the `runId` returned by `run --json` for `resume <runId>`.
 `checks HEAD --json` is only meaningful in a repository with a GitHub remote and readable check-runs. Missing `gh`, missing auth, or no check-runs are reported as a graceful JSON status.
 
 ## From A Local Tarball
@@ -74,8 +75,10 @@ npx task-loop-orchestrator doctor --json
 npx task-loop-orchestrator init --json
 npx task-loop-orchestrator run "Quickstart smoke" --max-iterations 1 --json
 npx task-loop-orchestrator status --json
-npx task-loop-orchestrator resume run_xxx --max-iterations 1 --json
+npx task-loop-orchestrator resume <runId> --max-iterations 1 --json
 ```
+
+Use the `runId` returned by `run --json` for `resume <runId>`. After resuming, rerun `status <runId> --json` when you want the explicit stored run report.
 
 `init` creates or updates only local bootstrap files:
 

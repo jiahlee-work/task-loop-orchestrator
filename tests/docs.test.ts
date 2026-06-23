@@ -41,7 +41,9 @@ describe("quickstart documentation", () => {
       "npx task-loop-orchestrator init --json",
       'npx task-loop-orchestrator run "Quickstart smoke" --max-iterations 1 --json',
       "npx task-loop-orchestrator status --json",
-      "npx task-loop-orchestrator resume run_xxx --max-iterations 1 --json",
+      "npx task-loop-orchestrator resume <runId> --max-iterations 1 --json",
+      "Use the `runId` returned by `run --json` for `resume <runId>`",
+      "status <runId> --json",
       "npx task-loop-orchestrator checks HEAD --json",
       "npx task-loop-orchestrator checkpoint --json",
       "npx task-loop-orchestrator checkpoint --github gh-cli --json",
@@ -644,8 +646,9 @@ describe("documentation role boundaries", () => {
       "npx task-loop-orchestrator init",
       'npx task-loop-orchestrator run "Quickstart smoke" --max-iterations 1 --json',
       "npx task-loop-orchestrator status --json",
-      "npx task-loop-orchestrator resume run_xxx --max-iterations 1 --json",
-      "npx task-loop-orchestrator checks HEAD --json"
+      "npx task-loop-orchestrator resume <runId> --max-iterations 1 --json",
+      "npx task-loop-orchestrator checks HEAD --json",
+      "Use the `runId` returned by `run --json` for the `resume <runId>` command"
     ]);
     expect(readme).not.toContain("npx task-loop-orchestrator write-runner --intent intent_xxx --preflight readiness-preflight.json --simulate --json");
     expect(readme).not.toContain("npx task-loop-orchestrator execution-audit --all");
@@ -1040,6 +1043,7 @@ describe("command reference documentation", () => {
       '"resume", loopReport.runId, "--max-iterations", "1", "--json"',
       '"status", "--json"',
       '"checkpoint", loopReport.runId, "--json"',
+      '"status", loopReport.runId, "--json"',
       '"pr-plan", loopReport.runId, "--json"',
       '"pr-exec", loopReport.runId, "--json"',
       '"approve-pr", loopReport.runId, "--approved-by", "package-smoke", "--json"',
