@@ -284,9 +284,12 @@ describe("release readiness documentation", () => {
     const commands = await readCommands();
     const roadmap = await readRoadmap();
     const design = await readWriteExecutionModel();
+    const auditCliDesign = await readExecutionAuditCliDesign();
 
     expect(roadmap).toContain("[`design/write-execution-model.md`](design/write-execution-model.md)");
+    expect(roadmap).toContain("[`design/execution-audit-cli.md`](design/execution-audit-cli.md)");
     expect(commands).toContain("[design/write-execution-model.md](design/write-execution-model.md)");
+    expect(design).toContain("[`execution-audit-cli.md`](execution-audit-cli.md)");
     expectContainsAll(design, [
       "# Approval-Gated Write Execution Model",
       "Status: design draft, not enabled.",
@@ -315,6 +318,45 @@ describe("release readiness documentation", () => {
       "git tag creation",
       "GitHub release creation",
       "arbitrary shell command execution"
+    ]);
+    expectContainsAll(auditCliDesign, [
+      "# Execution Audit Read-Only CLI Surface",
+      "Status: design draft, not enabled.",
+      "not implemented",
+      "does not enable command execution",
+      "must not be described as an available command",
+      "task-loop-orchestrator execution-audit --intent <intentId> --json",
+      "task-loop-orchestrator execution-audit --all --json",
+      "`--intent <intentId>`",
+      "`--all`",
+      "`--json`: required",
+      "existing CLI JSON envelope",
+      "command: \"execution-audit\"",
+      "ExecutionAuditBundle",
+      "`executionEnabled: false`",
+      "`writeExecution: \"disabled\"`",
+      "`hasExecutionResults: false`",
+      "no file writes",
+      "no external command execution",
+      "no `child_process` or shell execution",
+      "no branch creation",
+      "no commit",
+      "no push",
+      "no pull request creation or mutation",
+      "no approval mutation",
+      "no run status transition",
+      "No persisted intents",
+      "Intent not found",
+      "No traces for an existing intent",
+      "Trace mismatch",
+      "`schemas/cli-json.schema.json`",
+      "`docs/json-output.md`",
+      "`docs/commands.md` entry after the command exists",
+      "package smoke coverage",
+      "actual command execution",
+      "`gh pr create`",
+      "npm publish",
+      "GitHub release creation"
     ]);
   });
 });
@@ -690,6 +732,10 @@ async function readRoadmap() {
 
 async function readWriteExecutionModel() {
   return readFile(join(root, "docs", "design", "write-execution-model.md"), "utf8");
+}
+
+async function readExecutionAuditCliDesign() {
+  return readFile(join(root, "docs", "design", "execution-audit-cli.md"), "utf8");
 }
 
 async function readChangelog() {
