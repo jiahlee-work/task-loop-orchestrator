@@ -41,10 +41,12 @@ npx task-loop-orchestrator checks HEAD --json
 npx task-loop-orchestrator execution-audit --all
 npx task-loop-orchestrator execution-audit --all --json
 npx task-loop-orchestrator write-runner --intent intent_xxx --preflight readiness-preflight.json --json
+npx task-loop-orchestrator write-runner --intent intent_xxx --preflight readiness-preflight.json --simulate --json
+npx task-loop-orchestrator write-runner --intent intent_xxx --preflight readiness-preflight.json --execute --json
 ```
 
 `checks HEAD --json` requires a GitHub remote and readable check-runs to report live CI status; otherwise it returns a graceful JSON fallback.
-`execution-audit` is read-only and useful when `.orchestrator/execution-intents/` records exist. Plain output is for humans; use `--json` for automation and scripts. `write-runner` is still dry-run only: it may save local trace artifacts when readiness is ready, but it does not execute commands or create branches, commits, pushes, or PRs.
+`execution-audit` is read-only and useful when `.orchestrator/execution-intents/` records exist. Plain output is for humans; use `--json` for automation and scripts. `write-runner` is still a dry-run/simulation boundary: it may save local trace artifacts when readiness is ready, `--simulate` returns symbolic safe executor results, and `--execute` returns an `execute_disabled` report. It does not execute shell, git, or GitHub commands or create branches, commits, pushes, or PRs.
 
 ## Local Development
 
@@ -84,6 +86,8 @@ node dist/cli.js execution-audit --all --json
 node dist/cli.js execution-audit --intent intent_xxx
 node dist/cli.js execution-audit --intent intent_xxx --json
 node dist/cli.js write-runner --intent intent_xxx --preflight readiness-preflight.json --json
+node dist/cli.js write-runner --intent intent_xxx --preflight readiness-preflight.json --simulate --json
+node dist/cli.js write-runner --intent intent_xxx --preflight readiness-preflight.json --execute --json
 ```
 
 Runs are stored as JSON files under `.orchestrator/runs/<runId>.json`.
@@ -103,7 +107,7 @@ The package can be installed from a local tarball through its `bin` entry, but i
 
 For the local pre-release verification bundle, run `pnpm run release:check`; it includes typecheck, tests, build, package artifact dry-run review, lint, installed binary package smoke, version output, and read-only check refresh.
 
-For only the dry-run package file listing review, run `pnpm run package:artifacts`. For only the installed binary smoke, run `pnpm run package:smoke`. The package smoke packs the current checkout, installs the tarball into a temporary project, and verifies the core `--json` flows for `init`, `doctor`, `run`, `resume`, `status`, `checkpoint`, `pr-plan`, `pr-exec`, `approve-pr`, and `checks`.
+For only the dry-run package file listing review, run `pnpm run package:artifacts`. For only the installed binary smoke, run `pnpm run package:smoke`. The package smoke packs the current checkout, installs the tarball into a temporary project, and verifies the core `--json` flows for `init`, `doctor`, `run`, `resume`, `status`, `checkpoint`, `pr-plan`, `pr-exec`, `approve-pr`, `execution-audit`, `write-readiness`, `write-runner`, and `checks`.
 
 These release and package verification commands never create GitHub PRs, merge, push, create releases, create tags, or publish to npm.
 
@@ -234,7 +238,7 @@ Stored approvals are tied to the checkpoint that was current when approval was r
 
 The command is read-only. It does not write files, execute commands, create branches, commit, push, create PRs, merge, publish, create tags, or create GitHub releases.
 
-`write-runner --intent <intentId> [--preflight <path>] --json` is the audited dry-run runner boundary. It can write local dry-run trace records under `.orchestrator/execution-traces/` only when readiness is ready; it still never runs shell commands, creates branches, commits, pushes, PRs, merges, releases, or tags.
+`write-runner --intent <intentId> [--preflight <path>] [--simulate|--execute] --json` is the audited dry-run and simulation runner boundary. It can write local dry-run trace records under `.orchestrator/execution-traces/` only when readiness is ready. `--simulate` returns deterministic symbolic safe executor results, and `--execute` returns an `execute_disabled` policy/report. It still never runs shell commands, creates branches, commits, pushes, PRs, merges, releases, or tags.
 
 Current approval model:
 

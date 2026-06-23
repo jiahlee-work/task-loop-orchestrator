@@ -44,6 +44,15 @@ describe("audited write runner dry-run boundary", () => {
         planItemCount: 2,
         traceCount: 2,
         localTracePersistence: "saved",
+        policy: expect.objectContaining({
+          mode: "dry_run",
+          requiredReadiness: "ready",
+          actualExecutionEnabled: false,
+          executionEnabled: false,
+          writeExecution: "disabled"
+        }),
+        simulationResultCount: 0,
+        simulationResults: [],
         blockedReasonCount: 0,
         executionEnabled: false,
         writeExecution: "disabled",
@@ -69,6 +78,52 @@ describe("audited write runner dry-run boundary", () => {
     }
   });
 
+  it("simulates safe execution results without exposing raw commands when explicitly requested", () => {
+    const intent = executionIntent("top-secret-runner-argv");
+    const bundle = summarizeExecutionAuditBundle(intent, []);
+    const readiness = summarizeWriteExecutionReadiness(bundle, passingPreflight());
+    const traces = createWriteRunnerDryRunTraces(intent, readiness, {
+      createdAt: "2026-06-22T01:00:00.000Z"
+    });
+    const report = summarizeWriteRunnerDryRun(intent, readiness, traces, {
+      createdAt: "2026-06-22T01:00:00.000Z",
+      localTracePersistence: "saved",
+      mode: "simulate"
+    });
+
+    expect(report).toMatchObject({
+      status: "simulated",
+      readinessStatus: "ready",
+      ready: true,
+      planItemCount: 2,
+      traceCount: 2,
+      localTracePersistence: "saved",
+      policy: expect.objectContaining({
+        mode: "simulate",
+        allowedActions: ["create_branch", "create_pr"],
+        disallowedActions: [],
+        actualExecutionEnabled: false
+      }),
+      simulationResultCount: 2,
+      executionEnabled: false,
+      writeExecution: "disabled",
+      hasExecutionResults: false
+    });
+    expect(report.simulationResults).toEqual([
+      expect.objectContaining({
+        action: "create_branch",
+        status: "simulated",
+        summary: "Simulated branch creation boundary without creating a branch."
+      }),
+      expect.objectContaining({
+        action: "create_pr",
+        status: "simulated",
+        summary: "Simulated PR creation boundary without creating a GitHub PR."
+      })
+    ]);
+    expectNoUnsafeRunnerOutput(report);
+  });
+
   it("returns a blocked dry-run report without traces when readiness is unknown", () => {
     const intent = executionIntent("top-secret-runner-argv");
     const bundle = summarizeExecutionAuditBundle(intent, []);
@@ -89,11 +144,77 @@ describe("audited write runner dry-run boundary", () => {
       traceCount: 0,
       traceIds: [],
       localTracePersistence: "skipped",
+      policy: expect.objectContaining({
+        mode: "dry_run",
+        blockers: ["Write readiness is unknown."],
+        actualExecutionEnabled: false
+      }),
+      simulationResultCount: 0,
+      simulationResults: [],
       blockedReasonCount: 1,
       blockedReasons: ["Write readiness is unknown."],
       executionEnabled: false,
       writeExecution: "disabled",
       hasExecutionResults: false
+    });
+    expectNoUnsafeRunnerOutput(report);
+  });
+
+  it("blocks simulation when readiness is unknown", () => {
+    const intent = executionIntent("top-secret-runner-argv");
+    const bundle = summarizeExecutionAuditBundle(intent, []);
+    const readiness = summarizeWriteExecutionReadiness(bundle);
+    const traces = createWriteRunnerDryRunTraces(intent, readiness);
+    const report = summarizeWriteRunnerDryRun(intent, readiness, traces, {
+      createdAt: "2026-06-22T01:00:00.000Z",
+      mode: "simulate"
+    });
+
+    expect(report).toMatchObject({
+      status: "blocked",
+      readinessStatus: "unknown",
+      ready: false,
+      planItemCount: 0,
+      traceCount: 0,
+      simulationResultCount: 0,
+      simulationResults: [],
+      blockedReasons: ["Write readiness is unknown."],
+      policy: expect.objectContaining({
+        mode: "simulate",
+        blockers: ["Write readiness is unknown."],
+        actualExecutionEnabled: false
+      })
+    });
+    expectNoUnsafeRunnerOutput(report);
+  });
+
+  it("returns disabled when actual execution is requested", () => {
+    const intent = executionIntent("top-secret-runner-argv");
+    const bundle = summarizeExecutionAuditBundle(intent, []);
+    const readiness = summarizeWriteExecutionReadiness(bundle, passingPreflight());
+    const report = summarizeWriteRunnerDryRun(intent, readiness, [], {
+      createdAt: "2026-06-22T01:00:00.000Z",
+      mode: "execute_disabled"
+    });
+
+    expect(report).toMatchObject({
+      status: "disabled",
+      readinessStatus: "ready",
+      ready: true,
+      planItemCount: 0,
+      planItems: [],
+      traceCount: 0,
+      localTracePersistence: "skipped",
+      simulationResultCount: 0,
+      simulationResults: [],
+      blockedReasons: ["Actual write execution is disabled; use simulate mode until the guarded executor is implemented."],
+      policy: expect.objectContaining({
+        mode: "execute_disabled",
+        blockers: ["Actual write execution is disabled; use simulate mode until the guarded executor is implemented."],
+        actualExecutionEnabled: false,
+        executionEnabled: false,
+        writeExecution: "disabled"
+      })
     });
     expectNoUnsafeRunnerOutput(report);
   });

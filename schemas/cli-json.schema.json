@@ -999,7 +999,62 @@
     },
     "writeRunnerStatus": {
       "type": "string",
-      "enum": ["planned", "blocked"]
+      "enum": ["planned", "blocked", "simulated", "disabled"]
+    },
+    "writeRunnerExecutionMode": {
+      "type": "string",
+      "enum": ["dry_run", "simulate", "execute_disabled"]
+    },
+    "writeRunnerExecutionPolicy": {
+      "type": "object",
+      "required": [
+        "mode",
+        "requiredReadiness",
+        "allowedActions",
+        "disallowedActions",
+        "blockers",
+        "actualExecutionEnabled",
+        "executionEnabled",
+        "writeExecution"
+      ],
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/writeRunnerExecutionMode"
+        },
+        "requiredReadiness": {
+          "const": "ready"
+        },
+        "allowedActions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["create_branch", "commit", "push", "create_pr"]
+          }
+        },
+        "disallowedActions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["create_branch", "commit", "push", "create_pr"]
+          }
+        },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "actualExecutionEnabled": {
+          "const": false
+        },
+        "executionEnabled": {
+          "const": false
+        },
+        "writeExecution": {
+          "const": "disabled"
+        }
+      },
+      "additionalProperties": true
     },
     "writeRunnerPlanItem": {
       "type": "object",
@@ -1036,6 +1091,33 @@
       },
       "additionalProperties": true
     },
+    "writeRunnerSimulationResult": {
+      "type": "object",
+      "required": ["action", "status", "summary", "executionEnabled", "writeExecution", "hasExecutionResults"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["create_branch", "commit", "push", "create_pr"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["simulated", "skipped"]
+        },
+        "summary": {
+          "type": "string"
+        },
+        "executionEnabled": {
+          "const": false
+        },
+        "writeExecution": {
+          "const": "disabled"
+        },
+        "hasExecutionResults": {
+          "const": false
+        }
+      },
+      "additionalProperties": true
+    },
     "writeRunnerDryRunPayload": {
       "type": "object",
       "required": [
@@ -1051,6 +1133,9 @@
         "traceCount",
         "traceIds",
         "localTracePersistence",
+        "policy",
+        "simulationResultCount",
+        "simulationResults",
         "blockedReasonCount",
         "blockedReasons",
         "createdAt",
@@ -1106,6 +1191,19 @@
         "localTracePersistence": {
           "type": "string",
           "enum": ["saved", "skipped"]
+        },
+        "policy": {
+          "$ref": "#/$defs/writeRunnerExecutionPolicy"
+        },
+        "simulationResultCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "simulationResults": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/writeRunnerSimulationResult"
+          }
         },
         "blockedReasonCount": {
           "type": "integer",

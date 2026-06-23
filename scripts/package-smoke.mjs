@@ -263,6 +263,34 @@ async function main() {
         localTracePersistence: "saved"
       });
 
+      const simulatedRun = await run(
+        bin,
+        ["write-runner", "--intent", fixture.intentId, "--preflight", preflight.validPath, "--simulate", "--json"],
+        { cwd: projectDir }
+      );
+      assertWriteRunnerDryRunReport(parseJson(simulatedRun), fixture.intentId, {
+        status: "simulated",
+        readinessStatus: "ready",
+        ready: true,
+        localTracePersistence: "saved",
+        mode: "simulate",
+        simulationResultCount: 1
+      });
+
+      const disabledExecuteRun = await run(
+        bin,
+        ["write-runner", "--intent", fixture.intentId, "--preflight", preflight.validPath, "--execute", "--json"],
+        { cwd: projectDir }
+      );
+      assertWriteRunnerDryRunReport(parseJson(disabledExecuteRun), fixture.intentId, {
+        status: "disabled",
+        readinessStatus: "ready",
+        ready: true,
+        localTracePersistence: "skipped",
+        mode: "execute_disabled",
+        simulationResultCount: 0
+      });
+
       const missingAudit = await run(bin, ["execution-audit", "--intent", "intent_missing", "--json"], {
         cwd: projectDir
       });
@@ -402,7 +430,9 @@ async function main() {
     console.log(
       "- write-readiness JSON and plain output read audit fixtures, preflight evidence, and return safe errors through the installed binary"
     );
-    console.log("- write-runner JSON dry-run output blocks unknown readiness and saves local trace artifacts for ready preflight");
+    console.log(
+      "- write-runner JSON dry-run and simulate output block unknown readiness, keep actual execution disabled, and save local trace artifacts for ready preflight"
+    );
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
@@ -870,6 +900,22 @@ function assertWriteRunnerDryRunReport(report, intentId, expected) {
     expected.localTracePersistence,
     "write-runner JSON should include expected local trace persistence"
   );
+  assertObject(report.policy, "write-runner JSON should include execution policy");
+  if (expected.mode) {
+    assertEqual(report.policy.mode, expected.mode, "write-runner JSON should include expected policy mode");
+  }
+  assertEqual(report.policy.actualExecutionEnabled, false, "write-runner policy should keep actual execution disabled");
+  assertEqual(report.policy.executionEnabled, false, "write-runner policy should keep execution disabled");
+  assertEqual(report.policy.writeExecution, "disabled", "write-runner policy should keep write execution disabled");
+  assertNumber(report.simulationResultCount, "write-runner JSON should include simulation result count");
+  assertArray(report.simulationResults, "write-runner JSON should include simulation results");
+  if (typeof expected.simulationResultCount === "number") {
+    assertEqual(
+      report.simulationResultCount,
+      expected.simulationResultCount,
+      "write-runner JSON should include expected simulation result count"
+    );
+  }
   assertNumber(report.blockedReasonCount, "write-runner JSON should include blocked reason count");
   assertArray(report.blockedReasons, "write-runner JSON should include blocked reasons");
   assertEqual(report.executionEnabled, false, "write-runner JSON should keep execution disabled");

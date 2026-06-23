@@ -525,7 +525,20 @@ export interface WriteReadinessErrorReport {
   hasExecutionResults: false;
 }
 
-export type WriteRunnerDryRunStatus = "planned" | "blocked";
+export type WriteRunnerExecutionMode = "dry_run" | "simulate" | "execute_disabled";
+
+export type WriteRunnerDryRunStatus = "planned" | "blocked" | "simulated" | "disabled";
+
+export interface WriteRunnerExecutionPolicy {
+  mode: WriteRunnerExecutionMode;
+  requiredReadiness: "ready";
+  allowedActions: PullRequestCommandCandidate["action"][];
+  disallowedActions: PullRequestCommandCandidate["action"][];
+  blockers: string[];
+  actualExecutionEnabled: false;
+  executionEnabled: false;
+  writeExecution: "disabled";
+}
 
 export interface WriteRunnerDryRunPlanItem {
   action: PullRequestCommandCandidate["action"];
@@ -537,6 +550,15 @@ export interface WriteRunnerDryRunPlanItem {
   commitMessageCandidate?: string;
   prTitleCandidate?: string;
   prBodyCandidate?: string;
+}
+
+export interface WriteRunnerSimulationResult {
+  action: PullRequestCommandCandidate["action"];
+  status: "simulated" | "skipped";
+  summary: string;
+  executionEnabled: false;
+  writeExecution: "disabled";
+  hasExecutionResults: false;
 }
 
 export interface WriteRunnerDryRunReport {
@@ -553,6 +575,9 @@ export interface WriteRunnerDryRunReport {
   traceCount: number;
   traceIds: string[];
   localTracePersistence: "saved" | "skipped";
+  policy: WriteRunnerExecutionPolicy;
+  simulationResultCount: number;
+  simulationResults: WriteRunnerSimulationResult[];
   blockedReasonCount: number;
   blockedReasons: string[];
   createdAt: string;

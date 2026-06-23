@@ -228,17 +228,19 @@ JSON: supported with `--json`.
 
 Behavior: read-only. It reads `.orchestrator/execution-intents/` and `.orchestrator/execution-traces/`, derives an audit bundle, and calls the readiness helper. Plain output is for human terminal review; `--json` is the stable automation contract. Plain and JSON modes can read a safe preflight evidence file with `--preflight <path>`; loader/parser failures return short safe plain errors or JSON error envelopes instead of partial success. Missing intents, missing `--intent`, and invalid persisted audit files return JSON error envelopes with disabled execution markers in JSON mode and short safe plain errors otherwise. It does not write files, does not execute commands, does not query GitHub, and does not create branches, commits, pushes, PRs, merges, releases, approvals, tags, or GitHub releases.
 
-### `write-runner --intent intentId [--preflight path] --json`
+### `write-runner --intent intentId [--preflight path] [--simulate|--execute] --json`
 
-Purpose: Produce an audited write runner dry-run boundary report for one persisted execution intent.
+Purpose: Produce an audited write runner dry-run or simulated execution boundary report for one persisted execution intent.
 
 Example:
 
 ```bash
 task-loop-orchestrator write-runner --intent intent_xxx --preflight readiness-preflight.json --json
+task-loop-orchestrator write-runner --intent intent_xxx --preflight readiness-preflight.json --simulate --json
+task-loop-orchestrator write-runner --intent intent_xxx --preflight readiness-preflight.json --execute --json
 task-loop-orchestrator write-runner --intent intent_xxx --json
 ```
 
 JSON: supported with `--json`.
 
-Behavior: dry-run and JSON-only in the current implementation; `--json` is required. It reads `.orchestrator/execution-intents/` and `.orchestrator/execution-traces/`, optionally reads the same safe preflight evidence file accepted by `write-readiness`, and computes readiness before planning. When readiness is `ready`, it writes local dry-run trace records under `.orchestrator/execution-traces/` as audit artifacts and returns safe plan items without raw command arguments. When readiness is `blocked` or `unknown`, it returns a blocked dry-run report and does not save new traces. It does not execute commands, does not create branches, commits, pushes, GitHub PRs, merges, releases, approvals, tags, or GitHub releases, and does not expose raw stdout, stderr, exit codes, stacks, or executed command results.
+Behavior: dry-run/simulate and JSON-only in the current implementation; `--json` is required. It reads `.orchestrator/execution-intents/` and `.orchestrator/execution-traces/`, optionally reads the same safe preflight evidence file accepted by `write-readiness`, and computes readiness before planning. Default mode is `dry_run`. `--simulate` uses a deterministic safe executor boundary that returns symbolic simulation results only; it does not run shell, git, or GitHub commands. `--execute` returns an `execute_disabled` policy/report and still performs no actual write execution. When readiness is `ready`, dry-run or simulate mode writes local dry-run trace records under `.orchestrator/execution-traces/` as audit artifacts and returns safe plan items without raw command arguments. When readiness is `blocked` or `unknown`, it returns a blocked dry-run report and does not save new traces. It does not execute commands, does not create branches, commits, pushes, GitHub PRs, merges, releases, approvals, tags, or GitHub releases, and does not expose raw stdout, stderr, exit codes, stacks, or executed command results.

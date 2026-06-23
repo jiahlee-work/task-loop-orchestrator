@@ -131,7 +131,7 @@ function printUsage(): void {
   task-loop-orchestrator pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]
   task-loop-orchestrator execution-audit (--intent intentId|--all) [--json]
   task-loop-orchestrator write-readiness --intent intentId [--preflight path] [--json]
-  task-loop-orchestrator write-runner --intent intentId [--preflight path] --json
+  task-loop-orchestrator write-runner --intent intentId [--preflight path] [--simulate|--execute] --json
   task-loop-orchestrator checks [ref] [--json]`);
 }
 
@@ -925,7 +925,8 @@ async function writeRunnerCommand(args: ParsedArgs): Promise<void> {
   }
 
   const readiness = summarizeWriteExecutionReadiness(bundle, preflight);
-  const dryRunTraces = createWriteRunnerDryRunTraces(intent, readiness);
+  const mode = args.flags.execute === true ? "execute_disabled" : args.flags.simulate === true ? "simulate" : "dry_run";
+  const dryRunTraces = mode === "execute_disabled" ? [] : createWriteRunnerDryRunTraces(intent, readiness);
   for (const trace of dryRunTraces) {
     await store.saveExecutionTrace(trace);
   }
@@ -933,7 +934,8 @@ async function writeRunnerCommand(args: ParsedArgs): Promise<void> {
   printJson(
     "write-runner",
     summarizeWriteRunnerDryRun(intent, readiness, dryRunTraces, {
-      localTracePersistence: dryRunTraces.length > 0 ? "saved" : "skipped"
+      localTracePersistence: dryRunTraces.length > 0 ? "saved" : "skipped",
+      mode
     })
   );
 }
