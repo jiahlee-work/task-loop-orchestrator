@@ -40,7 +40,11 @@ import { LocalEvidenceReviewer } from "./reviewers.js";
 import { createMockRoleProviders, type RoleProviders } from "./roles.js";
 import { createRunCliReport } from "./run-report.js";
 import { FileRunStore } from "./store.js";
-import { summarizeWriteExecutionReadiness } from "./write-readiness.js";
+import {
+  formatWriteExecutionReadiness,
+  formatWriteReadinessError,
+  summarizeWriteExecutionReadiness
+} from "./write-readiness.js";
 
 interface ParsedArgs {
   command?: string;
@@ -117,7 +121,7 @@ function printUsage(): void {
   task-loop-orchestrator approve-pr [runId] --approved-by name [--reason text] [--json]
   task-loop-orchestrator pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]
   task-loop-orchestrator execution-audit (--intent intentId|--all) [--json]
-  task-loop-orchestrator write-readiness --intent intentId --json
+  task-loop-orchestrator write-readiness --intent intentId [--json]
   task-loop-orchestrator checks [ref] [--json]`);
 }
 
@@ -199,6 +203,19 @@ function printWriteReadinessError(
   } = {}
 ): void {
   printJson("write-readiness", createWriteReadinessErrorReport(errorCode, message, options));
+}
+
+function printPlainWriteReadinessError(
+  errorCode: WriteReadinessErrorCode,
+  message: string,
+  options: {
+    status?: WriteReadinessErrorReport["status"];
+    intentId?: string;
+    details?: WriteReadinessErrorReport["details"];
+  } = {}
+): void {
+  process.stdout.write(formatWriteReadinessError(createWriteReadinessErrorReport(errorCode, message, options)));
+  process.exitCode = 1;
 }
 
 function createWriteReadinessErrorReport(
@@ -699,13 +716,15 @@ async function executionAuditCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function writeReadinessCommand(args: ParsedArgs): Promise<void> {
-  if (args.flags.json !== true) {
-    throw new Error("write-readiness currently requires --json.");
-  }
+  const jsonOutput = args.flags.json === true;
 
   const intentId = stringFlag(args.flags, "intent");
   if (!intentId?.trim()) {
-    printWriteReadinessError("write_readiness_missing_intent", "write-readiness requires --intent <intentId>.");
+    printWriteReadinessErrorForMode(
+      jsonOutput,
+      "write_readiness_missing_intent",
+      "write-readiness requires --intent <intentId>."
+    );
     return;
   }
 
@@ -715,14 +734,14 @@ async function writeReadinessCommand(args: ParsedArgs): Promise<void> {
     intent = await store.loadExecutionIntent(intentId);
   } catch (error) {
     if (isMissingFileError(error)) {
-      printWriteReadinessError("write_readiness_intent_not_found", "Execution intent was not found.", {
+      printWriteReadinessErrorForMode(jsonOutput, "write_readiness_intent_not_found", "Execution intent was not found.", {
         status: "not_found",
         intentId
       });
       return;
     }
     if (isInvalidExecutionIntentFileError(error)) {
-      printWriteReadinessError("invalid_execution_intent_file", "Execution intent file is invalid.", {
+      printWriteReadinessErrorForMode(jsonOutput, "invalid_execution_intent_file", "Execution intent file is invalid.", {
         intentId,
         details: { kind: "execution_intent" }
       });
@@ -736,7 +755,7 @@ async function writeReadinessCommand(args: ParsedArgs): Promise<void> {
     traces = await store.listExecutionTraces();
   } catch (error) {
     if (isInvalidExecutionTraceFileError(error)) {
-      printWriteReadinessError("invalid_execution_trace_file", "Execution trace file is invalid.", {
+      printWriteReadinessErrorForMode(jsonOutput, "invalid_execution_trace_file", "Execution trace file is invalid.", {
         intentId,
         details: { kind: "execution_trace" }
       });
@@ -746,7 +765,29 @@ async function writeReadinessCommand(args: ParsedArgs): Promise<void> {
   }
 
   const bundle = summarizeExecutionAuditBundle(intent, traces);
-  printJson("write-readiness", summarizeWriteExecutionReadiness(bundle));
+  const report = summarizeWriteExecutionReadiness(bundle);
+  if (jsonOutput) {
+    printJson("write-readiness", report);
+  } else {
+    process.stdout.write(formatWriteExecutionReadiness(report));
+  }
+}
+
+function printWriteReadinessErrorForMode(
+  jsonOutput: boolean,
+  errorCode: WriteReadinessErrorCode,
+  message: string,
+  options: {
+    status?: WriteReadinessErrorReport["status"];
+    intentId?: string;
+    details?: WriteReadinessErrorReport["details"];
+  } = {}
+): void {
+  if (jsonOutput) {
+    printWriteReadinessError(errorCode, message, options);
+  } else {
+    printPlainWriteReadinessError(errorCode, message, options);
+  }
 }
 
 function printExecutionAuditErrorForMode(

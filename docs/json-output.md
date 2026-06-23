@@ -122,7 +122,7 @@ Each `writeReadinessBlocker` fixes `category`, `code`, `message`, and `source`. 
 
 The `writeReadinessResponsePayload` allows either a success `writeReadinessPayload` or a `writeReadinessErrorPayload`. Error payloads fix `status`, `errorCode`, `message`, `readiness`, `executionEnabled`, `writeExecution`, and `hasExecutionResults`, with optional `intentId` and `details`. Error payloads keep `readiness: null`, `executionEnabled: false`, `writeExecution: "disabled"`, and `hasExecutionResults: false`.
 
-The JSON path handles missing `--intent`, missing execution intents, invalid persisted execution intent files, and invalid persisted execution trace files with safe error envelopes. Plain output is still deferred. This command does not permit command execution, file writes, GitHub lookup, branch creation, commits, pushes, pull request creation, merges, releases, or tags.
+The JSON path handles missing `--intent`, missing execution intents, invalid persisted execution intent files, and invalid persisted execution trace files with safe error envelopes. Plain output is available for human terminal review, but automation should use `--json`. This command does not permit command execution, file writes, GitHub lookup, branch creation, commits, pushes, pull request creation, merges, releases, or tags.
 
 ## Doctor Schema
 

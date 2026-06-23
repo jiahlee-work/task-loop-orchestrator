@@ -4,7 +4,8 @@ import type {
   WriteExecutionReadinessCategory,
   WriteExecutionReadinessCheck,
   WriteExecutionReadinessPreflightInput,
-  WriteExecutionReadinessReport
+  WriteExecutionReadinessReport,
+  WriteReadinessErrorReport
 } from "./domain.js";
 
 type PreflightKey = keyof WriteExecutionReadinessPreflightInput;
@@ -151,6 +152,22 @@ export function formatWriteExecutionReadiness(report: WriteExecutionReadinessRep
     "Checks:",
     ...formatChecks(report),
     "Use --json for the stable automation contract."
+  ];
+
+  return `${lines.join("\n")}\n`;
+}
+
+export function formatWriteReadinessError(report: WriteReadinessErrorReport): string {
+  const lines = [
+    "Write readiness error:",
+    `Status: ${report.status}`,
+    `Code: ${report.errorCode}`,
+    `Message: ${report.message}`,
+    ...(report.intentId ? [`Intent: ${report.intentId}`] : []),
+    ...(report.details ? [`Details: ${report.details.kind}`] : []),
+    `Execution: ${report.executionEnabled ? "enabled" : "disabled"}`,
+    `Write execution: ${report.writeExecution}`,
+    "Re-run with --json for machine-readable error details."
   ];
 
   return `${lines.join("\n")}\n`;

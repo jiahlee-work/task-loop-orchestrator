@@ -138,6 +138,9 @@ async function main() {
       const readiness = await run(bin, ["write-readiness", "--intent", fixture.intentId, "--json"], { cwd: projectDir });
       assertWriteReadinessReport(parseJson(readiness), fixture.intentId);
 
+      const plainReadiness = await run(bin, ["write-readiness", "--intent", fixture.intentId], { cwd: projectDir });
+      assertWriteReadinessPlainOutput(plainReadiness.stdout, fixture.intentId);
+
       const plainAudit = await run(bin, ["execution-audit", "--intent", fixture.intentId], { cwd: projectDir });
       assertExecutionAuditPlainOutput(plainAudit.stdout, fixture.intentId);
 
@@ -171,6 +174,11 @@ async function main() {
       const missingReadinessIntent = await run(bin, ["write-readiness", "--json"], { cwd: projectDir });
       assertWriteReadinessErrorReport(parseJson(missingReadinessIntent), {
         status: "error",
+        errorCode: "write_readiness_missing_intent"
+      });
+      const plainMissingReadinessIntent = await runAllowFailure(bin, ["write-readiness"], { cwd: projectDir });
+      assertEqual(plainMissingReadinessIntent.exitCode, "1", "write-readiness plain missing selector should exit non-zero");
+      assertWriteReadinessPlainErrorOutput(plainMissingReadinessIntent.stdout, {
         errorCode: "write_readiness_missing_intent"
       });
 
@@ -284,7 +292,7 @@ async function main() {
     console.log(
       "- execution-audit JSON and plain output read fixtures, list bundles, and return safe errors through the installed binary"
     );
-    console.log("- write-readiness JSON reads audit fixtures and returns safe errors through the installed binary");
+    console.log("- write-readiness JSON and plain output read audit fixtures and return safe errors through the installed binary");
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
@@ -653,6 +661,36 @@ function assertWriteReadinessErrorReport(report, expected) {
   assertEqual(report.writeExecution, "disabled", "write-readiness error JSON should keep write execution disabled");
   assertEqual(report.hasExecutionResults, false, "write-readiness error JSON should not expose execution results");
   assertNoExecutionResultFields(report);
+}
+
+function assertWriteReadinessPlainOutput(output, intentId) {
+  assertIncludes(output, `Write execution readiness: ${intentId}`, "write-readiness plain output should include intent header");
+  assertIncludes(output, "Status: unknown", "write-readiness plain output should include readiness status");
+  assertIncludes(output, "Ready: unknown", "write-readiness plain output should include ready state");
+  assertIncludes(output, "Execution: disabled", "write-readiness plain output should keep execution disabled");
+  assertIncludes(output, "Write execution: disabled", "write-readiness plain output should keep write execution disabled");
+  assertIncludes(output, "Inputs: auditBundle=available, preflight=missing", "write-readiness plain output should show missing preflight");
+  assertIncludes(output, "Checks:", "write-readiness plain output should include checks");
+  assertIncludes(output, "Use --json for the stable automation contract.", "write-readiness plain output should recommend JSON for automation");
+  assertNoUnsafePlainExecutionOutput(output);
+}
+
+function assertWriteReadinessPlainErrorOutput(output, expected) {
+  assertIncludes(output, "Write readiness error:", "write-readiness plain error should include header");
+  assertIncludes(output, `Code: ${expected.errorCode}`, "write-readiness plain error should include error code");
+  assertIncludes(
+    output,
+    "Re-run with --json for machine-readable error details.",
+    "write-readiness plain error should recommend JSON for automation"
+  );
+  if (expected.forbiddenText) {
+    assertNotIncludes(
+      output,
+      expected.forbiddenText,
+      "write-readiness plain error should not expose raw persisted file content"
+    );
+  }
+  assertNoUnsafePlainExecutionOutput(output);
 }
 
 function assertExecutionAuditPlainOutput(output, intentId) {

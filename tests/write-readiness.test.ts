@@ -8,7 +8,11 @@ import {
   createExecutionIntent,
   summarizeExecutionAuditBundle
 } from "../src/execution-intents.js";
-import { formatWriteExecutionReadiness, summarizeWriteExecutionReadiness } from "../src/write-readiness.js";
+import {
+  formatWriteExecutionReadiness,
+  formatWriteReadinessError,
+  summarizeWriteExecutionReadiness
+} from "../src/write-readiness.js";
 
 const root = process.cwd();
 
@@ -380,6 +384,30 @@ describe("write execution readiness helper", () => {
     expect(output).toContain("Blockers:");
     expect(output).toContain("Checks:");
     expect(output.match(/  - none/g)).toHaveLength(2);
+    expectNoUnsafeReadinessOutput(output);
+  });
+
+  it("formats safe plain readiness errors", () => {
+    const output = formatWriteReadinessError({
+      status: "error",
+      errorCode: "invalid_execution_intent_file",
+      message: "Execution intent file is invalid.",
+      intentId: "intent_invalid",
+      details: { kind: "execution_intent" },
+      readiness: null,
+      executionEnabled: false,
+      writeExecution: "disabled",
+      hasExecutionResults: false
+    });
+
+    expect(output).toContain("Write readiness error:");
+    expect(output).toContain("Status: error");
+    expect(output).toContain("Code: invalid_execution_intent_file");
+    expect(output).toContain("Intent: intent_invalid");
+    expect(output).toContain("Details: execution_intent");
+    expect(output).toContain("Execution: disabled");
+    expect(output).toContain("Write execution: disabled");
+    expect(output).toContain("Re-run with --json for machine-readable error details.");
     expectNoUnsafeReadinessOutput(output);
   });
 });

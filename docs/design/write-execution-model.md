@@ -16,7 +16,7 @@ This document describes the model that should exist before `task-loop-orchestrat
 - The audit bundle JSON contract is covered by internal tests before any CLI read surface is enabled.
 - A read-only CLI surface for audit bundle lookup is enabled for `execution-audit --intent <intentId>` and `execution-audit --all` in both plain and JSON modes, as documented in [`execution-audit-cli.md`](execution-audit-cli.md).
 - A pure write execution readiness helper can summarize an audit bundle plus optional future preflight input without enabling CLI/schema output or command execution.
-- `write-readiness --intent <intentId> --json` is enabled as a read-only JSON readiness surface. Plain output and preflight inputs remain deferred.
+- `write-readiness --intent <intentId>` is enabled as a read-only plain readiness surface, and `--json` is enabled for automation. Preflight inputs remain deferred.
 - `pr-exec` is dry-run/preflight oriented.
 - `pr-exec --execute` requires approval data, checks stale approvals, and still returns a blocked report before branch, commit, push, or `gh pr create`.
 - `executedCommands` remains empty in the current implementation.
@@ -192,11 +192,11 @@ Tests should cover:
 - no execution result fields such as `executedCommands`, raw stdout, raw stderr, or exit code
 - plain formatter safety and command-specific JSON schema branch only when the CLI surface is explicitly enabled
 
-Package smoke covers the installed binary JSON readiness path only. Plain readiness output should not be added to smoke until the plain CLI path exists.
+Package smoke covers the installed binary JSON and plain readiness paths.
 
 ## Write Readiness CLI And Schema Surface Draft
 
-Status: JSON path enabled for `write-readiness --intent <intentId> --json`; plain output and preflight inputs are not enabled. This section documents the read-only surface only; it does not unlock write execution.
+Status: plain and JSON paths enabled for `write-readiness --intent <intentId> [--json]`; preflight inputs are not enabled. This section documents the read-only surface only; it does not unlock write execution.
 
 ### Recommended CLI Surface
 
@@ -213,7 +213,7 @@ The first CLI implementation is read-only and loads the existing audit bundle fo
 Initial options:
 
 - `--intent <intentId>`: required selector for the persisted execution intent to evaluate.
-- `--json`: required in the first CLI implementation; use it for automation, UI integrations, scripts, and schema validation.
+- `--json`: optional; use it for automation, UI integrations, scripts, and schema validation.
 
 Deferred options:
 
@@ -221,7 +221,7 @@ Deferred options:
 - preflight flags such as `--with-repo-state`, `--with-checks`, or `--preflight`: defer until each input source has a read-only policy and test fixture.
 - `--root <path>`: defer unless the broader CLI adopts root override semantics.
 
-Plain output is deferred. JSON is the stable automation contract. The enabled JSON mode must preserve the same read-only safety boundary: no file writes, no external command execution, no GitHub lookup, no branch creation, no commit, no push, no pull request creation or mutation, no merge, no release, no tag, no approval mutation, and no run status transition.
+Plain output uses `formatWriteExecutionReadiness(report)` for human terminal review. JSON is the stable automation contract. Both modes must preserve the same read-only safety boundary: no file writes, no external command execution, no GitHub lookup, no branch creation, no commit, no push, no pull request creation or mutation, no merge, no release, no tag, no approval mutation, and no run status transition.
 
 ### Future JSON Schema Surface
 
@@ -272,10 +272,9 @@ Error payloads should keep `executionEnabled: false`, `writeExecution: "disabled
 
 ### Rollout Plan For CLI And Schema
 
-1. Keep `write-readiness --intent <intentId> --json` under schema/docs/package smoke coverage.
-2. Add plain `write-readiness --intent <intentId>` output using `formatWriteExecutionReadiness(report)`.
-3. Add optional read-only preflight input support only after each preflight source has a fixture and no-write policy.
-4. Treat actual write execution unlock as a separate milestone that must first test approval freshness, clean worktree policy, diff verification, CI policy, and remote/ref policy.
+1. Keep `write-readiness --intent <intentId> [--json]` under schema/docs/package smoke coverage.
+2. Add optional read-only preflight input support only after each preflight source has a fixture and no-write policy.
+3. Treat actual write execution unlock as a separate milestone that must first test approval freshness, clean worktree policy, diff verification, CI policy, and remote/ref policy.
 
 ## Rollout Slices
 
@@ -292,7 +291,7 @@ Error payloads should keep `executionEnabled: false`, `writeExecution: "disabled
 11. Add a read-only write execution readiness plain formatter without command execution.
 12. Draft the readiness CLI/schema surface without enabling the production command or active schema branch.
 13. Enable the read-only `write-readiness --intent <intentId> --json` path and command-specific schema branch.
-14. Add plain readiness output only after JSON behavior is stable.
+14. Enable plain readiness output using the pure formatter after JSON behavior is stable.
 15. Add a single local-only command behind tests and explicit approval, such as branch creation in a temporary fixture repository.
 16. Add commit execution only after staged-file policy and diff verification exist.
 17. Add push only after remote/ref policy and CI handling are documented and tested.

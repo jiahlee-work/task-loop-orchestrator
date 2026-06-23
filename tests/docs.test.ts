@@ -355,10 +355,9 @@ describe("release readiness documentation", () => {
       "formatWriteExecutionReadiness(report)",
       "does not parse files, write files, spawn commands, or mutate domain state",
       "contract fixture coverage for blocked and ready JSON-like report shapes before CLI/schema enablement",
-      "Package smoke covers the installed binary JSON readiness path only",
-      "Plain readiness output should not be added to smoke until the plain CLI path exists",
+      "Package smoke covers the installed binary JSON and plain readiness paths",
       "Write Readiness CLI And Schema Surface Draft",
-      "Status: JSON path enabled for `write-readiness --intent <intentId> --json`; plain output and preflight inputs are not enabled.",
+      "Status: plain and JSON paths enabled for `write-readiness --intent <intentId> [--json]`; preflight inputs are not enabled.",
       "does not unlock write execution",
       "task-loop-orchestrator write-readiness --intent <intentId> [--json]",
       "This is preferred over `execution-audit --intent <intentId> --readiness [--json]`",
@@ -367,9 +366,9 @@ describe("release readiness documentation", () => {
       "does not run a preflight query yet",
       "approval freshness, CI, repository state, fingerprint, and remote/ref checks remain `unknown`",
       "`--intent <intentId>`: required selector",
-      "`--json`: required in the first CLI implementation",
+      "`--json`: optional",
       "`--all`: defer list output",
-      "Plain output is deferred",
+      "Plain output uses `formatWriteExecutionReadiness(report)`",
       "JSON is the stable automation contract",
       "no file writes",
       "no external command execution",
@@ -411,8 +410,7 @@ describe("release readiness documentation", () => {
       `errorCode: "write_readiness_preflight_unsupported"`,
       "`readiness: null`",
       "raw persisted file contents, stack traces, secrets, raw stdout, raw stderr, exit codes, raw command argv, or execution results",
-      "Keep `write-readiness --intent <intentId> --json` under schema/docs/package smoke coverage",
-      "Add plain `write-readiness --intent <intentId>` output",
+      "Keep `write-readiness --intent <intentId> [--json]` under schema/docs/package smoke coverage",
       "optional read-only preflight input support",
       "actual write execution unlock as a separate milestone",
       "Persist execution intents without running commands",
@@ -420,7 +418,7 @@ describe("release readiness documentation", () => {
       "Add a read-only write execution readiness plain formatter",
       "Draft the readiness CLI/schema surface without enabling the production command or active schema branch",
       "Enable the read-only `write-readiness --intent <intentId> --json` path and command-specific schema branch",
-      "Add plain readiness output only after JSON behavior is stable",
+      "Enable plain readiness output using the pure formatter after JSON behavior is stable",
       "npm publish",
       "git tag creation",
       "GitHub release creation",
@@ -750,7 +748,7 @@ describe("command reference documentation", () => {
       "approve-pr [runId] --approved-by name [--reason text] [--json]",
       "pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]",
       "execution-audit (--intent intentId|--all) [--json]",
-      "write-readiness --intent intentId --json",
+      "write-readiness --intent intentId [--json]",
       "checks [ref] [--json]"
     ]);
     expect(commandHeadings).toEqual([
@@ -840,12 +838,14 @@ describe("command reference documentation", () => {
       "short safe plain errors otherwise"
     ]);
     expectSectionContains(sections, "write-readiness", [
-      "read-only JSON output only",
+      "read-only",
       ".orchestrator/execution-intents/",
       ".orchestrator/execution-traces/",
       "without preflight input",
-      "Plain output is deferred",
+      "Plain output is for human terminal review",
+      "`--json` is the stable automation contract",
       "JSON error envelopes with disabled execution markers",
+      "short safe plain errors otherwise",
       "does not write files",
       "does not execute commands",
       "does not query GitHub"
@@ -936,6 +936,7 @@ describe("command reference documentation", () => {
       '"approve-pr", loopReport.runId, "--approved-by", "package-smoke", "--json"',
       '"execution-audit", "--intent", fixture.intentId, "--json"',
       '"write-readiness", "--intent", fixture.intentId, "--json"',
+      '"write-readiness", "--intent", fixture.intentId]',
       '"execution-audit", "--intent", fixture.intentId]',
       '"execution-audit", "--all"]',
       '"checks", "HEAD", "--json"'
