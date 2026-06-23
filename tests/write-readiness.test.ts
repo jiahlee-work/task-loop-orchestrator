@@ -272,7 +272,7 @@ describe("write execution readiness helper", () => {
     expectNoUnsafeReadinessOutput(json);
   });
 
-  it("matches the inactive write readiness schema payload definition", async () => {
+  it("matches the active write readiness schema payload definition", async () => {
     const approvedPlan = prPlan("checkpoint-old");
     const currentPlan = prPlan("checkpoint-current", ["Repository status is not clean."], "top-secret-readiness");
     const report = summarizeWriteExecutionReadiness(

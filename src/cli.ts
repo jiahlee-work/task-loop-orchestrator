@@ -10,7 +10,14 @@ import {
   normalizeReviewerMode
 } from "./config.js";
 import { createCliJsonReport, type CliJsonCommand } from "./cli-json.js";
-import type { ExecutionAuditErrorReport, ExecutorMode, GitHubProviderMode, PermissionMode, ReviewerMode } from "./domain.js";
+import type {
+  ExecutionAuditErrorReport,
+  ExecutorMode,
+  GitHubProviderMode,
+  PermissionMode,
+  ReviewerMode,
+  WriteReadinessErrorReport
+} from "./domain.js";
 import { runDoctor, type DoctorReport } from "./doctor.js";
 import { CodexCliExecutor } from "./executors.js";
 import {
@@ -33,6 +40,7 @@ import { LocalEvidenceReviewer } from "./reviewers.js";
 import { createMockRoleProviders, type RoleProviders } from "./roles.js";
 import { createRunCliReport } from "./run-report.js";
 import { FileRunStore } from "./store.js";
+import { summarizeWriteExecutionReadiness } from "./write-readiness.js";
 
 interface ParsedArgs {
   command?: string;
@@ -109,6 +117,7 @@ function printUsage(): void {
   task-loop-orchestrator approve-pr [runId] --approved-by name [--reason text] [--json]
   task-loop-orchestrator pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]
   task-loop-orchestrator execution-audit (--intent intentId|--all) [--json]
+  task-loop-orchestrator write-readiness --intent intentId --json
   task-loop-orchestrator checks [ref] [--json]`);
 }
 
@@ -176,6 +185,42 @@ function printPlainExecutionAuditError(
 ): void {
   process.stdout.write(formatExecutionAuditError(createExecutionAuditErrorReport(errorCode, message, options)));
   process.exitCode = 1;
+}
+
+type WriteReadinessErrorCode = WriteReadinessErrorReport["errorCode"];
+
+function printWriteReadinessError(
+  errorCode: WriteReadinessErrorCode,
+  message: string,
+  options: {
+    status?: WriteReadinessErrorReport["status"];
+    intentId?: string;
+    details?: WriteReadinessErrorReport["details"];
+  } = {}
+): void {
+  printJson("write-readiness", createWriteReadinessErrorReport(errorCode, message, options));
+}
+
+function createWriteReadinessErrorReport(
+  errorCode: WriteReadinessErrorCode,
+  message: string,
+  options: {
+    status?: WriteReadinessErrorReport["status"];
+    intentId?: string;
+    details?: WriteReadinessErrorReport["details"];
+  } = {}
+): WriteReadinessErrorReport {
+  return {
+    status: options.status ?? "error",
+    errorCode,
+    message,
+    ...(options.intentId ? { intentId: options.intentId } : {}),
+    ...(options.details ? { details: options.details } : {}),
+    readiness: null,
+    executionEnabled: false,
+    writeExecution: "disabled",
+    hasExecutionResults: false
+  };
 }
 
 async function doctorCommand(args: ParsedArgs): Promise<void> {
@@ -653,6 +698,57 @@ async function executionAuditCommand(args: ParsedArgs): Promise<void> {
   }
 }
 
+async function writeReadinessCommand(args: ParsedArgs): Promise<void> {
+  if (args.flags.json !== true) {
+    throw new Error("write-readiness currently requires --json.");
+  }
+
+  const intentId = stringFlag(args.flags, "intent");
+  if (!intentId?.trim()) {
+    printWriteReadinessError("write_readiness_missing_intent", "write-readiness requires --intent <intentId>.");
+    return;
+  }
+
+  const store = new FileRunStore(process.cwd());
+  let intent: Awaited<ReturnType<FileRunStore["loadExecutionIntent"]>>;
+  try {
+    intent = await store.loadExecutionIntent(intentId);
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      printWriteReadinessError("write_readiness_intent_not_found", "Execution intent was not found.", {
+        status: "not_found",
+        intentId
+      });
+      return;
+    }
+    if (isInvalidExecutionIntentFileError(error)) {
+      printWriteReadinessError("invalid_execution_intent_file", "Execution intent file is invalid.", {
+        intentId,
+        details: { kind: "execution_intent" }
+      });
+      return;
+    }
+    throw error;
+  }
+
+  let traces: Awaited<ReturnType<FileRunStore["listExecutionTraces"]>>;
+  try {
+    traces = await store.listExecutionTraces();
+  } catch (error) {
+    if (isInvalidExecutionTraceFileError(error)) {
+      printWriteReadinessError("invalid_execution_trace_file", "Execution trace file is invalid.", {
+        intentId,
+        details: { kind: "execution_trace" }
+      });
+      return;
+    }
+    throw error;
+  }
+
+  const bundle = summarizeExecutionAuditBundle(intent, traces);
+  printJson("write-readiness", summarizeWriteExecutionReadiness(bundle));
+}
+
 function printExecutionAuditErrorForMode(
   jsonOutput: boolean,
   errorCode:
@@ -762,6 +858,11 @@ async function main(): Promise<void> {
 
   if (args.command === "execution-audit") {
     await executionAuditCommand(args);
+    return;
+  }
+
+  if (args.command === "write-readiness") {
+    await writeReadinessCommand(args);
     return;
   }
 

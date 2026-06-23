@@ -502,6 +502,25 @@ export interface WriteExecutionReadinessReport {
   hasExecutionResults: false;
 }
 
+export interface WriteReadinessErrorReport {
+  status: "not_found" | "error";
+  errorCode:
+    | "write_readiness_missing_intent"
+    | "write_readiness_intent_not_found"
+    | "invalid_execution_intent_file"
+    | "invalid_execution_trace_file"
+    | "write_readiness_preflight_unsupported";
+  message: string;
+  intentId?: string;
+  readiness: null;
+  details?: {
+    kind: "execution_intent" | "execution_trace" | "preflight";
+  };
+  executionEnabled: false;
+  writeExecution: "disabled";
+  hasExecutionResults: false;
+}
+
 export type ProposedSubtask = Omit<Subtask, "status" | "createdAt" | "updatedAt"> &
   Partial<Pick<Subtask, "createdAt" | "updatedAt">>;
 

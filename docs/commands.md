@@ -210,3 +210,17 @@ task-loop-orchestrator execution-audit --all --json
 JSON: supported with `--json`.
 
 Behavior: read-only. It reads `.orchestrator/execution-intents/` and `.orchestrator/execution-traces/` through the local file store and returns a human-readable audit summary by default, or the audit bundle/list wrapper described in [json-output.md](json-output.md) when `--json` is used. Missing intents, missing `--intent`, and invalid persisted audit files return JSON error envelopes with disabled execution markers in JSON mode and short safe plain errors otherwise. It does not write files, does not execute commands, and does not create branches, commits, pushes, PRs, merges, releases, approvals, tags, or GitHub releases.
+
+### `write-readiness --intent intentId --json`
+
+Purpose: Summarize whether one persisted execution intent is ready, blocked, or unknown using the read-only execution audit bundle.
+
+Example:
+
+```bash
+task-loop-orchestrator write-readiness --intent intent_xxx --json
+```
+
+JSON: supported with `--json`.
+
+Behavior: read-only JSON output only. It reads `.orchestrator/execution-intents/` and `.orchestrator/execution-traces/`, derives an audit bundle, and calls the readiness helper without preflight input. Plain output is deferred, so `write-readiness --intent intent_xxx` without `--json` is not the supported surface yet. Missing intents, missing `--intent`, and invalid persisted audit files return JSON error envelopes with disabled execution markers. It does not write files, does not execute commands, does not query GitHub, and does not create branches, commits, pushes, PRs, merges, releases, approvals, tags, or GitHub releases.

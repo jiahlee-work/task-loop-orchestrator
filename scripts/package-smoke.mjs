@@ -41,6 +41,7 @@ async function main() {
       assertIncludes(help.stdout, "task-loop-orchestrator init", "help output should include init usage");
       assertIncludes(help.stdout, "task-loop-orchestrator doctor", "help output should include doctor usage");
       assertIncludes(help.stdout, "task-loop-orchestrator execution-audit", "help output should include execution-audit usage");
+      assertIncludes(help.stdout, "task-loop-orchestrator write-readiness", "help output should include write-readiness usage");
       assertIncludes(help.stdout, "task-loop-orchestrator --version", "help output should include version usage");
     });
 
@@ -134,6 +135,9 @@ async function main() {
       const audit = await run(bin, ["execution-audit", "--intent", fixture.intentId, "--json"], { cwd: projectDir });
       assertExecutionAuditReport(parseJson(audit), fixture.intentId);
 
+      const readiness = await run(bin, ["write-readiness", "--intent", fixture.intentId, "--json"], { cwd: projectDir });
+      assertWriteReadinessReport(parseJson(readiness), fixture.intentId);
+
       const plainAudit = await run(bin, ["execution-audit", "--intent", fixture.intentId], { cwd: projectDir });
       assertExecutionAuditPlainOutput(plainAudit.stdout, fixture.intentId);
 
@@ -164,6 +168,21 @@ async function main() {
         errorCode: "execution_audit_missing_intent"
       });
 
+      const missingReadinessIntent = await run(bin, ["write-readiness", "--json"], { cwd: projectDir });
+      assertWriteReadinessErrorReport(parseJson(missingReadinessIntent), {
+        status: "error",
+        errorCode: "write_readiness_missing_intent"
+      });
+
+      const missingReadiness = await run(bin, ["write-readiness", "--intent", "intent_missing", "--json"], {
+        cwd: projectDir
+      });
+      assertWriteReadinessErrorReport(parseJson(missingReadiness), {
+        status: "not_found",
+        errorCode: "write_readiness_intent_not_found",
+        intentId: "intent_missing"
+      });
+
       const plainMissingIntent = await runAllowFailure(bin, ["execution-audit"], { cwd: projectDir });
       assertEqual(plainMissingIntent.exitCode, "1", "execution-audit plain missing selector should exit non-zero");
       assertExecutionAuditPlainErrorOutput(plainMissingIntent.stdout, {
@@ -175,6 +194,18 @@ async function main() {
         cwd: projectDir
       });
       assertExecutionAuditErrorReport(parseJson(invalidIntentResult), {
+        status: "error",
+        errorCode: "invalid_execution_intent_file",
+        intentId: invalidIntent.intentId,
+        detailsKind: "execution_intent",
+        forbiddenText: invalidIntent.secret
+      });
+      const invalidReadinessIntentResult = await run(
+        bin,
+        ["write-readiness", "--intent", invalidIntent.intentId, "--json"],
+        { cwd: projectDir }
+      );
+      assertWriteReadinessErrorReport(parseJson(invalidReadinessIntentResult), {
         status: "error",
         errorCode: "invalid_execution_intent_file",
         intentId: invalidIntent.intentId,
@@ -205,6 +236,16 @@ async function main() {
         cwd: projectDir
       });
       assertExecutionAuditErrorReport(parseJson(invalidTraceResult), {
+        status: "error",
+        errorCode: "invalid_execution_trace_file",
+        intentId: fixture.intentId,
+        detailsKind: "execution_trace",
+        forbiddenText: invalidTrace.secret
+      });
+      const invalidReadinessTraceResult = await run(bin, ["write-readiness", "--intent", fixture.intentId, "--json"], {
+        cwd: projectDir
+      });
+      assertWriteReadinessErrorReport(parseJson(invalidReadinessTraceResult), {
         status: "error",
         errorCode: "invalid_execution_trace_file",
         intentId: fixture.intentId,
@@ -243,6 +284,7 @@ async function main() {
     console.log(
       "- execution-audit JSON and plain output read fixtures, list bundles, and return safe errors through the installed binary"
     );
+    console.log("- write-readiness JSON reads audit fixtures and returns safe errors through the installed binary");
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
@@ -570,6 +612,46 @@ function assertExecutionAuditErrorReport(report, expected) {
   assertEqual(report.executionEnabled, false, "execution-audit error JSON should keep execution disabled");
   assertEqual(report.writeExecution, "disabled", "execution-audit error JSON should keep write execution disabled");
   assertEqual(report.hasExecutionResults, false, "execution-audit error JSON should not expose execution results");
+  assertNoExecutionResultFields(report);
+}
+
+function assertWriteReadinessReport(report, intentId) {
+  assertEnvelope(report, "write-readiness");
+  assertEqual(report.intentId, intentId, "write-readiness JSON should preserve intent id");
+  assertString(report.runId, "write-readiness JSON should include run id");
+  assertString(report.planId, "write-readiness JSON should include plan id");
+  assertString(report.approvalId, "write-readiness JSON should include approval id");
+  assertEqual(report.readinessStatus, "unknown", "write-readiness JSON should be unknown without preflight input");
+  assertEqual(report.ready, false, "write-readiness JSON should not be ready without preflight input");
+  assertArray(report.blockers, "write-readiness JSON should include blockers");
+  assertArray(report.checks, "write-readiness JSON should include checks");
+  assertObject(report.inputs, "write-readiness JSON should include inputs");
+  assertEqual(report.inputs.auditBundle, "available", "write-readiness JSON should include audit bundle input status");
+  assertEqual(report.inputs.preflight, "missing", "write-readiness JSON should show missing preflight input");
+  assertEqual(report.executionEnabled, false, "write-readiness JSON should keep execution disabled");
+  assertEqual(report.writeExecution, "disabled", "write-readiness JSON should keep write execution disabled");
+  assertEqual(report.hasExecutionResults, false, "write-readiness JSON should not expose execution results");
+  assertNoExecutionResultFields(report);
+}
+
+function assertWriteReadinessErrorReport(report, expected) {
+  assertEnvelope(report, "write-readiness");
+  assertEqual(report.status, expected.status, "write-readiness error JSON should include expected status");
+  assertEqual(report.errorCode, expected.errorCode, "write-readiness error JSON should include expected errorCode");
+  assertString(report.message, "write-readiness error JSON should include message");
+  if (expected.intentId) {
+    assertEqual(report.intentId, expected.intentId, "write-readiness error JSON should preserve intent id");
+  }
+  if (expected.detailsKind) {
+    assertEqual(report.details?.kind, expected.detailsKind, "write-readiness error JSON should include safe details kind");
+  }
+  if (expected.forbiddenText) {
+    assertNotIncludes(JSON.stringify(report), expected.forbiddenText, "write-readiness error JSON should not expose raw persisted file content");
+  }
+  assertEqual(report.readiness, null, "write-readiness error JSON should set readiness to null");
+  assertEqual(report.executionEnabled, false, "write-readiness error JSON should keep execution disabled");
+  assertEqual(report.writeExecution, "disabled", "write-readiness error JSON should keep write execution disabled");
+  assertEqual(report.hasExecutionResults, false, "write-readiness error JSON should not expose execution results");
   assertNoExecutionResultFields(report);
 }
 

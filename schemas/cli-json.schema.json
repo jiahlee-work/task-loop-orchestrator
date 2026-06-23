@@ -23,7 +23,8 @@
         "pr-plan",
         "pr-exec",
         "approve-pr",
-        "execution-audit"
+        "execution-audit",
+        "write-readiness"
       ],
       "description": "CLI command that produced the response."
     },
@@ -967,6 +968,30 @@
       },
       "additionalProperties": true
     },
+    "writeReadinessResponsePayload": {
+      "type": "object",
+      "required": ["executionEnabled", "writeExecution", "hasExecutionResults"],
+      "properties": {
+        "executionEnabled": {
+          "const": false
+        },
+        "writeExecution": {
+          "const": "disabled"
+        },
+        "hasExecutionResults": {
+          "const": false
+        }
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/writeReadinessPayload"
+        },
+        {
+          "$ref": "#/$defs/writeReadinessErrorPayload"
+        }
+      ],
+      "additionalProperties": true
+    },
     "ownerDecisionItem": {
       "type": "object",
       "required": ["source", "reason"],
@@ -1391,6 +1416,19 @@
       },
       "then": {
         "$ref": "#/$defs/executionAuditResponsePayload"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "write-readiness"
+          }
+        },
+        "required": ["command"]
+      },
+      "then": {
+        "$ref": "#/$defs/writeReadinessResponsePayload"
       }
     },
     {

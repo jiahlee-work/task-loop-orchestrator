@@ -9,6 +9,7 @@ import { createIntegrationCheckpoint } from "../../src/integration.js";
 import { createPullRequestPlan } from "../../src/pr-plan.js";
 import { MockRepoProvider } from "../../src/providers.js";
 import { createRunCliReport } from "../../src/run-report.js";
+import { summarizeWriteExecutionReadiness } from "../../src/write-readiness.js";
 
 export interface BuildCliJsonSamplesInput {
   initRoot: string;
@@ -53,7 +54,8 @@ export async function buildCliJsonSamples(input: BuildCliJsonSamplesInput): Prom
     toJsonObject(createCliJsonReport("pr-plan", prPlan, createdAt)),
     toJsonObject(createCliJsonReport("pr-exec", prExec, createdAt)),
     toJsonObject(createCliJsonReport("approve-pr", approval, createdAt)),
-    toJsonObject(createCliJsonReport("execution-audit", executionAuditBundle, createdAt))
+    toJsonObject(createCliJsonReport("execution-audit", executionAuditBundle, createdAt)),
+    toJsonObject(createCliJsonReport("write-readiness", summarizeWriteExecutionReadiness(executionAuditBundle), createdAt))
   ];
 }
 

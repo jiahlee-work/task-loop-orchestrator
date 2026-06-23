@@ -355,22 +355,21 @@ describe("release readiness documentation", () => {
       "formatWriteExecutionReadiness(report)",
       "does not parse files, write files, spawn commands, or mutate domain state",
       "contract fixture coverage for blocked and ready JSON-like report shapes before CLI/schema enablement",
-      "The schema artifact can define inactive readiness `$defs`",
-      "the active command enum and command-specific branch should not change until the CLI surface is implemented",
+      "Package smoke covers the installed binary JSON readiness path only",
+      "Plain readiness output should not be added to smoke until the plain CLI path exists",
       "Write Readiness CLI And Schema Surface Draft",
-      "Status: schema payload definitions prepared; CLI command and active schema branch not enabled.",
-      "does not add a production CLI command",
-      "does not add `write-readiness` to the active command enum",
+      "Status: JSON path enabled for `write-readiness --intent <intentId> --json`; plain output and preflight inputs are not enabled.",
+      "does not unlock write execution",
       "task-loop-orchestrator write-readiness --intent <intentId> [--json]",
       "This is preferred over `execution-audit --intent <intentId> --readiness [--json]`",
       "readiness answers a distinct question from audit review",
       "reuses the audit bundle internally",
-      "must not run a preflight query yet",
+      "does not run a preflight query yet",
       "approval freshness, CI, repository state, fingerprint, and remote/ref checks remain `unknown`",
       "`--intent <intentId>`: required selector",
-      "`--json`: optional",
+      "`--json`: required in the first CLI implementation",
       "`--all`: defer list output",
-      "Plain output is for a human terminal summary",
+      "Plain output is deferred",
       "JSON is the stable automation contract",
       "no file writes",
       "no external command execution",
@@ -379,11 +378,12 @@ describe("release readiness documentation", () => {
       "no commit",
       "no push",
       "no pull request creation or mutation",
-      "The schema artifact now includes inactive `$defs` for the readiness payload contract",
-      "the active command enum and command-specific branch remain unchanged",
-      "add `\"write-readiness\"` to `CliJsonCommand`",
+      "The schema artifact includes `$defs` for the readiness payload contract",
+      "the active command enum and command-specific branch now include `\"write-readiness\"`",
+      "active command enum and command-specific branch now include `\"write-readiness\"`",
       "branch condition: `command: \"write-readiness\"`",
-      "branch payload reference: `#/$defs/writeReadinessPayload`",
+      "branch payload reference: `#/$defs/writeReadinessResponsePayload`",
+      "`writeReadinessResponsePayload`",
       "`writeReadinessPayload`",
       "`writeReadinessBlocker`",
       "`writeReadinessCheck`",
@@ -401,8 +401,8 @@ describe("release readiness documentation", () => {
       "`writeReadinessBlocker` should require `category`, `code`, `message`, and `source`",
       "`writeReadinessCheck` should require `category`, `status`, `code`, `message`, and `source`",
       "`writeReadinessInputs` should require `auditBundle` and `preflight`",
-      "Schema tests compare these inactive payload definitions against the contract fixture tests in `tests/write-readiness.test.ts`",
-      "Before enabling the command, a later milestone should add command enum coverage and the command-specific branch",
+      "Schema tests compare these payload definitions against the contract fixture tests in `tests/write-readiness.test.ts`",
+      "The `writeReadinessResponsePayload` allows success `writeReadinessPayload` or `writeReadinessErrorPayload`",
       "`additionalProperties: true`",
       `errorCode: "write_readiness_missing_intent"`,
       `errorCode: "write_readiness_intent_not_found"`,
@@ -411,7 +411,7 @@ describe("release readiness documentation", () => {
       `errorCode: "write_readiness_preflight_unsupported"`,
       "`readiness: null`",
       "raw persisted file contents, stack traces, secrets, raw stdout, raw stderr, exit codes, raw command argv, or execution results",
-      "Add the read-only `write-readiness --intent <intentId> --json` path",
+      "Keep `write-readiness --intent <intentId> --json` under schema/docs/package smoke coverage",
       "Add plain `write-readiness --intent <intentId>` output",
       "optional read-only preflight input support",
       "actual write execution unlock as a separate milestone",
@@ -419,7 +419,8 @@ describe("release readiness documentation", () => {
       "Add a read-only write execution readiness report helper",
       "Add a read-only write execution readiness plain formatter",
       "Draft the readiness CLI/schema surface without enabling the production command or active schema branch",
-      "Add a readiness CLI/schema surface only after the helper, formatter, and schema contract are tested",
+      "Enable the read-only `write-readiness --intent <intentId> --json` path and command-specific schema branch",
+      "Add plain readiness output only after JSON behavior is stable",
       "npm publish",
       "git tag creation",
       "GitHub release creation",
@@ -657,7 +658,8 @@ describe("command json documentation boundaries", () => {
       "pr-plan",
       "pr-exec",
       "approve-pr",
-      "execution-audit"
+      "execution-audit",
+      "write-readiness"
     ]);
   });
 
@@ -690,7 +692,8 @@ describe("command json documentation boundaries", () => {
       ["pr-plan", "#/$defs/prPlanPayload"],
       ["pr-exec", "#/$defs/prExecPayload"],
       ["approve-pr", "#/$defs/approvePrPayload"],
-      ["execution-audit", "#/$defs/executionAuditResponsePayload"]
+      ["execution-audit", "#/$defs/executionAuditResponsePayload"],
+      ["write-readiness", "#/$defs/writeReadinessResponsePayload"]
     ]);
 
     expect([...branchRefs.keys()].sort()).toEqual([...cliJsonCommands].sort());
@@ -747,6 +750,7 @@ describe("command reference documentation", () => {
       "approve-pr [runId] --approved-by name [--reason text] [--json]",
       "pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]",
       "execution-audit (--intent intentId|--all) [--json]",
+      "write-readiness --intent intentId --json",
       "checks [ref] [--json]"
     ]);
     expect(commandHeadings).toEqual([
@@ -762,7 +766,8 @@ describe("command reference documentation", () => {
       "pr-plan",
       "approve-pr",
       "pr-exec",
-      "execution-audit"
+      "execution-audit",
+      "write-readiness"
     ]);
 
     const documentedCommands = new Set(commandHeadings);
@@ -834,6 +839,17 @@ describe("command reference documentation", () => {
       "human-readable audit summary by default",
       "short safe plain errors otherwise"
     ]);
+    expectSectionContains(sections, "write-readiness", [
+      "read-only JSON output only",
+      ".orchestrator/execution-intents/",
+      ".orchestrator/execution-traces/",
+      "without preflight input",
+      "Plain output is deferred",
+      "JSON error envelopes with disabled execution markers",
+      "does not write files",
+      "does not execute commands",
+      "does not query GitHub"
+    ]);
 
     expectSectionContains(sections, "init", ["writes local bootstrap files only", "orchestrator.config.json", ".gitignore"]);
     expectSectionContains(sections, "run", ["writes run state", ".orchestrator/runs/", "do not call external write-side systems"]);
@@ -903,6 +919,7 @@ describe("command reference documentation", () => {
       "pr-exec",
       "approve-pr",
       "execution-audit",
+      "write-readiness",
       "checks"
     ]) {
       expect(examples.has(command), `Missing command reference example for ${command}`).toBe(true);
@@ -918,6 +935,7 @@ describe("command reference documentation", () => {
       '"pr-exec", loopReport.runId, "--json"',
       '"approve-pr", loopReport.runId, "--approved-by", "package-smoke", "--json"',
       '"execution-audit", "--intent", fixture.intentId, "--json"',
+      '"write-readiness", "--intent", fixture.intentId, "--json"',
       '"execution-audit", "--intent", fixture.intentId]',
       '"execution-audit", "--all"]',
       '"checks", "HEAD", "--json"'

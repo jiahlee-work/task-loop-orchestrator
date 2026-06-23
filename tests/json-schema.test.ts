@@ -382,16 +382,17 @@ describe("CLI JSON schema artifact", () => {
     expect(executionAuditTraceReport?.properties?.hasExecutionResults).toEqual({ const: false });
   });
 
-  it("defines inactive write readiness payload schemas without enabling the command branch", async () => {
+  it("defines write readiness payload schemas and response branch contract", async () => {
     const schema = await readSchema();
     const writeReadinessPayload = schema.$defs?.writeReadinessPayload;
     const writeReadinessBlocker = schema.$defs?.writeReadinessBlocker;
     const writeReadinessCheck = schema.$defs?.writeReadinessCheck;
     const writeReadinessInputs = schema.$defs?.writeReadinessInputs;
     const writeReadinessErrorPayload = schema.$defs?.writeReadinessErrorPayload;
+    const writeReadinessResponsePayload = schema.$defs?.writeReadinessResponsePayload;
 
-    expect(schema.properties?.command?.enum).not.toContain("write-readiness");
-    expect(branchRefsForCommand(schema, "write-readiness")).toEqual([]);
+    expect(schema.properties?.command?.enum).toContain("write-readiness");
+    expect(branchRefsForCommand(schema, "write-readiness")).toEqual(["#/$defs/writeReadinessResponsePayload"]);
     expect(schema.$defs?.writeReadinessStatus).toEqual({
       type: "string",
       enum: ["ready", "blocked", "unknown"]
@@ -487,6 +488,14 @@ describe("CLI JSON schema artifact", () => {
     expect(writeReadinessErrorPayload?.properties?.writeExecution).toEqual({ const: "disabled" });
     expect(writeReadinessErrorPayload?.properties?.hasExecutionResults).toEqual({ const: false });
     expect(writeReadinessErrorPayload?.additionalProperties).toBe(true);
+    expect(writeReadinessResponsePayload?.required).toEqual(
+      expect.arrayContaining(["executionEnabled", "writeExecution", "hasExecutionResults"])
+    );
+    expect(writeReadinessResponsePayload?.oneOf).toEqual([
+      { $ref: "#/$defs/writeReadinessPayload" },
+      { $ref: "#/$defs/writeReadinessErrorPayload" }
+    ]);
+    expect(writeReadinessResponsePayload?.additionalProperties).toBe(true);
   });
 
   it("defines a focused doctor payload schema", async () => {
@@ -569,7 +578,8 @@ describe("CLI JSON schema artifact", () => {
       "pr-plan": "#/$defs/prPlanPayload",
       "pr-exec": "#/$defs/prExecPayload",
       "approve-pr": "#/$defs/approvePrPayload",
-      "execution-audit": "#/$defs/executionAuditResponsePayload"
+      "execution-audit": "#/$defs/executionAuditResponsePayload",
+      "write-readiness": "#/$defs/writeReadinessResponsePayload"
     };
 
     for (const command of cliJsonCommands) {
@@ -773,6 +783,28 @@ describe("CLI JSON schema artifact", () => {
     );
   });
 
+  it("applies the write readiness branch to all write readiness responses", async () => {
+    const schema = await readSchema();
+
+    expect(schema.allOf).toEqual(
+      expect.arrayContaining([
+        {
+          if: {
+            properties: {
+              command: {
+                const: "write-readiness"
+              }
+            },
+            required: ["command"]
+          },
+          then: {
+            $ref: "#/$defs/writeReadinessResponsePayload"
+          }
+        }
+      ])
+    );
+  });
+
   it("applies the doctor branch to doctor responses", async () => {
     const schema = await readSchema();
 
@@ -831,7 +863,7 @@ describe("CLI JSON schema artifact", () => {
     expect(docs).toContain("PR Execution Schema");
     expect(docs).toContain("PR Approval Schema");
     expect(docs).toContain("Execution Audit Schema");
-    expect(docs).toContain("Future Write Readiness Schema Definitions");
+    expect(docs).toContain("Write Readiness Schema");
     expect(docs).toContain("Doctor Schema");
     expect(docs).toContain("Init Schema");
     expect(docs).toContain("Coverage and Exceptions");
@@ -856,8 +888,9 @@ describe("CLI JSON schema artifact", () => {
       { heading: "Execution Audit Schema", required: requiredFields(schema.$defs?.executionAuditListPayload) },
       { heading: "Execution Audit Schema", required: requiredFields(schema.$defs?.executionAuditErrorPayload) },
       { heading: "Execution Audit Schema", required: requiredFields(schema.$defs?.executionAuditResponsePayload) },
-      { heading: "Future Write Readiness Schema Definitions", required: requiredFields(schema.$defs?.writeReadinessPayload) },
-      { heading: "Future Write Readiness Schema Definitions", required: requiredFields(schema.$defs?.writeReadinessErrorPayload) }
+      { heading: "Write Readiness Schema", required: requiredFields(schema.$defs?.writeReadinessPayload) },
+      { heading: "Write Readiness Schema", required: requiredFields(schema.$defs?.writeReadinessErrorPayload) },
+      { heading: "Write Readiness Schema", required: requiredFields(schema.$defs?.writeReadinessResponsePayload) }
     ];
 
     for (const section of sections) {
@@ -891,7 +924,7 @@ describe("CLI JSON schema artifact", () => {
         ]
       },
       {
-        heading: "Future Write Readiness Schema Definitions",
+        heading: "Write Readiness Schema",
         required: [
           ...requiredFields(schema.$defs?.writeReadinessBlocker),
           ...requiredFields(schema.$defs?.writeReadinessCheck),
@@ -1066,6 +1099,12 @@ async function readSchema(): Promise<{
     writeReadinessErrorPayload?: {
       required?: string[];
       properties?: Record<string, unknown>;
+      additionalProperties?: boolean;
+    };
+    writeReadinessResponsePayload?: {
+      required?: string[];
+      properties?: Record<string, unknown>;
+      oneOf?: unknown[];
       additionalProperties?: boolean;
     };
     approvalPlanSnapshot?: {
@@ -1251,6 +1290,12 @@ async function readSchema(): Promise<{
       writeReadinessErrorPayload?: {
         required?: string[];
         properties?: Record<string, unknown>;
+        additionalProperties?: boolean;
+      };
+      writeReadinessResponsePayload?: {
+        required?: string[];
+        properties?: Record<string, unknown>;
+        oneOf?: unknown[];
         additionalProperties?: boolean;
       };
       approvalPlanSnapshot?: {
