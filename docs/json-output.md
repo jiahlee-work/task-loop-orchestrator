@@ -105,6 +105,8 @@ Each `traces[]` item fixes `id`, `intentId`, `runId`, `planId`, `approvalId`, `a
 
 Execution audit output is read-only and intentionally excludes `executedCommands`, raw `stdout`, raw `stderr`, and `exitCode`. `--all` and plain output are deferred.
 
+JSON error envelopes for missing intents or invalid persisted files are still deferred and documented as a design draft in [`design/execution-audit-cli.md`](design/execution-audit-cli.md). They are not part of the current schema branch yet.
+
 ## Doctor Schema
 
 `doctor --json` has a command-specific schema branch for installation and project readiness diagnostics. Consumers can rely on top-level `status`, `rootDir`, `githubMode`, and `checks`.
