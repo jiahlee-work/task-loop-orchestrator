@@ -10,26 +10,15 @@ describe("quickstart documentation", () => {
     const quickstart = await readQuickstart();
 
     expectContainsAll(quickstart, [
-      "Node.js 24 or newer",
+      "Node.js 24 이상",
       "pnpm",
       "corepack enable",
       "pnpm install --frozen-lockfile",
       "pnpm run build",
       "node dist/cli.js --help",
-      "node dist/cli.js --version"
-    ]);
-  });
-
-  it("documents local tarball install entry points", async () => {
-    const quickstart = await readQuickstart();
-
-    expectContainsAll(quickstart, [
-      "npm pack --pack-destination",
-      "npm install /tmp/task-loop-orchestrator-0.1.0.tgz",
-      "npx task-loop-orchestrator --help",
-      "npx task-loop-orchestrator --version",
-      '"$tmpdir/node_modules/.bin/task-loop-orchestrator" --help',
-      '"$tmpdir/node_modules/.bin/task-loop-orchestrator" --version'
+      "node dist/cli.js --version",
+      'export TLO="/absolute/path/to/task-loop-orchestrator/dist/cli.js"',
+      'node "$TLO" doctor --json'
     ]);
   });
 
@@ -37,53 +26,23 @@ describe("quickstart documentation", () => {
     const quickstart = await readQuickstart();
 
     expectContainsAll(quickstart, [
-      "npx task-loop-orchestrator doctor --json",
-      "npx task-loop-orchestrator init --json",
-      'npx task-loop-orchestrator run "Quickstart smoke" --max-iterations 1 --json',
-      "npx task-loop-orchestrator status --json",
-      "npx task-loop-orchestrator resume <runId> --max-iterations 1 --json",
-      "Use the `runId` returned by `run --json` for `resume <runId>`",
-      "status <runId> --json",
+      'node "$TLO" init',
+      'node "$TLO" doctor --json',
+      'node "$TLO" run "Quickstart smoke" --max-iterations 1 --json',
+      'node "$TLO" status "$run_id" --json',
+      'node "$TLO" resume "$run_id" --max-iterations 1 --json',
+      "`run --json`이 반환한 `runId`",
+      'node "$TLO" status "$run_id" --json',
       "run_json=",
       "run_id=",
       "node -e",
-      'npx task-loop-orchestrator status "$run_id" --json',
-      'npx task-loop-orchestrator resume "$run_id" --max-iterations 1 --json',
-      "It is safe to rerun",
-      "Before `init`, config and gitignore checks normally warn",
-      "suggest `task-loop-orchestrator init`",
-      "npx task-loop-orchestrator checks HEAD --json",
-      "npx task-loop-orchestrator checkpoint --json",
-      "npx task-loop-orchestrator checkpoint --github gh-cli --json",
-      "npx task-loop-orchestrator execution-audit --all",
-      "npx task-loop-orchestrator execution-audit --all --json",
-      "npx task-loop-orchestrator execution-audit --intent intent_xxx",
-      "npx task-loop-orchestrator execution-audit --intent intent_xxx --json",
-      "npx task-loop-orchestrator write-readiness --intent intent_xxx",
-      "npx task-loop-orchestrator write-readiness --intent intent_xxx --json",
-      "npx task-loop-orchestrator write-readiness --intent intent_xxx --preflight readiness-preflight.json",
-      "npx task-loop-orchestrator write-readiness --intent intent_xxx --preflight readiness-preflight.json --json",
-      "npx task-loop-orchestrator write-runner --intent intent_xxx --json",
-      "npx task-loop-orchestrator write-runner --intent intent_xxx --preflight readiness-preflight.json --json",
-      "npx task-loop-orchestrator write-runner --intent intent_xxx --preflight readiness-preflight.json --simulate --json",
-      "npx task-loop-orchestrator write-runner --intent intent_xxx --preflight readiness-preflight.json --execute --json",
-      "Plain output is for people reading terminal summaries",
-      "Use `--json` for automation, scripts, or UI integrations",
-      "does not write files",
-      "write local dry-run trace records",
-      "symbolic safe executor results",
-      "`execute_disabled` report",
-      "execute external commands",
-      "create branches",
-      "commit",
-      "push",
-      "create PRs",
+      "`init`은 다시 실행해도",
+      "node \"$TLO\" init",
+      'node "$TLO" checks HEAD --json',
       "GitHub remote",
-      "readable check-runs",
-      "graceful JSON status",
+      "check-run",
       "unknown",
-      "not_found",
-      "Preflight input can change the readiness summary, but it does not unlock write execution"
+      "not_found"
     ]);
   });
 
@@ -98,11 +57,12 @@ describe("quickstart documentation", () => {
     expectContainsAll(quickstart, [
       "pnpm run release:check",
       "pnpm run package:artifacts",
-      "does not publish",
+      "pnpm run package:smoke",
+      "publish",
       "tag",
-      "create releases",
+      "GitHub release",
       "push",
-      "create PRs",
+      "PR 생성",
       "merge"
     ]);
   });
@@ -252,7 +212,7 @@ describe("release readiness documentation", () => {
     const changelog = await readChangelog();
 
     expectContainsAll(readme, ["GitHub PR 생성", "npm publish"]);
-    expectContainsAll(quickstart, ["does not publish", "create releases", "push", "create PRs", "merge"]);
+    expectContainsAll(quickstart, ["npm publish", "GitHub release", "push", "PR 생성", "merge"]);
     expectContainsAll(checklist, ["Do not run `npm publish`", "Do not create a GitHub release", "Do not create or push a release tag"]);
     expectContainsAll(changelog, ["npm publish", "GitHub release", "tag creation", "GitHub write actions"]);
   });
@@ -676,11 +636,14 @@ describe("documentation role boundaries", () => {
     const changelog = await readChangelog();
 
     expectContainsAll(quickstart, [
-      "npm pack --pack-destination /tmp",
-      "npm install /tmp/task-loop-orchestrator-0.1.0.tgz",
-      "mktemp -d",
-      "npm install --prefix"
+      "pnpm run package:artifacts",
+      "pnpm run package:smoke",
+      "pnpm run release:check",
+      "일반 사용 흐름은 clone"
     ]);
+    expect(quickstart).not.toContain("npm install /tmp/task-loop-orchestrator-0.1.0.tgz");
+    expect(quickstart).not.toContain("mktemp -d");
+    expect(quickstart).not.toContain("npm install --prefix");
     expectContainsAll(commands, [
       "# CLI Command Reference",
       "Purpose:",

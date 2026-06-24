@@ -56,7 +56,8 @@ describe("package metadata", () => {
     expect(cliSource).toContain("task-loop-orchestrator --version");
     expect(cliSource).toContain('args.command === "--version" || args.command === "-v"');
     expect(readme).toContain("node dist/cli.js --version");
-    expect(quickstart).toContain('"$tmpdir/node_modules/.bin/task-loop-orchestrator" --version');
+    expect(quickstart).toContain("node dist/cli.js --version");
+    expect(quickstart).toContain('export TLO="/absolute/path/to/task-loop-orchestrator/dist/cli.js"');
   });
 
   it("documents package smoke coverage and diagnostics", async () => {
