@@ -66,6 +66,7 @@ pnpm run release:check
 ```
 
 패키지에 포함될 파일 목록만 확인하려면 `pnpm run package:artifacts`를 실행합니다.
+`pnpm run package:smoke`는 현재 checkout을 tarball로 묶은 뒤 임시 프로젝트에 설치해, 실제 설치된 바이너리 기준으로 MVP 흐름을 검증합니다.
 
 ## MVP 범위
 
@@ -92,6 +93,7 @@ MVP에서 확인하는 것은 다음 네 가지입니다.
 - 빠른 시작: [docs/quickstart.md](docs/quickstart.md)
 - 명령어 전체 목록: [docs/commands.md](docs/commands.md)
 - JSON 출력 계약: [docs/json-output.md](docs/json-output.md)
+- JSON schema: [schemas/cli-json.schema.json](schemas/cli-json.schema.json)
 - 릴리스 점검표: [docs/release-checklist.md](docs/release-checklist.md)
 - 릴리스 준비 요약: [docs/release-readiness.md](docs/release-readiness.md)
 - 이후 작업 후보: [docs/roadmap.md](docs/roadmap.md)
