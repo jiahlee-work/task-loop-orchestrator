@@ -251,7 +251,7 @@ describe("release readiness documentation", () => {
     const checklist = await readReleaseChecklist();
     const changelog = await readChangelog();
 
-    expectContainsAll(readme, ["never create GitHub PRs", "publish to npm"]);
+    expectContainsAll(readme, ["GitHub PR 생성", "npm publish"]);
     expectContainsAll(quickstart, ["does not publish", "create releases", "push", "create PRs", "merge"]);
     expectContainsAll(checklist, ["Do not run `npm publish`", "Do not create a GitHub release", "Do not create or push a release tag"]);
     expectContainsAll(changelog, ["npm publish", "GitHub release", "tag creation", "GitHub write actions"]);
@@ -650,18 +650,17 @@ describe("documentation role boundaries", () => {
       "pnpm run build",
       "node dist/cli.js --help",
       "node dist/cli.js --version",
-      "npx task-loop-orchestrator doctor --json",
-      "npx task-loop-orchestrator init",
-      'npx task-loop-orchestrator run "Quickstart smoke" --max-iterations 1 --json',
-      "npx task-loop-orchestrator status --json",
-      "npx task-loop-orchestrator resume <runId> --max-iterations 1 --json",
-      "npx task-loop-orchestrator checks HEAD --json",
-      "Use the `runId` returned by `run --json` for the `resume <runId>` command",
-      "For a dependency-free copy-paste flow",
+      'export TLO="/absolute/path/to/task-loop-orchestrator/dist/cli.js"',
+      'node "$TLO" doctor --json',
+      'node "$TLO" init',
+      'node "$TLO" run "Quickstart smoke" --max-iterations 1 --json',
+      'node "$TLO" status "$run_id" --json',
+      'node "$TLO" resume "$run_id" --max-iterations 1 --json',
+      "`run --json`이 반환한 `runId`",
+      "기본 패턴",
       "node -e",
-      'npx task-loop-orchestrator status "$run_id" --json',
-      "`init` is safe to rerun",
-      "Run `doctor --json` before or after `init`"
+      "`init`은 다시 실행해도",
+      "설정이 이상해 보일 때는 `doctor --json`"
     ]);
     expect(readme).not.toContain("npx task-loop-orchestrator write-runner --intent intent_xxx --preflight readiness-preflight.json --simulate --json");
     expect(readme).not.toContain("npx task-loop-orchestrator execution-audit --all");

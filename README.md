@@ -1,29 +1,22 @@
 # task-loop-orchestrator
 
-MVP scaffold for an AI role-split closed-loop task orchestrator.
+AI 작업을 역할별로 나누고, 계획부터 검증까지의 진행 상태를 로컬 파일에 남기는 CLI 오케스트레이터입니다.
 
-## Requirements
+현재 MVP는 실제 코드를 대신 작성하거나 GitHub에 변경을 올리는 도구가 아닙니다. 먼저 `init`, `doctor`, `run`, `status`, `resume` 흐름으로 “작업 루프를 만들고, 저장하고, 이어서 확인하는” 기본 사용성을 검증하는 단계입니다.
 
-- Node.js 24 or newer
-- pnpm 11.5.2 via Corepack or a compatible local install
+## 요구 사항
 
-## Commands
+- Node.js 24 이상
+- Corepack으로 활성화한 pnpm 11.x, 또는 호환되는 pnpm 설치
+- 사용 대상 프로젝트가 Git 저장소이면 `doctor`와 상태 진단 결과가 더 정확합니다.
 
-```bash
-pnpm run build
-pnpm test
-pnpm run typecheck
-pnpm run lint
-```
+## 설치와 실행
 
-## Quickstart
-
-For local clone and tarball installation flows, see [docs/quickstart.md](docs/quickstart.md).
-For command-by-command usage, see [docs/commands.md](docs/commands.md).
-
-Minimal local checkout flow:
+아직 npm에 배포하지 않았습니다. 지금은 GitHub 저장소를 clone한 뒤 pnpm으로 빌드해서 사용합니다.
 
 ```bash
+git clone https://github.com/jiahlee-work/task-loop-orchestrator.git
+cd task-loop-orchestrator
 corepack enable
 pnpm install --frozen-lockfile
 pnpm run build
@@ -31,232 +24,81 @@ node dist/cli.js --help
 node dist/cli.js --version
 ```
 
-After installing the CLI in a target Git project, use `npx` for a project-local install or omit it when the binary is already on your `PATH`:
+다른 로컬 프로젝트에서 쓰려면 빌드된 CLI 경로를 지정해 두면 편합니다.
 
 ```bash
-npx task-loop-orchestrator doctor --json
-npx task-loop-orchestrator init
-npx task-loop-orchestrator run "Quickstart smoke" --max-iterations 1 --json
-npx task-loop-orchestrator status --json
-npx task-loop-orchestrator resume <runId> --max-iterations 1 --json
-npx task-loop-orchestrator checks HEAD --json
+export TLO="/absolute/path/to/task-loop-orchestrator/dist/cli.js"
+cd /path/to/your-git-project
+node "$TLO" doctor --json
 ```
 
-Use the `runId` returned by `run --json` for the `resume <runId>` command.
-`init` is safe to rerun: it skips an existing `orchestrator.config.json` unless `--force` is used and keeps `.orchestrator/` ignored. Run `doctor --json` before or after `init` when setup looks wrong; warning checks include recommended next commands.
-For a dependency-free copy-paste flow, capture `run --json` and extract the id with Node:
+## 첫 사용 흐름
+
+대상 프로젝트에서 아래 순서로 실행합니다.
 
 ```bash
-run_json="$(npx task-loop-orchestrator run "Quickstart smoke" --max-iterations 1 --json)"
+node "$TLO" init
+node "$TLO" doctor --json
+
+run_json="$(node "$TLO" run "Quickstart smoke" --max-iterations 1 --json)"
 run_id="$(printf '%s' "$run_json" | node -e 'let input=""; process.stdin.on("data", c => input += c); process.stdin.on("end", () => console.log(JSON.parse(input).runId));')"
-npx task-loop-orchestrator status "$run_id" --json
-npx task-loop-orchestrator resume "$run_id" --max-iterations 1 --json
-npx task-loop-orchestrator status "$run_id" --json
+
+node "$TLO" status "$run_id" --json
+node "$TLO" resume "$run_id" --max-iterations 1 --json
+node "$TLO" status "$run_id" --json
 ```
 
-`checks HEAD --json` requires a GitHub remote and readable check-runs to report live CI status; otherwise it returns a graceful JSON fallback.
-Advanced read-only audit and dry-run surfaces such as `execution-audit`, `write-readiness`, and `write-runner` are documented in [docs/commands.md](docs/commands.md). They are not required for the first install/run/status/resume flow. `write-runner` remains a dry-run/simulation boundary and does not execute shell, git, or GitHub commands or create branches, commits, pushes, or PRs.
+`run --json`이 반환한 `runId`를 `status <runId>`와 `resume <runId>`에 넘기는 것이 기본 패턴입니다. 실행 기록은 대상 프로젝트의 `.orchestrator/runs/<runId>.json`에 저장됩니다.
 
-## Local Development
+`init`은 다시 실행해도 기존 `orchestrator.config.json`을 덮어쓰지 않습니다. `.orchestrator/`가 `.gitignore`에 빠져 있으면 추가하고, 이미 있으면 그대로 둡니다. 설정이 이상해 보일 때는 `doctor --json`을 먼저 실행해 다음 조치 안내를 확인하세요.
 
-This project requires Node.js 24 or newer. Use pnpm through Corepack or a compatible pnpm 11.x install.
+## 자주 쓰는 개발 명령
+
+이 저장소 자체를 개발하거나 검증할 때 사용합니다.
 
 ```bash
-corepack enable
-pnpm install --frozen-lockfile
+pnpm run typecheck
+pnpm test
 pnpm run build
-node dist/cli.js --help
-node dist/cli.js --version
+pnpm run lint
+pnpm run package:smoke
+pnpm run release:check
 ```
 
-Run a local loop:
+패키지에 포함될 파일 목록만 확인하려면 `pnpm run package:artifacts`를 실행합니다.
 
-```bash
-pnpm run build
-node dist/cli.js run "Create MVP scaffold" --description "Exercise the mock closed loop"
-node dist/cli.js run "Prepare executor adapter" --executor codex-cli-dry-run
-node dist/cli.js run "Review evidence" --reviewer local-evidence
-node dist/cli.js run "Machine-readable smoke" --max-iterations 1 --json
-node dist/cli.js resume <runId> --max-iterations 1 --json
-node dist/cli.js status
-node dist/cli.js status --json
-node dist/cli.js status <runId> --json --raw
-node dist/cli.js checkpoint
-node dist/cli.js checkpoint --json
-node dist/cli.js checkpoint --github gh-cli --json
-node dist/cli.js checks HEAD --json
-node dist/cli.js pr-plan --json
-node dist/cli.js approve-pr --approved-by maintainer --reason "Reviewed checkpoint and PR plan" --json
-node dist/cli.js pr-exec --json
-node dist/cli.js pr-exec --execute --approval approval_xxx --json
-node dist/cli.js pr-exec --execute --approved-by maintainer --json
-node dist/cli.js execution-audit --all
-node dist/cli.js execution-audit --all --json
-node dist/cli.js execution-audit --intent intent_xxx
-node dist/cli.js execution-audit --intent intent_xxx --json
-node dist/cli.js write-runner --intent intent_xxx --preflight readiness-preflight.json --json
-node dist/cli.js write-runner --intent intent_xxx --preflight readiness-preflight.json --simulate --json
-node dist/cli.js write-runner --intent intent_xxx --preflight readiness-preflight.json --execute --json
-```
+## MVP 범위
 
-Runs are stored as JSON files under `.orchestrator/runs/<runId>.json`.
-Checkpoint reports are stored as JSON files under `.orchestrator/checkpoints/<checkpointId>.json`.
-Approval records are stored as JSON files under `.orchestrator/approvals/<approvalId>.json`.
+MVP에서 확인하는 것은 다음 네 가지입니다.
 
-## Local Package Install
+- 프로젝트 초기화: `init`
+- 로컬 설정 진단: `doctor`
+- mock 기반 작업 루프 실행과 저장: `run`
+- 저장된 run 조회와 이어 실행: `status`, `resume`
 
-The package can be installed from a local tarball through its `bin` entry, but it is not published to npm yet. The shipped file allowlist is intentionally small: `dist`, `schemas`, and `orchestrator.config.example.json`.
+반대로 아래 작업은 현재 MVP 범위가 아닙니다.
 
-- Install and first-run steps: [docs/quickstart.md](docs/quickstart.md)
-- Command reference: [docs/commands.md](docs/commands.md)
-- Release candidate checks: [docs/release-checklist.md](docs/release-checklist.md)
-- Release readiness summary: [docs/release-readiness.md](docs/release-readiness.md)
-- Post-0.1.0 roadmap: [docs/roadmap.md](docs/roadmap.md)
-- Release notes draft: [CHANGELOG.md](CHANGELOG.md)
+- 실제 Codex CLI 실행
+- 임의 shell 명령 실행
+- 브랜치 생성, 커밋, 푸시
+- GitHub PR 생성, 머지, 릴리스
+- npm publish
+- Jira/GitHub 쓰기 API 연동
 
-For the local pre-release verification bundle, run `pnpm run release:check`; it includes typecheck, tests, build, package artifact dry-run review, lint, installed binary package smoke, version output, and read-only check refresh.
+`checkpoint`, `checks`, `pr-plan`, `approve-pr`, `pr-exec`, `execution-audit`, `write-readiness`, `write-runner` 같은 명령은 고급 진단 또는 dry-run 경계로 남겨 둔 기능입니다. 첫 설치와 기본 루프 확인에는 필요하지 않습니다. 특히 `write-runner`는 shell, git, GitHub 명령을 실행하지 않으며 PR, 태그, 릴리스를 만들지 않습니다.
 
-For only the dry-run package file listing review, run `pnpm run package:artifacts`. For only the installed binary smoke, run `pnpm run package:smoke`. The package smoke packs the current checkout, installs the tarball into a temporary project, and verifies the MVP `--json` flows for `init`, `doctor`, `run`, `resume`, and `status`, plus read-only checkpoint/PR preflight/execution-audit flows, readiness/write-runner dry-run regression paths, and CI check refresh diagnostics.
+## 문서
 
-These release and package verification commands never create GitHub PRs, merge, push, create releases, create tags, or publish to npm.
+- 빠른 시작: [docs/quickstart.md](docs/quickstart.md)
+- 명령어 전체 목록: [docs/commands.md](docs/commands.md)
+- JSON 출력 계약: [docs/json-output.md](docs/json-output.md)
+- 릴리스 점검표: [docs/release-checklist.md](docs/release-checklist.md)
+- 릴리스 준비 요약: [docs/release-readiness.md](docs/release-readiness.md)
+- 이후 작업 후보: [docs/roadmap.md](docs/roadmap.md)
+- 변경 내역: [CHANGELOG.md](CHANGELOG.md)
 
-## Loop Model
+## 구조 요약
 
-The Root Orchestrator owns context and graph mutation. Planner, Executor, and Reviewer providers return reports and context deltas only.
+Root Orchestrator가 context와 graph를 관리합니다. Planner, Executor, Reviewer는 각자의 보고서와 context delta만 반환하고, context와 graph를 직접 수정하지 않습니다.
 
-Each run includes an audit trail in `events`. Current event kinds include discovery, planning, subtask selection, execution start/completion, review completion, context updates, graph updates, permission denial, and final run state events.
-
-The verify step also records `verification_evidence_collected` before reviewer execution when local evidence is gathered.
-
-Checkpoint generation records `integration_checkpoint_ready` on the run after a checkpoint report is saved.
-
-`resume --max-iterations n` treats `n` as additional iterations from the loaded run's current `iterations` count.
-
-`run --json`, `resume --json`, and `status --json` return a stable automation-friendly report with `runId`, status, iterations, permission mode, task summary, subtask counts, saved path, and the full run object. Prefer these JSON forms when integrating with scripts or UI. Use `status <runId> --json --raw` only when you need the stored raw `LoopRun` shape.
-
-## JSON Output
-
-JSON commands include lightweight schema metadata while preserving existing top-level payload fields:
-
-```json
-{
-  "schemaVersion": 1,
-  "command": "run",
-  "createdAt": "2026-06-22T00:00:00.000Z"
-}
-```
-
-The metadata is applied to every current `--json` command: `init`, `doctor`, `run`, `resume`, `status`, `checkpoint`, `checks`, `pr-plan`, `pr-exec`, and `approve-pr`. Command-specific payload fields remain at the top level for compatibility.
-
-See [docs/json-output.md](docs/json-output.md) for the full CLI JSON contract. A machine-readable schema for the common envelope is available at [schemas/cli-json.schema.json](schemas/cli-json.schema.json).
-
-## Permission Modes
-
-- `read`: permits `read_state` only.
-- `write`: permits `create_branch`, `write_file`, `run_tests`, `commit`, and `create_pr`. `push` is intentionally denied in write mode until an explicit approval flow exists.
-- `maintainer`: permits privileged actions such as `push`, `merge_pr`, `jira_transition`, and `release`, but those actions are decision-ready boundaries for now and are not auto-executed by the mock loop.
-
-Denied actions append a `permission_denied` event and block the run.
-
-## Providers
-
-External integrations are provider interfaces only at this stage. The default repo provider is mock-backed and does not call GitHub, Jira, Codex, or the network.
-
-The CLI uses a read-focused Git repo provider for discovery. It reads `git status --short` and `git diff --stat` only. Branch and worktree creation are represented as permission-gated dry-run boundaries, not executed.
-
-GitHub status is optional and disabled by default. `--github gh-cli` enables a read-only GitHub CLI provider for checkpoint checks. It uses `gh repo view`, `gh pr list`, and `gh pr checks`; it does not create or modify PRs, issues, releases, merges, or repository state. If `gh` is missing, unauthenticated, or cannot read the repository, checkpoint generation falls back to an `unknown` or `not_found` CI summary instead of failing.
-
-When PR checks are not available, the GitHub CLI provider falls back to read-only `gh api repos/{owner}/{repo}/commits/{ref}/check-runs` so branch or commit check-runs can still populate checkpoint `ciCheck`. `gh auth status` is useful for local setup, but failed auth remains a graceful checkpoint fallback.
-
-`checks [ref] [--json]` is a read-only shortcut for refreshing GitHub check status without creating a new checkpoint. The default ref is `HEAD`. Queued or in-progress GitHub Actions check-runs are reported as `pending`; missing checks or auth failures still return a JSON summary with exit code 0.
-
-## Executor Modes
-
-- `mock`: default executor; returns a deterministic mock `RoleReport`.
-- `codex-cli-dry-run`: builds the Codex CLI command for one bounded subtask and records it in the executor report/context delta without running Codex.
-- `codex-cli`: recognized by config and CLI, but actual execution is currently blocked unless a future explicit opt-in execution path is added.
-
-Executor input is scoped to exactly one selected subtask. The Root Orchestrator passes `runId`, `subtaskId`, task summary, bounded goal, non-goals, context summary, permission mode, and worktree/branch hint. Executors must return `RoleReport` and optional `contextDelta`; they do not mutate context or graph directly.
-
-## Config
-
-Optional config file: `orchestrator.config.json`.
-
-```json
-{
-  "executor": "mock",
-  "reviewer": "mock",
-  "github": "none",
-  "permissionMode": "write",
-  "worktree": {
-    "enabled": false
-  },
-  "maxIterations": 10
-}
-```
-
-CLI flags override config for the current command where supported, for example `--executor codex-cli-dry-run` or `--permission read`.
-
-## Reviewer Modes
-
-- `mock`: default reviewer; accepts successful executor reports so the basic smoke loop can complete.
-- `local-evidence`: structured read-only reviewer adapter. It consumes collected evidence and returns a verdict without mutating context or graph.
-
-Reviewer verdicts:
-
-- `accept`: evidence is sufficient for this local adapter.
-- `request_changes`: executor failed, executor only produced dry-run evidence, or reviewer cannot accept the result.
-- `reschedule`: reserved for future scheduling/retry policy.
-- `owner_decision`: human decision is needed, for example when acceptance criteria are missing.
-
-Evidence currently includes executor summary, executor command when present, repo status, diff stat, test result placeholder, and acceptance criteria coverage. `local-evidence` is intentionally conservative: Codex dry-run output alone is not accepted as completed work.
-
-## Integration Checkpoints
-
-`checkpoint [runId] [--github none|gh-cli] [--json]` creates a read-only decision-ready brief for the latest run or a specific run. It reads repo status and diff stat, summarizes graph counts, lists conflict risks, carries owner decision items forward, and recommends the next action.
-
-With `--github gh-cli`, checkpoint `ciCheck` is populated from GitHub checks when available. Without it, `ciCheck` remains a safe `not_run` placeholder.
-
-After pushing to `main`, use `node dist/cli.js checks HEAD --json` for a quick CI refresh, or rerun `node dist/cli.js checkpoint --github gh-cli --json` when you want a new decision-ready checkpoint brief.
-
-Checkpoint status:
-
-- `clean`: all subtasks are complete and repo evidence has no attention markers.
-- `needs_attention`: pending/active work, graph conflicts, or repo status/diff evidence needs review.
-- `blocked`: blocked/failed subtasks or reviewer `owner_decision` items must be resolved.
-
-Maintainer actions such as `create_pr`, `merge_pr`, and `release` are emitted only as decision-ready candidates. Checkpoint generation never creates branches, worktrees, commits, pushes, PRs, merges, releases, Jira transitions, or GitHub/Jira API calls.
-
-## PR Plans
-
-`pr-plan [runId] [--json]` creates a decision-ready PR preparation report for the latest run or a specific run. It uses the latest checkpoint for that run when available and reads local repo status/diff before suggesting any commands.
-
-The plan includes a source branch hint, base branch, PR title/body, preconditions, blocked reasons, and command candidates for branch creation, commit, push, and PR creation. These commands are dry-run candidates only. The orchestrator does not create branches, commit, push, or call `gh pr create`.
-
-A non-clean checkpoint or dirty repository is reported in `blockedReasons`; users must resolve those before treating the PR plan as ready for execution.
-
-`approve-pr [runId] --approved-by name [--reason text] [--json]` creates and stores an audit-friendly approval record for the latest PR plan shape. The record includes the approved run id, checkpoint id, plan id, and a minimal plan snapshot: title, base branch, source branch hint, blocked reasons, and command candidate actions.
-
-`pr-exec [runId] [--execute] [--approval approvalId] [--approved-by name] [--json]` creates an approval-aware execution preflight report from the PR plan. The default mode is dry-run and never executes commands. `--execute` requires approval data, but write execution is still blocked at the boundary until a later implementation adds an explicit, audited command runner. If `--approval` is omitted, `pr-exec` tries the latest stored approval for the run; `--approved-by` can still create an in-memory approval for one-off preflight checks.
-
-Stored approvals are tied to the checkpoint that was current when approval was recorded. During `pr-exec --execute`, both explicit `--approval approvalId` and latest-approval lookup are checked against the current latest checkpoint for the run. If the checkpoint changed, the approval is treated as stale and execution preflight is blocked before any write command can run. In-memory approvals from `--approved-by` are created from the current plan and are not stale.
-
-## Execution Audit
-
-`execution-audit --all` and `execution-audit --intent <intentId>` inspect persisted execution intents and dry-run traces when those records exist. Plain output is the human-readable terminal view; add `--json` for the stable automation contract.
-
-The command is read-only. It does not write files, execute commands, create branches, commit, push, create PRs, merge, publish, create tags, or create GitHub releases.
-
-`write-runner --intent <intentId> [--preflight <path>] [--simulate|--execute] --json` is the audited dry-run and simulation runner boundary. It can write local dry-run trace records under `.orchestrator/execution-traces/` only when readiness is ready. `--simulate` returns deterministic symbolic safe executor results, and `--execute` returns an `execute_disabled` policy/report. It still never runs shell commands, creates branches, commits, pushes, PRs, merges, releases, or tags.
-
-Current approval model:
-
-- no `--execute`: returns `dry_run` with command candidates and no executed commands
-- `--execute` without `--approved-by`: returns `blocked`
-- `approve-pr --approved-by name`: persists an approval under `.orchestrator/approvals`
-- `pr-exec --execute --approval approvalId`: loads the stored approval, blocks stale checkpoint approvals, then still blocks before branch/commit/push/PR creation because write execution is not implemented
-- `pr-exec --execute --approved-by name`: creates an in-memory approval for preflight, then still blocks before write execution
-
-## CI
-
-GitHub Actions CI is defined in `.github/workflows/ci.yml` and runs on pull requests and pushes to `main`. It uses Node 24 with Corepack/pnpm cache, installs with `pnpm install --frozen-lockfile`, then runs typecheck, tests, build, and `pnpm run package:smoke`. The package smoke step verifies `npm pack`, temporary install, installed binary help, project bootstrap, JSON command contracts, read-only checkpoint/PR preflight/execution-audit flows, and CI check refresh diagnostics.
+기본 executor와 reviewer는 mock 기반입니다. 외부 GitHub, Jira, Codex 연동은 provider 인터페이스나 읽기 전용 진단 경계로만 다룹니다.
