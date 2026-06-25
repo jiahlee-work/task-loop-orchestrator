@@ -155,7 +155,9 @@ describe("doctor", () => {
 
   it("reports missing Jira CLI only when Jira diagnostics are enabled", async () => {
     const root = await tempRoot();
-    const commandRunner: CommandRunner = async (command) => {
+    const calls: Array<{ command: string; args: string[] }> = [];
+    const commandRunner: CommandRunner = async (command, args = []) => {
+      calls.push({ command, args });
       if (command === "jira") {
         return { exitCode: 1, stdout: "", stderr: "jira: command not found" };
       }
@@ -169,6 +171,7 @@ describe("doctor", () => {
 
     const defaultReport = await runDoctor(root, { commandRunner });
     expect(defaultReport.checks.some((item) => item.id === "jira_cli")).toBe(false);
+    expect(calls.some((call) => call.command === "jira")).toBe(false);
 
     const jiraReport = await runDoctor(root, { commandRunner, jira: true });
 
@@ -191,6 +194,7 @@ describe("doctor", () => {
         }
       ]
     });
+    expect(calls.map((call) => [call.command, ...call.args])).toContainEqual(["jira", "version"]);
   });
 
   it("shows doctor in CLI usage", async () => {

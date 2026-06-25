@@ -290,7 +290,7 @@ export class JiraCliProvider implements JiraProvider {
       return undefined;
     }
 
-    const result = await this.runner(this.jiraBinary, ["issue", "view", issueKey, "--json"], this.rootDir);
+    const result = await this.runner(this.jiraBinary, ["issue", "view", issueKey, "--raw"], this.rootDir);
     if (result.exitCode !== 0) {
       return undefined;
     }

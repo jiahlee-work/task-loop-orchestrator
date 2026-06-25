@@ -370,7 +370,7 @@ async function createTaskSpecFromJiraKey(jiraKey: string, permissionMode: Permis
   if (!issue) {
     throw new Error(
       `Jira issue ${jiraKey} was not found or could not be read. Install and authenticate the Jira CLI with ` +
-        `brew install jira-cli and jira init, then verify jira issue view ${jiraKey} --json works.`
+        `brew install jira-cli and jira init, then verify jira issue view ${jiraKey} --raw works.`
     );
   }
 

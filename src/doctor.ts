@@ -339,7 +339,7 @@ async function checkGitHub(github: GitHubProvider): Promise<DoctorCheck[]> {
 }
 
 async function checkJiraCli(rootDir: string, commandRunner: CommandRunner): Promise<DoctorCheck> {
-  const result = await commandRunner("jira", ["--version"], rootDir);
+  const result = await commandRunner("jira", ["version"], rootDir);
   if (result.exitCode === 0) {
     return {
       id: "jira_cli",

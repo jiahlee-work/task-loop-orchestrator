@@ -251,7 +251,7 @@ describe("GitHubCliProvider", () => {
 });
 
 describe("JiraCliProvider", () => {
-  it("reads a Jira issue through a read-only CLI JSON command", async () => {
+  it("reads a Jira issue through a read-only raw JSON command", async () => {
     const calls: Array<{ command: string; args: string[]; cwd?: string }> = [];
     const runner: CommandRunner = async (command, args = [], cwd) => {
       calls.push({ command, args, cwd });
@@ -319,7 +319,7 @@ describe("JiraCliProvider", () => {
       acceptanceCriteria: ["Export includes invoice id", "Export includes amount"]
     });
     expect(calls.map((call) => [call.command, ...call.args])).toEqual([
-      ["jira", "issue", "view", "ABC-123", "--json"]
+      ["jira", "issue", "view", "ABC-123", "--raw"]
     ]);
   });
 
