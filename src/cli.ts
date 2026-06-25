@@ -121,7 +121,7 @@ function printUsage(): void {
   task-loop-orchestrator --help
   task-loop-orchestrator --version
   task-loop-orchestrator init [--force] [--json]
-  task-loop-orchestrator doctor [--github none|gh-cli] [--json]
+  task-loop-orchestrator doctor [--github none|gh-cli] [--jira] [--json]
   task-loop-orchestrator run <title> [--description text] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]
   task-loop-orchestrator run --jira ISSUE-KEY [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]
   task-loop-orchestrator status [runId] [--json] [--raw]
@@ -280,7 +280,7 @@ function printPlainWriteRunnerError(
 
 async function doctorCommand(args: ParsedArgs): Promise<void> {
   const githubMode = stringFlag(args.flags, "github") ? githubFlag(stringFlag(args.flags, "github")) : "none";
-  const report = await runDoctor(process.cwd(), { githubMode });
+  const report = await runDoctor(process.cwd(), { githubMode, jira: args.flags.jira === true });
 
   if (args.flags.json === true) {
     printJson("doctor", report);
@@ -368,7 +368,10 @@ async function createTaskSpecFromJiraKey(jiraKey: string, permissionMode: Permis
   const provider = new JiraCliProvider(process.cwd());
   const issue = await provider.getIssue(jiraKey);
   if (!issue) {
-    throw new Error(`Jira issue ${jiraKey} was not found or could not be read.`);
+    throw new Error(
+      `Jira issue ${jiraKey} was not found or could not be read. Install and authenticate the Jira CLI with ` +
+        `brew install jira-cli and jira init, then verify jira issue view ${jiraKey} --json works.`
+    );
   }
 
   return createTaskSpecFromJiraIssue(issue, permissionMode);

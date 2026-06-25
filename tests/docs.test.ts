@@ -806,7 +806,7 @@ describe("command reference documentation", () => {
       "--help",
       "--version",
       "init [--force] [--json]",
-      "doctor [--github none|gh-cli] [--json]",
+      "doctor [--github none|gh-cli] [--jira] [--json]",
       "run <title> [--description text] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]",
       "run --jira ISSUE-KEY [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]",
       "status [runId] [--json] [--raw]",
@@ -894,7 +894,12 @@ describe("command reference documentation", () => {
 
     expectSectionContains(sections, "--help", ["read-only", "no files or external systems are modified"]);
     expectSectionContains(sections, "--version", ["read-only", "no files or external systems are modified"]);
-    expectSectionContains(sections, "doctor", ["read-only", "read-only GitHub CLI diagnostics", "instead of writing repository state"]);
+    expectSectionContains(sections, "doctor", [
+      "read-only",
+      "read-only GitHub CLI diagnostics",
+      "optional Jira CLI availability",
+      "instead of writing repository state"
+    ]);
     expectSectionContains(sections, "status", ["read-only", "does not modify local state or external systems"]);
     expectSectionContains(sections, "checks", ["read-only", "unknown", "not_found"]);
     expectSectionContains(sections, "pr-plan", ["read-only planning", "command candidates", "does not execute them"]);

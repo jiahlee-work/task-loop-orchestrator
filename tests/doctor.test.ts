@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { checkNodeVersion, initProject, runDoctor, type DoctorCheck } from "../src/index.js";
-import type { GitHubProvider } from "../src/providers.js";
+import type { CommandRunner, GitHubProvider } from "../src/providers.js";
 
 const execFileAsync = promisify(execFile);
 const tempDirs: string[] = [];
@@ -153,10 +153,50 @@ describe("doctor", () => {
     });
   });
 
+  it("reports missing Jira CLI only when Jira diagnostics are enabled", async () => {
+    const root = await tempRoot();
+    const commandRunner: CommandRunner = async (command) => {
+      if (command === "jira") {
+        return { exitCode: 1, stdout: "", stderr: "jira: command not found" };
+      }
+
+      if (command === "git") {
+        return { exitCode: 0, stdout: "true\n", stderr: "" };
+      }
+
+      return { exitCode: 0, stdout: "", stderr: "" };
+    };
+
+    const defaultReport = await runDoctor(root, { commandRunner });
+    expect(defaultReport.checks.some((item) => item.id === "jira_cli")).toBe(false);
+
+    const jiraReport = await runDoctor(root, { commandRunner, jira: true });
+
+    expect(jiraReport.status).toBe("warn");
+    expect(check(jiraReport.checks, "jira_cli")).toMatchObject({
+      status: "warn",
+      recommendedAction: "Install and authenticate the Jira CLI before using run --jira.",
+      suggestions: [
+        {
+          label: "Install Jira CLI with Homebrew",
+          command: ["brew", "install", "jira-cli"],
+          reason: "Install the jira command on macOS.",
+          destructive: false
+        },
+        {
+          label: "Initialize Jira CLI auth",
+          command: ["jira", "init"],
+          reason: "Configure the Jira site and credentials.",
+          destructive: false
+        }
+      ]
+    });
+  });
+
   it("shows doctor in CLI usage", async () => {
     const cliSource = await readFile(join(process.cwd(), "src", "cli.ts"), "utf8");
 
-    expect(cliSource).toContain("task-loop-orchestrator doctor [--github none|gh-cli] [--json]");
+    expect(cliSource).toContain("task-loop-orchestrator doctor [--github none|gh-cli] [--jira] [--json]");
   });
 });
 

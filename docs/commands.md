@@ -50,7 +50,7 @@ JSON: supported with `--json`.
 
 Behavior: writes local bootstrap files only. It creates `orchestrator.config.json` when missing and ensures `.gitignore` contains `.orchestrator/`. Existing config is skipped unless `--force` is provided, so rerunning `init` is safe.
 
-### `doctor [--github none|gh-cli] [--json]`
+### `doctor [--github none|gh-cli] [--jira] [--json]`
 
 Purpose: Diagnose whether the current project is ready to use the orchestrator.
 
@@ -58,11 +58,12 @@ Example:
 
 ```bash
 task-loop-orchestrator doctor --github gh-cli --json
+task-loop-orchestrator doctor --jira --json
 ```
 
 JSON: supported with `--json`.
 
-Behavior: read-only. It checks Node.js, Git repository presence, config loading, `.gitignore`, store path access, and optional read-only GitHub CLI diagnostics instead of writing repository state. Warnings and failures include a short recommended action and safe command suggestions where available.
+Behavior: read-only. It checks Node.js, Git repository presence, config loading, `.gitignore`, store path access, optional read-only GitHub CLI diagnostics, and optional Jira CLI availability instead of writing repository state. Warnings and failures include a short recommended action and safe command suggestions where available.
 
 ## Run Loop
 
@@ -88,7 +89,7 @@ Useful options:
 
 JSON: supported with `--json`.
 
-Behavior: writes run state under `.orchestrator/runs/`. With `--jira`, the command reads one Jira issue through the read-only Jira CLI provider and converts it into the run `TaskSpec`. Default mock roles and dry-run adapters do not call external write-side systems.
+Behavior: writes run state under `.orchestrator/runs/`. With `--jira`, the command reads one Jira issue through the read-only Jira CLI provider and converts it into the run `TaskSpec`. If the local `jira` command is missing or not authenticated, run `task-loop-orchestrator doctor --jira --json` and follow the suggested install/auth commands. Default mock roles and dry-run adapters do not call external write-side systems.
 
 ### `resume <runId> [--max-iterations n] [--json]`
 

@@ -32,6 +32,7 @@ export interface DoctorReport {
 
 export interface DoctorOptions {
   githubMode?: GitHubProviderMode;
+  jira?: boolean;
   commandRunner?: CommandRunner;
   githubProvider?: GitHubProvider;
   nodeVersion?: string;
@@ -66,6 +67,10 @@ export async function runDoctor(rootDir: string = process.cwd(), options: Doctor
         )
       ]
     });
+  }
+
+  if (options.jira === true) {
+    checks.push(await checkJiraCli(rootDir, commandRunner));
   }
 
   return {
@@ -331,6 +336,38 @@ async function checkGitHub(github: GitHubProvider): Promise<DoctorCheck[]> {
   }
 
   return checks;
+}
+
+async function checkJiraCli(rootDir: string, commandRunner: CommandRunner): Promise<DoctorCheck> {
+  const result = await commandRunner("jira", ["--version"], rootDir);
+  if (result.exitCode === 0) {
+    return {
+      id: "jira_cli",
+      status: "pass",
+      summary: "Jira CLI is installed.",
+      details: {
+        version: result.stdout.trim() || undefined
+      }
+    };
+  }
+
+  return {
+    id: "jira_cli",
+    status: "warn",
+    summary: "Jira CLI is not installed or is not available on PATH.",
+    details: {
+      stderr: result.stderr.trim() || undefined
+    },
+    recommendedAction: "Install and authenticate the Jira CLI before using run --jira.",
+    suggestions: [
+      commandSuggestion(
+        "Install Jira CLI with Homebrew",
+        ["brew", "install", "jira-cli"],
+        "Install the jira command on macOS."
+      ),
+      commandSuggestion("Initialize Jira CLI auth", ["jira", "init"], "Configure the Jira site and credentials.")
+    ]
+  };
 }
 
 function aggregateDoctorStatus(checks: DoctorCheck[]): DoctorStatus {
