@@ -207,6 +207,26 @@ export interface GitHubCheckSummary {
   }>;
 }
 
+export interface JiraIssueComment {
+  author?: string;
+  body: string;
+  createdAt?: string;
+}
+
+export interface JiraIssue {
+  key: string;
+  title: string;
+  description?: string;
+  status?: string;
+  issueType?: string;
+  url?: string;
+  assignee?: string;
+  reporter?: string;
+  labels: string[];
+  comments: JiraIssueComment[];
+  acceptanceCriteria: string[];
+}
+
 export interface IntegrationCheckpointReport {
   id: string;
   runId: string;

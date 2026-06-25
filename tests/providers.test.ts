@@ -4,7 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import { GitHubCliProvider, GitRepoProvider, type CommandRunner } from "../src/providers.js";
+import {
+  createTaskSpecFromJiraIssue,
+  GitHubCliProvider,
+  GitRepoProvider,
+  JiraCliProvider,
+  type CommandRunner
+} from "../src/providers.js";
 
 const execFileAsync = promisify(execFile);
 const tempDirs: string[] = [];
@@ -241,5 +247,114 @@ describe("GitHubCliProvider", () => {
       summary: "HTTP 401: Requires authentication",
       source: "github"
     });
+  });
+});
+
+describe("JiraCliProvider", () => {
+  it("reads a Jira issue through a read-only CLI JSON command", async () => {
+    const calls: Array<{ command: string; args: string[]; cwd?: string }> = [];
+    const runner: CommandRunner = async (command, args = [], cwd) => {
+      calls.push({ command, args, cwd });
+      return {
+        exitCode: 0,
+        stdout: JSON.stringify({
+          key: "ABC-123",
+          self: "https://jira.example.com/rest/api/3/issue/ABC-123",
+          fields: {
+            summary: "Add billing export",
+            description: {
+              type: "doc",
+              content: [
+                {
+                  type: "paragraph",
+                  content: [{ type: "text", text: "Users need a CSV export from billing." }]
+                }
+              ]
+            },
+            status: { name: "To Do" },
+            issuetype: { name: "Story" },
+            assignee: { displayName: "Jane Developer" },
+            reporter: { displayName: "Product Owner" },
+            labels: ["billing", "export"],
+            acceptanceCriteria: "- Export includes invoice id\n- Export includes amount",
+            comment: {
+              comments: [
+                {
+                  author: { displayName: "Designer" },
+                  body: {
+                    content: [
+                      {
+                        content: [{ text: "Keep the button near the existing download action." }]
+                      }
+                    ]
+                  },
+                  created: "2026-06-25T00:00:00.000+0900"
+                }
+              ]
+            }
+          }
+        }),
+        stderr: ""
+      };
+    };
+    const provider = new JiraCliProvider("/tmp/repo", runner);
+
+    await expect(provider.getIssue("ABC-123")).resolves.toEqual({
+      key: "ABC-123",
+      title: "Add billing export",
+      description: "Users need a CSV export from billing.",
+      status: "To Do",
+      issueType: "Story",
+      url: "https://jira.example.com/rest/api/3/issue/ABC-123",
+      assignee: "Jane Developer",
+      reporter: "Product Owner",
+      labels: ["billing", "export"],
+      comments: [
+        {
+          author: "Designer",
+          body: "Keep the button near the existing download action.",
+          createdAt: "2026-06-25T00:00:00.000+0900"
+        }
+      ],
+      acceptanceCriteria: ["Export includes invoice id", "Export includes amount"]
+    });
+    expect(calls.map((call) => [call.command, ...call.args])).toEqual([
+      ["jira", "issue", "view", "ABC-123", "--json"]
+    ]);
+  });
+
+  it("degrades missing CLI or unreadable issue results to undefined", async () => {
+    const provider = new JiraCliProvider("/tmp/repo", async () => ({
+      exitCode: 1,
+      stdout: "",
+      stderr: "jira: command not found"
+    }));
+
+    await expect(provider.getIssue("ABC-404")).resolves.toBeUndefined();
+  });
+
+  it("converts a Jira issue into a TaskSpec for planner input", () => {
+    const spec = createTaskSpecFromJiraIssue({
+      key: "ABC-123",
+      title: "Add billing export",
+      description: "Users need a CSV export from billing.",
+      status: "To Do",
+      issueType: "Story",
+      url: "https://jira.example.com/browse/ABC-123",
+      labels: [],
+      comments: [{ author: "Designer", body: "Keep the button near the existing download action." }],
+      acceptanceCriteria: ["Export includes invoice id", "Export includes amount"]
+    });
+
+    expect(spec).toMatchObject({
+      id: "ABC-123",
+      title: "ABC-123: Add billing export",
+      permissionMode: "write",
+      acceptanceCriteria: ["Export includes invoice id", "Export includes amount"]
+    });
+    expect(spec.description).toContain("Jira: https://jira.example.com/browse/ABC-123");
+    expect(spec.description).toContain("Status: To Do");
+    expect(spec.description).toContain("Users need a CSV export from billing.");
+    expect(spec.description).toContain("Designer: Keep the button near the existing download action.");
   });
 });

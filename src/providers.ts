@@ -4,7 +4,11 @@ import type {
   GitHubCheckStatus,
   GitHubCheckSummary,
   GitHubPullRequestSummary,
-  GitHubRepositoryInfo
+  GitHubRepositoryInfo,
+  JiraIssue,
+  JiraIssueComment,
+  PermissionMode,
+  TaskSpec
 } from "./domain.js";
 
 const execFileAsync = promisify(execFile);
@@ -36,7 +40,7 @@ export interface GitHubProvider {
 }
 
 export interface JiraProvider {
-  getIssue?(key: string): Promise<unknown>;
+  getIssue(key: string): Promise<JiraIssue | undefined>;
   transitionIssue?(input: { key: string; transition: string }): Promise<unknown>;
 }
 
@@ -273,6 +277,33 @@ export class GitHubCliProvider implements GitHubProvider {
   }
 }
 
+export class JiraCliProvider implements JiraProvider {
+  constructor(
+    private readonly rootDir: string = process.cwd(),
+    private readonly runner: CommandRunner = runCommand,
+    private readonly jiraBinary: string = "jira"
+  ) {}
+
+  async getIssue(key: string): Promise<JiraIssue | undefined> {
+    const issueKey = key.trim();
+    if (!issueKey) {
+      return undefined;
+    }
+
+    const result = await this.runner(this.jiraBinary, ["issue", "view", issueKey, "--json"], this.rootDir);
+    if (result.exitCode !== 0) {
+      return undefined;
+    }
+
+    const parsed = parseJson(result.stdout);
+    if (!isRecord(parsed)) {
+      return undefined;
+    }
+
+    return normalizeJiraIssue(issueKey, parsed);
+  }
+}
+
 export function createMockToolProviders(): ToolProviders {
   return {
     repo: new MockRepoProvider()
@@ -283,6 +314,31 @@ export function createGitToolProviders(rootDir: string = process.cwd(), github?:
   return {
     repo: new GitRepoProvider(rootDir),
     ...(github ? { github } : {})
+  };
+}
+
+export function createTaskSpecFromJiraIssue(issue: JiraIssue, permissionMode: PermissionMode = "write"): TaskSpec {
+  const description = [
+    issue.url ? `Jira: ${issue.url}` : undefined,
+    issue.status ? `Status: ${issue.status}` : undefined,
+    issue.issueType ? `Type: ${issue.issueType}` : undefined,
+    issue.description,
+    issue.comments.length > 0
+      ? `Comments:\n${issue.comments.map((comment) => `- ${comment.author ? `${comment.author}: ` : ""}${comment.body}`).join("\n")}`
+      : undefined
+  ]
+    .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+    .join("\n\n");
+
+  return {
+    id: issue.key,
+    title: `${issue.key}: ${issue.title}`,
+    description: description || undefined,
+    acceptanceCriteria:
+      issue.acceptanceCriteria.length > 0
+        ? issue.acceptanceCriteria
+        : [`Read Jira issue ${issue.key} and produce bounded subtasks that preserve the issue requirements.`],
+    permissionMode
   };
 }
 
@@ -330,6 +386,150 @@ function parseJson(value: string): unknown {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function normalizeJiraIssue(fallbackKey: string, value: Record<string, unknown>): JiraIssue | undefined {
+  const fields = isRecord(value.fields) ? value.fields : value;
+  const key = stringValue(value.key) ?? stringValue(fields.key) ?? fallbackKey;
+  const title = stringValue(fields.summary) ?? stringValue(value.summary) ?? stringValue(value.title);
+  if (!key || !title) {
+    return undefined;
+  }
+
+  return {
+    key,
+    title,
+    description: textFromUnknown(fields.description ?? value.description),
+    status: namedValue(fields.status ?? value.status),
+    issueType: namedValue(fields.issuetype ?? fields.issueType ?? value.issueType),
+    url: stringValue(value.url) ?? stringValue(value.self),
+    assignee: displayName(fields.assignee ?? value.assignee),
+    reporter: displayName(fields.reporter ?? value.reporter),
+    labels: stringArray(fields.labels ?? value.labels),
+    comments: jiraComments(fields.comment ?? value.comments),
+    acceptanceCriteria: acceptanceCriteriaFromFields(fields)
+  };
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function namedValue(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    return stringValue(value);
+  }
+
+  if (isRecord(value)) {
+    return stringValue(value.name) ?? stringValue(value.value);
+  }
+
+  return undefined;
+}
+
+function displayName(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    return stringValue(value);
+  }
+
+  if (isRecord(value)) {
+    return stringValue(value.displayName) ?? stringValue(value.name) ?? stringValue(value.emailAddress);
+  }
+
+  return undefined;
+}
+
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => (typeof item === "string" ? item.trim() : undefined))
+    .filter((item): item is string => Boolean(item));
+}
+
+function jiraComments(value: unknown): JiraIssueComment[] {
+  const comments = isRecord(value) && Array.isArray(value.comments) ? value.comments : Array.isArray(value) ? value : [];
+  return comments.filter(isRecord).flatMap((comment) => {
+    const body = textFromUnknown(comment.body);
+    if (!body) {
+      return [];
+    }
+
+    return [
+      {
+        author: displayName(comment.author),
+        body,
+        createdAt: stringValue(comment.created)
+      }
+    ];
+  });
+}
+
+function acceptanceCriteriaFromFields(fields: Record<string, unknown>): string[] {
+  const candidates = [fields.acceptanceCriteria, fields.acceptance_criteria, fields.criteria];
+  for (const candidate of candidates) {
+    const text = textFromUnknown(candidate);
+    if (text) {
+      return text
+        .split(/\r?\n/)
+        .map((line) => line.replace(/^[-*]\s*/, "").trim())
+        .filter(Boolean);
+    }
+  }
+
+  return [];
+}
+
+function textFromUnknown(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    return stringValue(value);
+  }
+
+  if (isRecord(value)) {
+    if (typeof value.text === "string") {
+      return stringValue(value.text);
+    }
+
+    if (Array.isArray(value.content)) {
+      return joinText(value.content);
+    }
+  }
+
+  if (Array.isArray(value)) {
+    return joinText(value);
+  }
+
+  return undefined;
+}
+
+function joinText(values: unknown[]): string | undefined {
+  const text = values
+    .map((item) => {
+      if (typeof item === "string") {
+        return item;
+      }
+
+      if (!isRecord(item)) {
+        return "";
+      }
+
+      if (typeof item.text === "string") {
+        return item.text;
+      }
+
+      if (Array.isArray(item.content)) {
+        return joinText(item.content) ?? "";
+      }
+
+      return "";
+    })
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return text || undefined;
 }
 
 function classifyGhFailure(stderr: string): GitHubCheckStatus {
