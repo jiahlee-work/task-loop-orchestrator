@@ -808,6 +808,7 @@ describe("command reference documentation", () => {
       "init [--force] [--json]",
       "doctor [--github none|gh-cli] [--json]",
       "run <title> [--description text] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]",
+      "run --jira ISSUE-KEY [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]",
       "status [runId] [--json] [--raw]",
       "resume <runId> [--max-iterations n] [--json]",
       "checkpoint [runId] [--github none|gh-cli] [--json]",

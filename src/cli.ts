@@ -36,7 +36,7 @@ import { createIntegrationCheckpoint } from "./integration.js";
 import { RootOrchestrator, createTaskSpec } from "./orchestrator.js";
 import { checkPermission } from "./permission.js";
 import { createPullRequestPlan } from "./pr-plan.js";
-import { createGitToolProviders, GitHubCliProvider } from "./providers.js";
+import { createGitToolProviders, createTaskSpecFromJiraIssue, GitHubCliProvider, JiraCliProvider } from "./providers.js";
 import { LocalEvidenceReviewer } from "./reviewers.js";
 import { createMockRoleProviders, type RoleProviders } from "./roles.js";
 import { createRunCliReport } from "./run-report.js";
@@ -123,6 +123,7 @@ function printUsage(): void {
   task-loop-orchestrator init [--force] [--json]
   task-loop-orchestrator doctor [--github none|gh-cli] [--json]
   task-loop-orchestrator run <title> [--description text] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]
+  task-loop-orchestrator run --jira ISSUE-KEY [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]
   task-loop-orchestrator status [runId] [--json] [--raw]
   task-loop-orchestrator resume <runId> [--max-iterations n] [--json]
   task-loop-orchestrator checkpoint [runId] [--github none|gh-cli] [--json]
@@ -325,8 +326,9 @@ async function initCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function runCommand(args: ParsedArgs): Promise<void> {
+  const jiraKey = stringFlag(args.flags, "jira");
   const title = args.positional.join(" ").trim();
-  if (!title) {
+  if (!title && !jiraKey) {
     throw new Error("run requires a title.");
   }
 
@@ -334,6 +336,14 @@ async function runCommand(args: ParsedArgs): Promise<void> {
   const config = await loadOrchestratorConfig(process.cwd());
   const executorMode = stringFlag(args.flags, "executor") ? executorFlag(stringFlag(args.flags, "executor")) : config.executor;
   const reviewerMode = stringFlag(args.flags, "reviewer") ? reviewerFlag(stringFlag(args.flags, "reviewer")) : config.reviewer;
+  const permissionMode = stringFlag(args.flags, "permission") ? permissionFlag(stringFlag(args.flags, "permission")) : config.permissionMode;
+  const taskSpec = jiraKey
+    ? await createTaskSpecFromJiraKey(jiraKey, permissionMode)
+    : createTaskSpec({
+        title,
+        description: stringFlag(args.flags, "description"),
+        permissionMode
+      });
   const orchestrator = new RootOrchestrator({
     store,
     roles: createRoleProviders(executorMode, reviewerMode),
@@ -341,13 +351,7 @@ async function runCommand(args: ParsedArgs): Promise<void> {
     maxIterations: numberFlag(args.flags, "max-iterations") ?? config.maxIterations,
     worktreeEnabled: config.worktree.enabled
   });
-  const run = await orchestrator.runTask(
-    createTaskSpec({
-      title,
-      description: stringFlag(args.flags, "description"),
-      permissionMode: stringFlag(args.flags, "permission") ? permissionFlag(stringFlag(args.flags, "permission")) : config.permissionMode
-    })
-  );
+  const run = await orchestrator.runTask(taskSpec);
 
   if (args.flags.json === true) {
     printJson("run", createRunCliReport(run, store));
@@ -358,6 +362,16 @@ async function runCommand(args: ParsedArgs): Promise<void> {
   console.log(`Iterations: ${run.iterations}`);
   console.log(`Subtasks: ${run.graph.subtasks.length}`);
   console.log(`Saved: ${store.pathForRun(run.id)}`);
+}
+
+async function createTaskSpecFromJiraKey(jiraKey: string, permissionMode: PermissionMode) {
+  const provider = new JiraCliProvider(process.cwd());
+  const issue = await provider.getIssue(jiraKey);
+  if (!issue) {
+    throw new Error(`Jira issue ${jiraKey} was not found or could not be read.`);
+  }
+
+  return createTaskSpecFromJiraIssue(issue, permissionMode);
 }
 
 async function statusCommand(args: ParsedArgs): Promise<void> {

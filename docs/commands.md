@@ -74,11 +74,13 @@ Example:
 
 ```bash
 task-loop-orchestrator run "Quickstart smoke" --max-iterations 1 --json
+task-loop-orchestrator run --jira ABC-123 --max-iterations 1 --json
 ```
 
 Useful options:
 
 - `--description text`
+- `--jira ISSUE-KEY`
 - `--permission read|write|maintainer`
 - `--executor mock|codex-cli-dry-run|codex-cli`
 - `--reviewer mock|local-evidence`
@@ -86,7 +88,7 @@ Useful options:
 
 JSON: supported with `--json`.
 
-Behavior: writes run state under `.orchestrator/runs/`. Default mock roles and dry-run adapters do not call external write-side systems.
+Behavior: writes run state under `.orchestrator/runs/`. With `--jira`, the command reads one Jira issue through the read-only Jira CLI provider and converts it into the run `TaskSpec`. Default mock roles and dry-run adapters do not call external write-side systems.
 
 ### `resume <runId> [--max-iterations n] [--json]`
 

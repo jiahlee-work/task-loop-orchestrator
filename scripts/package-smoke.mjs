@@ -4,7 +4,7 @@
 // Failures are wrapped with step labels plus command/cwd/output excerpts; this
 // script never creates branches, pushes, PRs, merges, releases, or publishes.
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,6 +18,7 @@ async function main() {
   const packDir = join(tempRoot, "pack");
   const installDir = join(tempRoot, "install");
   const projectDir = join(tempRoot, "project");
+  const fakeBinDir = join(tempRoot, "bin");
   const packageVersion = await readPackageVersion();
   let tarballPath = "";
   let bin = "";
@@ -27,9 +28,11 @@ async function main() {
     await runStep("pack and install", async () => {
       await mkdir(packDir);
       await mkdir(projectDir);
+      await mkdir(fakeBinDir);
       await run("npm", ["pack", "--pack-destination", packDir], { cwd: repoRoot });
       tarballPath = await findTarball(packDir);
       await run("npm", ["install", "--prefix", installDir, tarballPath], { cwd: repoRoot });
+      await writeFakeJiraBinary(fakeBinDir);
 
       bin = process.platform === "win32"
         ? join(installDir, "node_modules", ".bin", "task-loop-orchestrator.cmd")
@@ -164,6 +167,35 @@ async function main() {
 
       const rawStatusJson = await run(bin, ["status", loopReport.runId, "--json", "--raw"], { cwd: projectDir });
       assertRawStatusReport(parseJson(rawStatusJson), loopReport.runId);
+    });
+
+    await runStep("jira issue run json", async () => {
+      const jiraRun = await run(bin, ["run", "--jira", "ABC-123", "--max-iterations", "1", "--json"], {
+        cwd: projectDir,
+        env: prependPath(fakeBinDir)
+      });
+      const jiraRunReport = parseJson(jiraRun);
+      assertRunReport(jiraRunReport, "run", {
+        status: "completed",
+        completedCount: 1,
+        runIdIncludes: "run_",
+        taskTitle: "ABC-123: Package smoke Jira task"
+      });
+      assertIncludes(
+        jiraRunReport.run.spec.description,
+        "Jira: https://jira.example.com/browse/ABC-123",
+        "Jira run should preserve issue URL in the task description"
+      );
+      assertIncludes(
+        jiraRunReport.run.spec.description,
+        "Package smoke issue description.",
+        "Jira run should preserve issue description"
+      );
+      assertEqual(
+        JSON.stringify(jiraRunReport.run.spec.acceptanceCriteria),
+        JSON.stringify(["Provider reads issue JSON", "Run flow uses Jira TaskSpec"]),
+        "Jira run should use issue acceptance criteria"
+      );
     });
 
     await runStep("checkpoint/pr-plan/pr-exec/approve-pr json", async () => {
@@ -482,6 +514,7 @@ async function main() {
     console.log(
       "- MVP first-run flow init/doctor/run/status/resume/status works through the installed binary with the actual runId"
     );
+    console.log("- Jira issue read provider feeds --jira issue data into the installed binary run flow");
     console.log("- status no-run and resume missing-run JSON guidance work through the installed binary");
     console.log("- checkpoint/pr-plan/pr-exec/approve-pr JSON fields work through the installed binary");
     console.log(
@@ -516,6 +549,40 @@ async function readPackageVersion() {
   }
 
   return packageJson.version;
+}
+
+async function writeFakeJiraBinary(fakeBinDir) {
+  const path = join(fakeBinDir, process.platform === "win32" ? "jira.cmd" : "jira");
+  const script =
+    process.platform === "win32"
+      ? `@echo off
+node -e "console.log(JSON.stringify({key:'ABC-123',self:'https://jira.example.com/browse/ABC-123',fields:{summary:'Package smoke Jira task',description:'Package smoke issue description.',status:{name:'To Do'},issuetype:{name:'Task'},labels:['package-smoke'],acceptanceCriteria:'- Provider reads issue JSON\\n- Run flow uses Jira TaskSpec'}}))"
+`
+      : `#!/usr/bin/env node
+console.log(JSON.stringify({
+  key: "ABC-123",
+  self: "https://jira.example.com/browse/ABC-123",
+  fields: {
+    summary: "Package smoke Jira task",
+    description: "Package smoke issue description.",
+    status: { name: "To Do" },
+    issuetype: { name: "Task" },
+    labels: ["package-smoke"],
+    acceptanceCriteria: "- Provider reads issue JSON\\n- Run flow uses Jira TaskSpec"
+  }
+}));
+`;
+  await writeFile(path, script, "utf8");
+  if (process.platform !== "win32") {
+    await chmod(path, 0o755);
+  }
+}
+
+function prependPath(dir) {
+  return {
+    ...process.env,
+    PATH: `${dir}${process.platform === "win32" ? ";" : ":"}${process.env.PATH ?? ""}`
+  };
 }
 
 async function writeExecutionAuditFixture(projectDir) {
@@ -686,6 +753,7 @@ async function run(command, args, options) {
   try {
     const result = await execFileAsync(command, args, {
       cwd: options.cwd,
+      env: options.env,
       maxBuffer: 1024 * 1024 * 10
     });
     return {
@@ -714,6 +782,7 @@ async function runAllowFailure(command, args, options) {
   try {
     const result = await execFileAsync(command, args, {
       cwd: options.cwd,
+      env: options.env,
       maxBuffer: 1024 * 1024 * 10
     });
     return {
