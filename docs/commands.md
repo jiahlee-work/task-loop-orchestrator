@@ -63,7 +63,7 @@ task-loop-orchestrator doctor --jira --json
 
 JSON: supported with `--json`.
 
-Behavior: read-only. It checks Node.js, Git repository presence, config loading, `.gitignore`, store path access, optional read-only GitHub CLI diagnostics, and optional Jira CLI availability instead of writing repository state. Warnings and failures include a short recommended action and safe command suggestions where available.
+Behavior: read-only. It checks Node.js, Git repository presence, config loading, `.gitignore`, store path access, optional read-only GitHub CLI diagnostics, and optional Jira MCP availability instead of writing repository state. When MCP is unavailable and CLI fallback is enabled, it also reports local Jira CLI availability. Warnings and failures include a short recommended action and safe command suggestions where available.
 
 ## Run Loop
 
@@ -89,7 +89,7 @@ Useful options:
 
 JSON: supported with `--json`.
 
-Behavior: writes run state under `.orchestrator/runs/`. With `--jira`, the command reads one Jira issue through the read-only Jira CLI provider and converts it into the run `TaskSpec`. If the local `jira` command is missing or not authenticated, run `task-loop-orchestrator doctor --jira --json` and follow the suggested install/auth commands. Default mock roles and dry-run adapters do not call external write-side systems.
+Behavior: writes run state under `.orchestrator/runs/`. With `--jira`, the command reads one Jira issue through the configured Jira provider and converts it into the run `TaskSpec`. The default provider launches the `mcp-atlassian` MCP server directly through stdio when `JIRA_URL` and Jira auth environment variables are present; local Jira CLI remains a fallback. If issue reading fails, run `task-loop-orchestrator doctor --jira --json` and follow the suggested setup commands. Default mock roles and dry-run adapters do not call external write-side systems.
 
 ### `resume <runId> [--max-iterations n] [--json]`
 

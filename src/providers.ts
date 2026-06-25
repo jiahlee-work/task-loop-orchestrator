@@ -1,5 +1,8 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport, getDefaultEnvironment } from "@modelcontextprotocol/sdk/client/stdio.js";
+import type { JiraMcpConfig } from "./config.js";
 import type {
   GitHubCheckStatus,
   GitHubCheckSummary,
@@ -43,6 +46,14 @@ export interface JiraProvider {
   getIssue(key: string): Promise<JiraIssue | undefined>;
   transitionIssue?(input: { key: string; transition: string }): Promise<unknown>;
 }
+
+export interface McpClientSession {
+  listTools(): Promise<{ tools: Array<{ name: string }> }>;
+  callTool(name: string, args: Record<string, unknown>): Promise<unknown>;
+  close(): Promise<void>;
+}
+
+export type McpClientSessionFactory = (config: JiraMcpConfig, rootDir: string) => Promise<McpClientSession>;
 
 export interface ToolProviders {
   repo: RepoProvider;
@@ -304,6 +315,63 @@ export class JiraCliProvider implements JiraProvider {
   }
 }
 
+export class JiraMcpProvider implements JiraProvider {
+  constructor(
+    private readonly config: JiraMcpConfig,
+    private readonly rootDir: string = process.cwd(),
+    private readonly sessionFactory: McpClientSessionFactory = createStdioMcpSession
+  ) {}
+
+  async getIssue(key: string): Promise<JiraIssue | undefined> {
+    const issueKey = key.trim();
+    if (!issueKey) {
+      return undefined;
+    }
+
+    if (!hasJiraMcpEnvironment(this.config)) {
+      return undefined;
+    }
+
+    let session: McpClientSession | undefined;
+    try {
+      session = await this.sessionFactory(this.config, this.rootDir);
+      const result = await session.callTool(this.config.toolName, {
+        [this.config.issueKeyArgument]: issueKey
+      });
+      return normalizeJiraIssueFromMcpResult(issueKey, result);
+    } catch {
+      return undefined;
+    } finally {
+      await closeMcpSession(session);
+    }
+  }
+
+  async hasIssueTool(): Promise<boolean> {
+    if (!hasJiraMcpEnvironment(this.config)) {
+      return false;
+    }
+
+    let session: McpClientSession | undefined;
+    try {
+      session = await this.sessionFactory(this.config, this.rootDir);
+      const result = await session.listTools();
+      return result.tools.some((tool) => tool.name === this.config.toolName);
+    } catch {
+      return false;
+    } finally {
+      await closeMcpSession(session);
+    }
+  }
+}
+
+export function hasJiraMcpEnvironment(config: JiraMcpConfig): boolean {
+  const env = mcpEnvironment(config.env);
+  const hasUrl = Boolean(env.JIRA_URL);
+  const hasCloudAuth = Boolean(env.JIRA_USERNAME && env.JIRA_API_TOKEN);
+  const hasPersonalToken = Boolean(env.JIRA_PERSONAL_TOKEN);
+  return hasUrl && (hasCloudAuth || hasPersonalToken);
+}
+
 export function createMockToolProviders(): ToolProviders {
   return {
     repo: new MockRepoProvider()
@@ -315,6 +383,54 @@ export function createGitToolProviders(rootDir: string = process.cwd(), github?:
     repo: new GitRepoProvider(rootDir),
     ...(github ? { github } : {})
   };
+}
+
+async function createStdioMcpSession(config: JiraMcpConfig, rootDir: string): Promise<McpClientSession> {
+  const transport = new StdioClientTransport({
+    command: config.command,
+    args: config.args,
+    cwd: rootDir,
+    env: mcpEnvironment(config.env),
+    stderr: "pipe"
+  });
+  const client = new Client({ name: "task-loop-orchestrator", version: "0.1.0" }, { capabilities: {} });
+  await client.connect(transport);
+
+  return {
+    async listTools() {
+      return client.listTools();
+    },
+    async callTool(name, args) {
+      return client.callTool({ name, arguments: args });
+    },
+    async close() {
+      await client.close();
+      await transport.close();
+    }
+  };
+}
+
+function mcpEnvironment(overrides: Record<string, string>): Record<string, string> {
+  const env = { ...getDefaultEnvironment() };
+  for (const [key, value] of Object.entries(process.env)) {
+    if (typeof value === "string" && (key.startsWith("JIRA_") || key.startsWith("ATLASSIAN_"))) {
+      env[key] = value;
+    }
+  }
+
+  return { ...env, ...overrides };
+}
+
+async function closeMcpSession(session: McpClientSession | undefined): Promise<void> {
+  if (!session) {
+    return;
+  }
+
+  try {
+    await session.close();
+  } catch {
+    // The primary MCP operation already produced the useful outcome.
+  }
 }
 
 export function createTaskSpecFromJiraIssue(issue: JiraIssue, permissionMode: PermissionMode = "write"): TaskSpec {
@@ -409,6 +525,52 @@ function normalizeJiraIssue(fallbackKey: string, value: Record<string, unknown>)
     comments: jiraComments(fields.comment ?? value.comments),
     acceptanceCriteria: acceptanceCriteriaFromFields(fields)
   };
+}
+
+function normalizeJiraIssueFromMcpResult(fallbackKey: string, result: unknown): JiraIssue | undefined {
+  for (const candidate of jiraIssueCandidatesFromMcpResult(result)) {
+    const issue = normalizeJiraIssue(fallbackKey, candidate);
+    if (issue) {
+      return issue;
+    }
+  }
+
+  return undefined;
+}
+
+function jiraIssueCandidatesFromMcpResult(result: unknown): Record<string, unknown>[] {
+  if (!isRecord(result)) {
+    return [];
+  }
+
+  const candidates: Record<string, unknown>[] = [];
+  if (isRecord(result.structuredContent)) {
+    candidates.push(result.structuredContent);
+  }
+
+  const content = Array.isArray(result.content) ? result.content : [];
+  for (const item of content) {
+    if (!isRecord(item)) {
+      continue;
+    }
+
+    if (typeof item.text === "string") {
+      const parsed = parseJson(item.text);
+      if (isRecord(parsed)) {
+        candidates.push(parsed);
+      }
+    }
+
+    const resource = item.resource;
+    if (isRecord(resource) && typeof resource.text === "string") {
+      const parsed = parseJson(resource.text);
+      if (isRecord(parsed)) {
+        candidates.push(parsed);
+      }
+    }
+  }
+
+  return candidates;
 }
 
 function stringValue(value: unknown): string | undefined {

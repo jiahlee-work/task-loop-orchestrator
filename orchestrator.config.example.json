@@ -2,6 +2,19 @@
   "executor": "mock",
   "reviewer": "mock",
   "github": "none",
+  "jira": {
+    "provider": "mcp-atlassian",
+    "fallback": "cli",
+    "mcp": {
+      "command": "uvx",
+      "args": [
+        "mcp-atlassian"
+      ],
+      "toolName": "jira_get_issue",
+      "issueKeyArgument": "issue_key",
+      "env": {}
+    }
+  },
   "permissionMode": "write",
   "worktree": {
     "enabled": false

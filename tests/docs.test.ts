@@ -897,7 +897,7 @@ describe("command reference documentation", () => {
     expectSectionContains(sections, "doctor", [
       "read-only",
       "read-only GitHub CLI diagnostics",
-      "optional Jira CLI availability",
+      "optional Jira MCP availability",
       "instead of writing repository state"
     ]);
     expectSectionContains(sections, "status", ["read-only", "does not modify local state or external systems"]);

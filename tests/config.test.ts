@@ -32,6 +32,19 @@ describe("loadOrchestratorConfig", () => {
         executor: "codex-cli-dry-run",
         reviewer: "local-evidence",
         github: "gh-cli",
+        jira: {
+          provider: "cli",
+          fallback: "none",
+          mcp: {
+            command: "custom-mcp",
+            args: ["--stdio"],
+            toolName: "custom_jira_get_issue",
+            issueKeyArgument: "key",
+            env: {
+              JIRA_URL: "https://jira.example.com"
+            }
+          }
+        },
         permissionMode: "maintainer",
         worktree: {
           enabled: true
@@ -45,6 +58,19 @@ describe("loadOrchestratorConfig", () => {
       executor: "codex-cli-dry-run",
       reviewer: "local-evidence",
       github: "gh-cli",
+      jira: {
+        provider: "cli",
+        fallback: "none",
+        mcp: {
+          command: "custom-mcp",
+          args: ["--stdio"],
+          toolName: "custom_jira_get_issue",
+          issueKeyArgument: "key",
+          env: {
+            JIRA_URL: "https://jira.example.com"
+          }
+        }
+      },
       permissionMode: "maintainer",
       worktree: {
         enabled: true

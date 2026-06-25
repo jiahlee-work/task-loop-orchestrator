@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { appendEvent } from "./audit.js";
 import { createPullRequestApproval, preparePullRequestExecution } from "./approval.js";
 import {
+  type JiraConfig,
   loadOrchestratorConfig,
   normalizeExecutorMode,
   normalizeGitHubProviderMode,
@@ -36,7 +37,7 @@ import { createIntegrationCheckpoint } from "./integration.js";
 import { RootOrchestrator, createTaskSpec } from "./orchestrator.js";
 import { checkPermission } from "./permission.js";
 import { createPullRequestPlan } from "./pr-plan.js";
-import { createGitToolProviders, createTaskSpecFromJiraIssue, GitHubCliProvider, JiraCliProvider } from "./providers.js";
+import { createGitToolProviders, createTaskSpecFromJiraIssue, GitHubCliProvider, JiraCliProvider, JiraMcpProvider } from "./providers.js";
 import { LocalEvidenceReviewer } from "./reviewers.js";
 import { createMockRoleProviders, type RoleProviders } from "./roles.js";
 import { createRunCliReport } from "./run-report.js";
@@ -280,7 +281,8 @@ function printPlainWriteRunnerError(
 
 async function doctorCommand(args: ParsedArgs): Promise<void> {
   const githubMode = stringFlag(args.flags, "github") ? githubFlag(stringFlag(args.flags, "github")) : "none";
-  const report = await runDoctor(process.cwd(), { githubMode, jira: args.flags.jira === true });
+  const config = args.flags.jira === true ? await loadOrchestratorConfig(process.cwd()).catch(() => undefined) : undefined;
+  const report = await runDoctor(process.cwd(), { githubMode, jira: args.flags.jira === true, jiraConfig: config?.jira });
 
   if (args.flags.json === true) {
     printJson("doctor", report);
@@ -338,7 +340,7 @@ async function runCommand(args: ParsedArgs): Promise<void> {
   const reviewerMode = stringFlag(args.flags, "reviewer") ? reviewerFlag(stringFlag(args.flags, "reviewer")) : config.reviewer;
   const permissionMode = stringFlag(args.flags, "permission") ? permissionFlag(stringFlag(args.flags, "permission")) : config.permissionMode;
   const taskSpec = jiraKey
-    ? await createTaskSpecFromJiraKey(jiraKey, permissionMode)
+    ? await createTaskSpecFromJiraKey(jiraKey, permissionMode, config.jira)
     : createTaskSpec({
         title,
         description: stringFlag(args.flags, "description"),
@@ -364,17 +366,34 @@ async function runCommand(args: ParsedArgs): Promise<void> {
   console.log(`Saved: ${store.pathForRun(run.id)}`);
 }
 
-async function createTaskSpecFromJiraKey(jiraKey: string, permissionMode: PermissionMode) {
-  const provider = new JiraCliProvider(process.cwd());
-  const issue = await provider.getIssue(jiraKey);
-  if (!issue) {
+async function createTaskSpecFromJiraKey(jiraKey: string, permissionMode: PermissionMode, jiraConfig: JiraConfig) {
+  const primaryProvider =
+    jiraConfig.provider === "mcp-atlassian"
+      ? new JiraMcpProvider(jiraConfig.mcp, process.cwd())
+      : new JiraCliProvider(process.cwd());
+  const issue = await primaryProvider.getIssue(jiraKey);
+  if (issue) {
+    return createTaskSpecFromJiraIssue(issue, permissionMode);
+  }
+
+  if (jiraConfig.provider === "mcp-atlassian" && jiraConfig.fallback === "cli") {
+    const fallbackIssue = await new JiraCliProvider(process.cwd()).getIssue(jiraKey);
+    if (fallbackIssue) {
+      return createTaskSpecFromJiraIssue(fallbackIssue, permissionMode);
+    }
+  }
+
+  if (jiraConfig.provider === "mcp-atlassian") {
     throw new Error(
-      `Jira issue ${jiraKey} was not found or could not be read. Install and authenticate the Jira CLI with ` +
-        `brew install jira-cli and jira init, then verify jira issue view ${jiraKey} --raw works.`
+      `Jira issue ${jiraKey} was not found or could not be read. Configure Jira MCP with ` +
+        `JIRA_URL, JIRA_USERNAME, and JIRA_API_TOKEN, then verify the MCP server exposes ${jiraConfig.mcp.toolName}.`
     );
   }
 
-  return createTaskSpecFromJiraIssue(issue, permissionMode);
+  throw new Error(
+    `Jira issue ${jiraKey} was not found or could not be read. Install and authenticate the Jira CLI with ` +
+      `brew install jira-cli and jira init, then verify jira issue view ${jiraKey} --raw works.`
+  );
 }
 
 async function statusCommand(args: ParsedArgs): Promise<void> {

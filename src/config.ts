@@ -1,11 +1,26 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ExecutorMode, GitHubProviderMode, PermissionMode, ReviewerMode } from "./domain.js";
+import type { ExecutorMode, GitHubProviderMode, JiraProviderMode, PermissionMode, ReviewerMode } from "./domain.js";
+
+export interface JiraMcpConfig {
+  command: string;
+  args: string[];
+  toolName: string;
+  issueKeyArgument: string;
+  env: Record<string, string>;
+}
+
+export interface JiraConfig {
+  provider: JiraProviderMode;
+  fallback: "cli" | "none";
+  mcp: JiraMcpConfig;
+}
 
 export interface OrchestratorConfig {
   executor: ExecutorMode;
   reviewer: ReviewerMode;
   github: GitHubProviderMode;
+  jira: JiraConfig;
   permissionMode: PermissionMode;
   worktree: {
     enabled: boolean;
@@ -17,6 +32,17 @@ export const defaultOrchestratorConfig: OrchestratorConfig = {
   executor: "mock",
   reviewer: "mock",
   github: "none",
+  jira: {
+    provider: "mcp-atlassian",
+    fallback: "cli",
+    mcp: {
+      command: "uvx",
+      args: ["mcp-atlassian"],
+      toolName: "jira_get_issue",
+      issueKeyArgument: "issue_key",
+      env: {}
+    }
+  },
   permissionMode: "write",
   worktree: {
     enabled: false
@@ -43,6 +69,7 @@ export function normalizeConfig(input: Partial<OrchestratorConfig>): Orchestrato
     executor: normalizeExecutorMode(input.executor),
     reviewer: normalizeReviewerMode(input.reviewer),
     github: normalizeGitHubProviderMode(input.github),
+    jira: normalizeJiraConfig(input.jira),
     permissionMode: normalizePermissionMode(input.permissionMode),
     worktree: {
       enabled: typeof input.worktree?.enabled === "boolean" ? input.worktree.enabled : defaultOrchestratorConfig.worktree.enabled
@@ -78,12 +105,61 @@ export function normalizeGitHubProviderMode(value: unknown): GitHubProviderMode 
   return defaultOrchestratorConfig.github;
 }
 
+export function normalizeJiraProviderMode(value: unknown): JiraProviderMode {
+  if (value === "mcp-atlassian" || value === "cli") {
+    return value;
+  }
+
+  return defaultOrchestratorConfig.jira.provider;
+}
+
+export function normalizeJiraConfig(value: unknown): JiraConfig {
+  if (!isRecord(value)) {
+    return defaultOrchestratorConfig.jira;
+  }
+
+  const fallback = value.fallback === "none" || value.fallback === "cli" ? value.fallback : defaultOrchestratorConfig.jira.fallback;
+  return {
+    provider: normalizeJiraProviderMode(value.provider),
+    fallback,
+    mcp: normalizeJiraMcpConfig(value.mcp)
+  };
+}
+
+function normalizeJiraMcpConfig(value: unknown): JiraMcpConfig {
+  if (!isRecord(value)) {
+    return defaultOrchestratorConfig.jira.mcp;
+  }
+
+  return {
+    command: typeof value.command === "string" && value.command.trim() ? value.command.trim() : defaultOrchestratorConfig.jira.mcp.command,
+    args: Array.isArray(value.args)
+      ? value.args.filter((item): item is string => typeof item === "string")
+      : defaultOrchestratorConfig.jira.mcp.args,
+    toolName:
+      typeof value.toolName === "string" && value.toolName.trim()
+        ? value.toolName.trim()
+        : defaultOrchestratorConfig.jira.mcp.toolName,
+    issueKeyArgument:
+      typeof value.issueKeyArgument === "string" && value.issueKeyArgument.trim()
+        ? value.issueKeyArgument.trim()
+        : defaultOrchestratorConfig.jira.mcp.issueKeyArgument,
+    env: isRecord(value.env)
+      ? Object.fromEntries(Object.entries(value.env).filter((entry): entry is [string, string] => typeof entry[1] === "string"))
+      : defaultOrchestratorConfig.jira.mcp.env
+  };
+}
+
 export function normalizePermissionMode(value: unknown): PermissionMode {
   if (value === "read" || value === "write" || value === "maintainer") {
     return value;
   }
 
   return defaultOrchestratorConfig.permissionMode;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function isMissingFileError(error: unknown): boolean {

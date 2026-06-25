@@ -1,9 +1,16 @@
 import { access, readFile, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join } from "node:path";
-import { loadOrchestratorConfig } from "./config.js";
+import { defaultOrchestratorConfig, loadOrchestratorConfig, type JiraConfig } from "./config.js";
 import type { GitHubProviderMode } from "./domain.js";
-import { GitHubCliProvider, runCommand, type CommandRunner, type GitHubProvider } from "./providers.js";
+import {
+  GitHubCliProvider,
+  JiraMcpProvider,
+  runCommand,
+  type CommandRunner,
+  type GitHubProvider,
+  type McpClientSessionFactory
+} from "./providers.js";
 
 export type DoctorStatus = "pass" | "warn" | "fail";
 
@@ -33,6 +40,8 @@ export interface DoctorReport {
 export interface DoctorOptions {
   githubMode?: GitHubProviderMode;
   jira?: boolean;
+  jiraConfig?: JiraConfig;
+  jiraMcpSessionFactory?: McpClientSessionFactory;
   commandRunner?: CommandRunner;
   githubProvider?: GitHubProvider;
   nodeVersion?: string;
@@ -70,7 +79,14 @@ export async function runDoctor(rootDir: string = process.cwd(), options: Doctor
   }
 
   if (options.jira === true) {
-    checks.push(await checkJiraCli(rootDir, commandRunner));
+    checks.push(
+      ...(await checkJira(
+        rootDir,
+        commandRunner,
+        options.jiraConfig ?? defaultOrchestratorConfig.jira,
+        options.jiraMcpSessionFactory
+      ))
+    );
   }
 
   return {
@@ -338,11 +354,74 @@ async function checkGitHub(github: GitHubProvider): Promise<DoctorCheck[]> {
   return checks;
 }
 
-async function checkJiraCli(rootDir: string, commandRunner: CommandRunner): Promise<DoctorCheck> {
+async function checkJira(
+  rootDir: string,
+  commandRunner: CommandRunner,
+  jiraConfig: JiraConfig,
+  jiraMcpSessionFactory?: McpClientSessionFactory
+): Promise<DoctorCheck[]> {
+  if (jiraConfig.provider === "cli") {
+    return [await checkJiraCli(rootDir, commandRunner)];
+  }
+
+  const checks = [await checkJiraMcp(rootDir, jiraConfig, jiraMcpSessionFactory)];
+  if (jiraConfig.fallback === "cli" && checks[0]?.status !== "pass") {
+    checks.push(await checkJiraCli(rootDir, commandRunner, "jira_cli_fallback"));
+  }
+
+  return checks;
+}
+
+async function checkJiraMcp(
+  rootDir: string,
+  jiraConfig: JiraConfig,
+  jiraMcpSessionFactory?: McpClientSessionFactory
+): Promise<DoctorCheck> {
+  const provider = new JiraMcpProvider(jiraConfig.mcp, rootDir, jiraMcpSessionFactory);
+  const hasIssueTool = await provider.hasIssueTool();
+  if (hasIssueTool) {
+    return {
+      id: "jira_mcp",
+      status: "pass",
+      summary: `Jira MCP server exposes ${jiraConfig.mcp.toolName}.`,
+      details: {
+        command: jiraConfig.mcp.command,
+        args: jiraConfig.mcp.args,
+        toolName: jiraConfig.mcp.toolName
+      }
+    };
+  }
+
+  return {
+    id: "jira_mcp",
+    status: "warn",
+    summary: "Jira MCP server is not available or does not expose the issue read tool.",
+    details: {
+      command: jiraConfig.mcp.command,
+      args: jiraConfig.mcp.args,
+      toolName: jiraConfig.mcp.toolName
+    },
+    recommendedAction: "Configure Jira MCP environment variables and ensure the MCP server can start.",
+    suggestions: [
+      commandSuggestion(
+        "Set Jira MCP environment",
+        ["export", "JIRA_URL=https://your-company.atlassian.net"],
+        "Provide the Jira site URL before running the orchestrator."
+      ),
+      commandSuggestion(
+        "Set Jira MCP API token",
+        ["export", "JIRA_API_TOKEN=your-atlassian-api-token"],
+        "Provide a Jira API token for the MCP server process."
+      )
+    ]
+  };
+}
+
+async function checkJiraCli(rootDir: string, commandRunner: CommandRunner, id = "jira_cli"): Promise<DoctorCheck> {
   const result = await commandRunner("jira", ["version"], rootDir);
   if (result.exitCode === 0) {
     return {
-      id: "jira_cli",
+      id,
       status: "pass",
       summary: "Jira CLI is installed.",
       details: {
@@ -352,7 +431,7 @@ async function checkJiraCli(rootDir: string, commandRunner: CommandRunner): Prom
   }
 
   return {
-    id: "jira_cli",
+    id,
     status: "warn",
     summary: "Jira CLI is not installed or is not available on PATH.",
     details: {

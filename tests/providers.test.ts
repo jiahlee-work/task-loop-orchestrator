@@ -9,6 +9,7 @@ import {
   GitHubCliProvider,
   GitRepoProvider,
   JiraCliProvider,
+  JiraMcpProvider,
   type CommandRunner
 } from "../src/providers.js";
 
@@ -356,5 +357,58 @@ describe("JiraCliProvider", () => {
     expect(spec.description).toContain("Status: To Do");
     expect(spec.description).toContain("Users need a CSV export from billing.");
     expect(spec.description).toContain("Designer: Keep the button near the existing download action.");
+  });
+});
+
+describe("JiraMcpProvider", () => {
+  it("reads a Jira issue through an MCP jira_get_issue tool", async () => {
+    const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+    const provider = new JiraMcpProvider(
+      {
+        command: "uvx",
+        args: ["mcp-atlassian"],
+        toolName: "jira_get_issue",
+        issueKeyArgument: "issue_key",
+        env: {
+          JIRA_URL: "https://jira.example.com",
+          JIRA_USERNAME: "bot@example.com",
+          JIRA_API_TOKEN: "token"
+        }
+      },
+      "/tmp/repo",
+      async () => ({
+        async listTools() {
+          return { tools: [{ name: "jira_get_issue" }] };
+        },
+        async callTool(name, args) {
+          calls.push({ name, args });
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  key: "ABC-123",
+                  fields: {
+                    summary: "Read Jira through MCP",
+                    description: "MCP issue body.",
+                    status: { name: "To Do" }
+                  }
+                })
+              }
+            ]
+          };
+        },
+        async close() {}
+      })
+    );
+
+    await expect(provider.hasIssueTool()).resolves.toBe(true);
+    await expect(provider.getIssue("ABC-123")).resolves.toMatchObject({
+      key: "ABC-123",
+      title: "Read Jira through MCP",
+      description: "MCP issue body.",
+      status: "To Do"
+    });
+    expect(calls).toEqual([{ name: "jira_get_issue", args: { issue_key: "ABC-123" } }]);
   });
 });

@@ -6,6 +6,8 @@ export type ReviewerMode = "mock" | "local-evidence";
 
 export type GitHubProviderMode = "none" | "gh-cli";
 
+export type JiraProviderMode = "mcp-atlassian" | "cli";
+
 export type ReviewVerdict = "accept" | "request_changes" | "reschedule" | "owner_decision";
 
 export type IntegrationCheckpointStatus = "clean" | "needs_attention" | "blocked";

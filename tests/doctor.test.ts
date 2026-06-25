@@ -153,7 +153,7 @@ describe("doctor", () => {
     });
   });
 
-  it("reports missing Jira CLI only when Jira diagnostics are enabled", async () => {
+  it("reports missing Jira MCP and CLI fallback only when Jira diagnostics are enabled", async () => {
     const root = await tempRoot();
     const calls: Array<{ command: string; args: string[] }> = [];
     const commandRunner: CommandRunner = async (command, args = []) => {
@@ -171,12 +171,23 @@ describe("doctor", () => {
 
     const defaultReport = await runDoctor(root, { commandRunner });
     expect(defaultReport.checks.some((item) => item.id === "jira_cli")).toBe(false);
+    expect(defaultReport.checks.some((item) => item.id === "jira_mcp")).toBe(false);
     expect(calls.some((call) => call.command === "jira")).toBe(false);
 
-    const jiraReport = await runDoctor(root, { commandRunner, jira: true });
+    const jiraReport = await runDoctor(root, {
+      commandRunner,
+      jira: true,
+      jiraMcpSessionFactory: async () => {
+        throw new Error("mcp unavailable");
+      }
+    });
 
     expect(jiraReport.status).toBe("warn");
-    expect(check(jiraReport.checks, "jira_cli")).toMatchObject({
+    expect(check(jiraReport.checks, "jira_mcp")).toMatchObject({
+      status: "warn",
+      recommendedAction: "Configure Jira MCP environment variables and ensure the MCP server can start."
+    });
+    expect(check(jiraReport.checks, "jira_cli_fallback")).toMatchObject({
       status: "warn",
       recommendedAction: "Install and authenticate the Jira CLI before using run --jira.",
       suggestions: [
@@ -195,6 +206,43 @@ describe("doctor", () => {
       ]
     });
     expect(calls.map((call) => [call.command, ...call.args])).toContainEqual(["jira", "version"]);
+  });
+
+  it("passes Jira MCP diagnostics when the issue read tool is available", async () => {
+    const root = await tempRoot();
+
+    const report = await runDoctor(root, {
+      commandRunner: async (command) =>
+        command === "git" ? { exitCode: 0, stdout: "true\n", stderr: "" } : { exitCode: 0, stdout: "", stderr: "" },
+      jira: true,
+      jiraConfig: {
+        provider: "mcp-atlassian",
+        fallback: "cli",
+        mcp: {
+          command: "uvx",
+          args: ["mcp-atlassian"],
+          toolName: "jira_get_issue",
+          issueKeyArgument: "issue_key",
+          env: {
+            JIRA_URL: "https://jira.example.com",
+            JIRA_USERNAME: "bot@example.com",
+            JIRA_API_TOKEN: "token"
+          }
+        }
+      },
+      jiraMcpSessionFactory: async () => ({
+        async listTools() {
+          return { tools: [{ name: "jira_get_issue" }] };
+        },
+        async callTool() {
+          return { content: [] };
+        },
+        async close() {}
+      })
+    });
+
+    expect(check(report.checks, "jira_mcp")).toMatchObject({ status: "pass" });
+    expect(report.checks.some((item) => item.id === "jira_cli_fallback")).toBe(false);
   });
 
   it("shows doctor in CLI usage", async () => {
