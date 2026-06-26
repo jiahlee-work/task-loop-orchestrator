@@ -50,6 +50,21 @@ JSON: supported with `--json`.
 
 Behavior: writes local bootstrap files only. It creates `orchestrator.config.json` when missing and ensures `.gitignore` contains `.orchestrator/`. Existing config is skipped unless `--force` is provided, so rerunning `init` is safe.
 
+### `jira setup [--url url] [--username email] [--api-token token|--personal-token token] [--skip-check]`
+
+Purpose: Save local Jira MCP credentials for the current project.
+
+Example:
+
+```bash
+task-loop-orchestrator jira setup
+task-loop-orchestrator jira setup --url https://company.atlassian.net --username me@company.com --api-token "$JIRA_API_TOKEN"
+```
+
+JSON: not supported.
+
+Behavior: writes `.orchestrator/jira.env` with file mode `0600`, so only the local file owner can read or update it. The file is under `.orchestrator/`, which `init` adds to `.gitignore`. By default the command verifies that the configured MCP server exposes the Jira issue read tool; use `--skip-check` to save credentials without starting the MCP server.
+
 ### `doctor [--github none|gh-cli] [--jira] [--json]`
 
 Purpose: Diagnose whether the current project is ready to use the orchestrator.

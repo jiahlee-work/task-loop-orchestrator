@@ -42,6 +42,7 @@ async function main() {
     await runStep("help", async () => {
       const help = await run(bin, ["--help"], { cwd: projectDir });
       assertIncludes(help.stdout, "task-loop-orchestrator init", "help output should include init usage");
+      assertIncludes(help.stdout, "task-loop-orchestrator jira setup", "help output should include jira setup usage");
       assertIncludes(help.stdout, "task-loop-orchestrator doctor", "help output should include doctor usage");
       assertIncludes(help.stdout, "task-loop-orchestrator execution-audit", "help output should include execution-audit usage");
       assertIncludes(help.stdout, "task-loop-orchestrator write-readiness", "help output should include write-readiness usage");
@@ -505,7 +506,7 @@ async function main() {
 
     console.log("Package smoke passed:");
     console.log(`- tarball: ${tarballPath}`);
-    console.log("- help output includes init, execution-audit, and version usage");
+    console.log("- help output includes init, jira setup, execution-audit, and version usage");
     console.log("- installed binary version matches package.json");
     console.log("- doctor reports pre-init warnings and post-init readiness");
     console.log("- init creates config and .gitignore");

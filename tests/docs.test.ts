@@ -806,6 +806,7 @@ describe("command reference documentation", () => {
       "--help",
       "--version",
       "init [--force] [--json]",
+      "jira setup [--url url] [--username email] [--api-token token|--personal-token token] [--skip-check]",
       "doctor [--github none|gh-cli] [--jira] [--json]",
       "run <title> [--description text] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]",
       "run --jira ISSUE-KEY [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]",
@@ -824,6 +825,7 @@ describe("command reference documentation", () => {
       "--help",
       "--version",
       "init",
+      "jira",
       "doctor",
       "run",
       "resume",
@@ -885,7 +887,7 @@ describe("command reference documentation", () => {
       .sort();
 
     expect(supportedInDocs).toEqual([...cliJsonCommands].sort());
-    expect(unsupportedInDocs).toEqual(["--help", "--version"]);
+    expect(unsupportedInDocs).toEqual(["--help", "--version", "jira"]);
   });
 
   it("keeps per-command write-side boundaries explicit", async () => {
@@ -894,6 +896,7 @@ describe("command reference documentation", () => {
 
     expectSectionContains(sections, "--help", ["read-only", "no files or external systems are modified"]);
     expectSectionContains(sections, "--version", ["read-only", "no files or external systems are modified"]);
+    expectSectionContains(sections, "jira", [".orchestrator/jira.env", "`0600`", "MCP server exposes the Jira issue read tool"]);
     expectSectionContains(sections, "doctor", [
       "read-only",
       "read-only GitHub CLI diagnostics",

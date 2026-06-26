@@ -11,6 +11,8 @@ export * from "./executors.js";
 export * from "./graph.js";
 export * from "./init.js";
 export * from "./integration.js";
+export * from "./jira-env.js";
+export * from "./jira-setup.js";
 export * from "./orchestrator.js";
 export * from "./permission.js";
 export * from "./pr-plan.js";

@@ -185,7 +185,15 @@ describe("doctor", () => {
     expect(jiraReport.status).toBe("warn");
     expect(check(jiraReport.checks, "jira_mcp")).toMatchObject({
       status: "warn",
-      recommendedAction: "Configure Jira MCP environment variables and ensure the MCP server can start."
+      recommendedAction: "Run task-loop-orchestrator jira setup to save local Jira MCP credentials.",
+      suggestions: [
+        {
+          label: "Set up Jira MCP",
+          command: ["task-loop-orchestrator", "jira", "setup"],
+          reason: "Save local Jira MCP credentials in .orchestrator/jira.env.",
+          destructive: false
+        }
+      ]
     });
     expect(check(jiraReport.checks, "jira_cli_fallback")).toMatchObject({
       status: "warn",

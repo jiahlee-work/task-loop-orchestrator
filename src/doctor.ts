@@ -5,6 +5,7 @@ import { defaultOrchestratorConfig, loadOrchestratorConfig, type JiraConfig } fr
 import type { GitHubProviderMode } from "./domain.js";
 import {
   GitHubCliProvider,
+  hasJiraMcpEnvironment,
   JiraMcpProvider,
   runCommand,
   type CommandRunner,
@@ -377,6 +378,7 @@ async function checkJiraMcp(
   jiraConfig: JiraConfig,
   jiraMcpSessionFactory?: McpClientSessionFactory
 ): Promise<DoctorCheck> {
+  const hasEnv = hasJiraMcpEnvironment(jiraConfig.mcp);
   const provider = new JiraMcpProvider(jiraConfig.mcp, rootDir, jiraMcpSessionFactory);
   const hasIssueTool = await provider.hasIssueTool();
   if (hasIssueTool) {
@@ -395,25 +397,33 @@ async function checkJiraMcp(
   return {
     id: "jira_mcp",
     status: "warn",
-    summary: "Jira MCP server is not available or does not expose the issue read tool.",
+    summary: hasEnv
+      ? "Jira MCP server could not be verified or does not expose the issue read tool."
+      : "Jira MCP credentials are not configured.",
     details: {
       command: jiraConfig.mcp.command,
       args: jiraConfig.mcp.args,
       toolName: jiraConfig.mcp.toolName
     },
-    recommendedAction: "Configure Jira MCP environment variables and ensure the MCP server can start.",
-    suggestions: [
-      commandSuggestion(
-        "Set Jira MCP environment",
-        ["export", "JIRA_URL=https://your-company.atlassian.net"],
-        "Provide the Jira site URL before running the orchestrator."
-      ),
-      commandSuggestion(
-        "Set Jira MCP API token",
-        ["export", "JIRA_API_TOKEN=your-atlassian-api-token"],
-        "Provide a Jira API token for the MCP server process."
-      )
-    ]
+    recommendedAction: hasEnv
+      ? "Check that uvx and mcp-atlassian can start, and confirm Jira credentials are valid."
+      : "Run task-loop-orchestrator jira setup to save local Jira MCP credentials.",
+    suggestions: hasEnv
+      ? [
+          commandSuggestion("Run Jira MCP server", [jiraConfig.mcp.command, ...jiraConfig.mcp.args], "Start the configured MCP server directly."),
+          commandSuggestion(
+            "Re-run Jira doctor",
+            ["task-loop-orchestrator", "doctor", "--jira"],
+            "Re-check Jira MCP after fixing server or credential issues."
+          )
+        ]
+      : [
+          commandSuggestion(
+            "Set up Jira MCP",
+            ["task-loop-orchestrator", "jira", "setup"],
+            "Save local Jira MCP credentials in .orchestrator/jira.env."
+          )
+        ]
   };
 }
 

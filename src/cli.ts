@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
+import { createInterface } from "node:readline/promises";
+import { Writable } from "node:stream";
 import { appendEvent } from "./audit.js";
 import { createPullRequestApproval, preparePullRequestExecution } from "./approval.js";
 import {
@@ -34,6 +36,8 @@ import {
 } from "./execution-intents.js";
 import { initProject } from "./init.js";
 import { createIntegrationCheckpoint } from "./integration.js";
+import { loadJiraConfigWithLocalEnv, readJiraEnvFile } from "./jira-env.js";
+import { setupJiraMcp, type JiraSetupReport } from "./jira-setup.js";
 import { RootOrchestrator, createTaskSpec } from "./orchestrator.js";
 import { checkPermission } from "./permission.js";
 import { createPullRequestPlan } from "./pr-plan.js";
@@ -122,6 +126,7 @@ function printUsage(): void {
   task-loop-orchestrator --help
   task-loop-orchestrator --version
   task-loop-orchestrator init [--force] [--json]
+  task-loop-orchestrator jira setup [--url url] [--username email] [--api-token token|--personal-token token] [--skip-check]
   task-loop-orchestrator doctor [--github none|gh-cli] [--jira] [--json]
   task-loop-orchestrator run <title> [--description text] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]
   task-loop-orchestrator run --jira ISSUE-KEY [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]
@@ -281,8 +286,13 @@ function printPlainWriteRunnerError(
 
 async function doctorCommand(args: ParsedArgs): Promise<void> {
   const githubMode = stringFlag(args.flags, "github") ? githubFlag(stringFlag(args.flags, "github")) : "none";
-  const config = args.flags.jira === true ? await loadOrchestratorConfig(process.cwd()).catch(() => undefined) : undefined;
-  const report = await runDoctor(process.cwd(), { githubMode, jira: args.flags.jira === true, jiraConfig: config?.jira });
+  const config =
+    args.flags.jira === true
+      ? await loadOrchestratorConfig(process.cwd())
+          .then((loadedConfig) => loadJiraConfigWithLocalEnv(process.cwd(), loadedConfig.jira))
+          .catch(() => undefined)
+      : undefined;
+  const report = await runDoctor(process.cwd(), { githubMode, jira: args.flags.jira === true, jiraConfig: config });
 
   if (args.flags.json === true) {
     printJson("doctor", report);
@@ -327,6 +337,99 @@ async function initCommand(args: ParsedArgs): Promise<void> {
   }
 }
 
+async function jiraCommand(args: ParsedArgs): Promise<void> {
+  const subcommand = args.positional[0];
+  if (subcommand !== "setup") {
+    throw new Error("jira requires a subcommand: setup.");
+  }
+
+  const report = await jiraSetupCommand(args);
+  printJiraSetupReport(report);
+}
+
+async function jiraSetupCommand(args: ParsedArgs): Promise<JiraSetupReport> {
+  const existingEnv = await readJiraEnvFile(process.cwd());
+  const url = stringFlag(args.flags, "url") ?? (await promptValue("Jira site URL", existingEnv.JIRA_URL));
+  const personalToken = stringFlag(args.flags, "personal-token");
+
+  if (personalToken) {
+    return setupJiraMcp({
+      rootDir: process.cwd(),
+      url,
+      personalToken,
+      skipCheck: args.flags["skip-check"] === true
+    });
+  }
+
+  const username = stringFlag(args.flags, "username") ?? (await promptValue("Jira email", existingEnv.JIRA_USERNAME));
+  const apiToken =
+    stringFlag(args.flags, "api-token") ??
+    (await promptSecret("Jira API token", existingEnv.JIRA_API_TOKEN ? "leave blank to keep existing" : undefined)) ??
+    existingEnv.JIRA_API_TOKEN;
+
+  return setupJiraMcp({
+    rootDir: process.cwd(),
+    url,
+    username,
+    apiToken,
+    skipCheck: args.flags["skip-check"] === true
+  });
+}
+
+function printJiraSetupReport(report: JiraSetupReport): void {
+  console.log(`Jira setup: ${report.status}`);
+  console.log(`Env file: ${report.envFile}`);
+  console.log(`Auth mode: ${report.authMode}`);
+  console.log(`MCP check: ${report.mcpCheck.status} - ${report.mcpCheck.summary}`);
+  console.log(`Next: ${report.nextCommand}`);
+}
+
+async function promptValue(label: string, defaultValue?: string): Promise<string> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new Error(`${label} is required. Pass it with a flag in non-interactive mode.`);
+  }
+
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const suffix = defaultValue ? ` [${defaultValue}]` : "";
+    const answer = (await rl.question(`${label}${suffix}: `)).trim();
+    return answer || defaultValue || "";
+  } finally {
+    rl.close();
+  }
+}
+
+async function promptSecret(label: string, hint?: string): Promise<string | undefined> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new Error(`${label} is required. Pass it with a flag in non-interactive mode.`);
+  }
+
+  const output = new HiddenPromptOutput();
+  const rl = createInterface({ input: process.stdin, output, terminal: true });
+  try {
+    const suffix = hint ? ` (${hint})` : "";
+    process.stdout.write(`${label}${suffix}: `);
+    output.muted = true;
+    const answer = (await rl.question("")).trim();
+    process.stdout.write("\n");
+    return answer || undefined;
+  } finally {
+    output.muted = false;
+    rl.close();
+  }
+}
+
+class HiddenPromptOutput extends Writable {
+  muted = false;
+
+  override _write(chunk: Buffer | string, encoding: BufferEncoding, callback: (error?: Error | null) => void): void {
+    if (!this.muted) {
+      process.stdout.write(chunk, encoding);
+    }
+    callback();
+  }
+}
+
 async function runCommand(args: ParsedArgs): Promise<void> {
   const jiraKey = stringFlag(args.flags, "jira");
   const title = args.positional.join(" ").trim();
@@ -336,11 +439,12 @@ async function runCommand(args: ParsedArgs): Promise<void> {
 
   const store = new FileRunStore(process.cwd());
   const config = await loadOrchestratorConfig(process.cwd());
+  const jiraConfig = await loadJiraConfigWithLocalEnv(process.cwd(), config.jira);
   const executorMode = stringFlag(args.flags, "executor") ? executorFlag(stringFlag(args.flags, "executor")) : config.executor;
   const reviewerMode = stringFlag(args.flags, "reviewer") ? reviewerFlag(stringFlag(args.flags, "reviewer")) : config.reviewer;
   const permissionMode = stringFlag(args.flags, "permission") ? permissionFlag(stringFlag(args.flags, "permission")) : config.permissionMode;
   const taskSpec = jiraKey
-    ? await createTaskSpecFromJiraKey(jiraKey, permissionMode, config.jira)
+    ? await createTaskSpecFromJiraKey(jiraKey, permissionMode, jiraConfig)
     : createTaskSpec({
         title,
         description: stringFlag(args.flags, "description"),
@@ -1121,6 +1225,11 @@ async function main(): Promise<void> {
 
   if (args.command === "init") {
     await initCommand(args);
+    return;
+  }
+
+  if (args.command === "jira") {
+    await jiraCommand(args);
     return;
   }
 
