@@ -65,7 +65,7 @@ tlo setup gemini --api-key "$GEMINI_API_KEY" --model gemini-2.5-flash
 
 JSON: not supported.
 
-Behavior: writes provider env files such as `.orchestrator/jira.env` and `.orchestrator/gemini.env` with file mode `0600`, so only the local file owner can read or update them. The files are under `.orchestrator/`, which `init` adds to `.gitignore`. By default the command verifies that the configured MCP server exposes the Jira issue read tool or that the Gemini planner model responds; use `--skip-check` to save credentials without a live verification call.
+Behavior: writes provider env files such as `.orchestrator/jira.env` and `.orchestrator/gemini.env` with file mode `0600`, so only the local file owner can read or update them. The files are under `.orchestrator/`, which `init` adds to `.gitignore`. Gemini setup expects a Gemini API key from [Google AI Studio API Keys](https://aistudio.google.com/app/apikey). By default the command verifies that the configured MCP server exposes the Jira issue read tool or that the Gemini planner model responds; use `--skip-check` to save credentials without a live verification call.
 
 ### `doctor [jira|gemini] [--github none|gh-cli] [--json]`
 

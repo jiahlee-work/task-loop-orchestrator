@@ -650,6 +650,10 @@ function preflightRunDependencies(
       reasons: ["Gemini Planner is selected, but Gemini credentials are not configured for this project."],
       next: [
         {
+          description: "Create or view a Gemini API key in Google AI Studio:",
+          command: "https://aistudio.google.com/app/apikey"
+        },
+        {
           description: "Save Gemini API credentials for this project:",
           command: "tlo setup gemini"
         },

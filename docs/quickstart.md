@@ -46,6 +46,18 @@ tlo run OUC-10
 
 `tlo run`은 실행 전에 필요한 provider 설정을 확인합니다. Gemini나 Jira 설정이 빠져 있으면 run 파일을 만들지 않고 실패 이유와 다음 명령을 보여 줍니다. 예를 들어 `tlo setup gemini`, `tlo setup jira`, `tlo doctor jira`처럼 필요한 명령을 `Next`에 표시합니다. 설정이 끝난 프로젝트에서는 `tlo run OUC-10`만 바로 실행하면 됩니다.
 
+## Gemini API key 준비
+
+Gemini Planner를 쓰려면 Google AI Studio에서 API key를 발급받아 현재 프로젝트에 저장해야 합니다.
+
+```bash
+tlo setup gemini
+```
+
+실행하면 Gemini API key를 입력하라는 프롬프트가 나옵니다. key는 [Google AI Studio API Keys](https://aistudio.google.com/app/apikey)에서 만들거나 확인할 수 있습니다. 새 계정은 약관 동의 후 기본 Google Cloud 프로젝트와 key를 만들 수 있고, 기존 Cloud 프로젝트를 쓰는 경우에는 AI Studio에서 프로젝트를 선택하거나 가져온 뒤 key를 만들면 됩니다.
+
+저장된 key는 `.orchestrator/gemini.env`에 들어가며, `init`이 `.orchestrator/`를 `.gitignore`에 추가합니다.
+
 Jira 이슈에 설명을 덧붙이거나, Jira 없이 직접 작업 설명만 넘길 수도 있습니다.
 
 ```bash
