@@ -38,7 +38,7 @@ describe("run CLI report", () => {
   it("shows JSON support for run and resume in CLI usage", async () => {
     const cliSource = await readFile(join(process.cwd(), "src", "cli.ts"), "utf8");
 
-    expect(cliSource).toContain("task-loop-orchestrator run <title>");
+    expect(cliSource).toContain("task-loop-orchestrator run <instruction>");
     expect(cliSource).toContain("[--max-iterations n] [--json]");
     expect(cliSource).toContain("task-loop-orchestrator status [runId] [--json] [--raw]");
     expect(cliSource).toContain("task-loop-orchestrator resume <runId> [--max-iterations n] [--json]");

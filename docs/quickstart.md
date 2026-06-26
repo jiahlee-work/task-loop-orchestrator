@@ -20,17 +20,17 @@ cd task-loop-orchestrator
 corepack enable
 pnpm install --frozen-lockfile
 pnpm run build
+pnpm link --global
 node dist/cli.js --help
 node dist/cli.js --version
 ```
 
-다른 프로젝트에서 반복해서 쓰려면 빌드된 CLI 경로를 환경 변수로 잡아 두세요.
+다른 프로젝트에서는 `tlo` 명령으로 실행합니다.
 
 ```bash
-export TLO="/absolute/path/to/task-loop-orchestrator/dist/cli.js"
 cd /path/to/your-git-project
-node "$TLO" --help
-node "$TLO" doctor --json
+tlo --help
+tlo doctor
 ```
 
 ## 대상 프로젝트 첫 실행
@@ -38,27 +38,38 @@ node "$TLO" doctor --json
 대상 프로젝트에서 아래 순서로 실행합니다.
 
 ```bash
-node "$TLO" init
-node "$TLO" doctor --json
+tlo init
+tlo doctor
+tlo setup jira
+tlo doctor jira
+tlo run OUC-10
+```
 
-run_json="$(node "$TLO" run "Quickstart smoke" --max-iterations 1 --json)"
+Jira 이슈에 설명을 덧붙이거나, Jira 없이 직접 작업 설명만 넘길 수도 있습니다.
+
+```bash
+tlo run OUC-10 --note "이번에는 UI 문구까지 같이 정리해줘"
+tlo run "README의 설치 흐름을 현재 CLI 기준으로 정리해줘"
+```
+
+자동화나 스크립트에서 run id를 정확히 꺼내야 할 때만 `--json`을 붙이면 됩니다.
+
+```bash
+run_json="$(tlo run "Quickstart smoke" --max-iterations 1 --json)"
 run_id="$(printf '%s' "$run_json" | node -e 'let input=""; process.stdin.on("data", c => input += c); process.stdin.on("end", () => console.log(JSON.parse(input).runId));')"
-
-node "$TLO" status "$run_id" --json
-node "$TLO" resume "$run_id" --max-iterations 1 --json
-node "$TLO" status "$run_id" --json
+tlo status "$run_id" --json
 ```
 
 `run --json`이 반환한 `runId`를 `status <runId>`와 `resume <runId>`에 넘기는 것이 기본 패턴입니다. 실행 기록은 대상 프로젝트의 `.orchestrator/runs/<runId>.json`에 저장됩니다.
 
 `init`은 다시 실행해도 기존 `orchestrator.config.json`을 덮어쓰지 않습니다. `.orchestrator/`가 `.gitignore`에 빠져 있으면 추가하고, 이미 있으면 그대로 둡니다.
 
-`doctor --json`은 설정, `.gitignore`, Git 상태 같은 준비 상태를 `pass`, `warn`, `fail`로 알려 줍니다. `init` 전에는 설정과 gitignore 관련 warning이 나올 수 있고, 이때는 `node "$TLO" init`을 먼저 실행하면 됩니다.
+`tlo doctor`는 설정, `.gitignore`, Git 상태 같은 준비 상태를 `pass`, `warn`, `fail`로 알려 줍니다. `init` 전에는 설정과 gitignore 관련 warning이 나올 수 있고, 이때는 `tlo init`을 먼저 실행하면 됩니다.
 
 GitHub remote와 읽을 수 있는 check-run이 있는 프로젝트에서는 CI 상태도 읽기 전용으로 확인할 수 있습니다.
 
 ```bash
-node "$TLO" checks HEAD --json
+tlo checks HEAD --json
 ```
 
 GitHub 정보가 없거나 인증이 부족하면 실패 대신 `unknown` 또는 `not_found` 계열의 JSON 상태로 안내합니다.

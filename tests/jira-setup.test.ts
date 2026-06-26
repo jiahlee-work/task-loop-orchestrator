@@ -81,7 +81,7 @@ describe("jira setup", () => {
         status: "pass",
         summary: "Jira MCP server exposes jira_get_issue."
       },
-      nextCommand: "task-loop-orchestrator run --jira ISSUE-KEY"
+      nextCommand: "tlo run ISSUE-KEY"
     });
   });
 });

@@ -16,7 +16,8 @@ describe("package metadata", () => {
     };
 
     expect(packageJson.bin).toEqual({
-      "task-loop-orchestrator": "./dist/cli.js"
+      "task-loop-orchestrator": "./dist/cli.js",
+      tlo: "./dist/cli.js"
     });
     expect(packageJson.engines?.node).toBe(">=24");
     expect(packageJson.packageManager).toMatch(/^pnpm@/);
@@ -37,6 +38,7 @@ describe("package metadata", () => {
     };
 
     expect(normalize(packageJson.bin?.["task-loop-orchestrator"] ?? "")).toBe(normalize("dist/cli.js"));
+    expect(normalize(packageJson.bin?.tlo ?? "")).toBe(normalize("dist/cli.js"));
     expect(packageJson.files?.sort()).toEqual(["dist", "orchestrator.config.example.json", "schemas"]);
     expect(packageJson.scripts?.prepack).toMatch(/\bpnpm run build\b/);
     expect(packageJson.exports).toBeUndefined();
@@ -57,7 +59,7 @@ describe("package metadata", () => {
     expect(cliSource).toContain('args.command === "--version" || args.command === "-v"');
     expect(readme).toContain("node dist/cli.js --version");
     expect(quickstart).toContain("node dist/cli.js --version");
-    expect(quickstart).toContain('export TLO="/absolute/path/to/task-loop-orchestrator/dist/cli.js"');
+    expect(quickstart).toContain("pnpm link --global");
   });
 
   it("documents package smoke coverage and diagnostics", async () => {

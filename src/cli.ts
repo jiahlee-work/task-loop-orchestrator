@@ -66,6 +66,15 @@ interface ParsedArgs {
   flags: Record<string, string | boolean>;
 }
 
+interface RunInput {
+  kind: "direct" | "jira";
+  title?: string;
+  jiraKey?: string;
+  note?: string;
+}
+
+const jiraIssueKeyPattern = /^[A-Z][A-Z0-9]+-\d+$/;
+
 function parseArgs(argv: string[]): ParsedArgs {
   const [command, ...rest] = argv;
   const positional: string[] = [];
@@ -126,10 +135,10 @@ function printUsage(): void {
   task-loop-orchestrator --help
   task-loop-orchestrator --version
   task-loop-orchestrator init [--force] [--json]
-  task-loop-orchestrator jira setup [--url url] [--username email] [--api-token token|--personal-token token] [--skip-check]
-  task-loop-orchestrator doctor [--github none|gh-cli] [--jira] [--json]
-  task-loop-orchestrator run <title> [--description text] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]
-  task-loop-orchestrator run --jira ISSUE-KEY [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]
+  task-loop-orchestrator setup jira [--url url] [--username email] [--api-token token|--personal-token token] [--skip-check]
+  task-loop-orchestrator doctor [jira] [--github none|gh-cli] [--json]
+  task-loop-orchestrator run ISSUE-KEY [--note text] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]
+  task-loop-orchestrator run <instruction> [--description text] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]
   task-loop-orchestrator status [runId] [--json] [--raw]
   task-loop-orchestrator resume <runId> [--max-iterations n] [--json]
   task-loop-orchestrator checkpoint [runId] [--github none|gh-cli] [--json]
@@ -139,7 +148,14 @@ function printUsage(): void {
   task-loop-orchestrator execution-audit (--intent intentId|--all) [--json]
   task-loop-orchestrator write-readiness --intent intentId [--preflight path] [--json]
   task-loop-orchestrator write-runner --intent intentId [--preflight path] [--simulate|--execute] --json
-  task-loop-orchestrator checks [ref] [--json]`);
+  task-loop-orchestrator checks [ref] [--json]
+
+Short alias:
+  tlo setup jira
+  tlo doctor jira
+  tlo run ISSUE-KEY
+  tlo run ISSUE-KEY --note "additional context"
+  tlo run "direct task instruction"`);
 }
 
 function packageVersion(): string {
@@ -159,6 +175,21 @@ function printVersion(): void {
 
 function printJson(command: CliJsonCommand, payload: object): void {
   console.log(JSON.stringify(createCliJsonReport(command, payload), null, 2));
+}
+
+function statusLabel(status: "pass" | "warn" | "fail"): "Success" | "Warning" | "Failed" {
+  if (status === "pass") {
+    return "Success";
+  }
+  if (status === "warn") {
+    return "Warning";
+  }
+
+  return "Failed";
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values.filter((value) => value.trim().length > 0))];
 }
 
 function printExecutionAuditError(
@@ -286,13 +317,14 @@ function printPlainWriteRunnerError(
 
 async function doctorCommand(args: ParsedArgs): Promise<void> {
   const githubMode = stringFlag(args.flags, "github") ? githubFlag(stringFlag(args.flags, "github")) : "none";
+  const jiraEnabled = args.flags.jira === true || args.positional.includes("jira");
   const config =
-    args.flags.jira === true
+    jiraEnabled
       ? await loadOrchestratorConfig(process.cwd())
           .then((loadedConfig) => loadJiraConfigWithLocalEnv(process.cwd(), loadedConfig.jira))
           .catch(() => undefined)
       : undefined;
-  const report = await runDoctor(process.cwd(), { githubMode, jira: args.flags.jira === true, jiraConfig: config });
+  const report = await runDoctor(process.cwd(), { githubMode, jira: jiraEnabled, jiraConfig: config });
 
   if (args.flags.json === true) {
     printJson("doctor", report);
@@ -303,16 +335,36 @@ async function doctorCommand(args: ParsedArgs): Promise<void> {
 }
 
 function printDoctorReport(report: DoctorReport): void {
-  console.log(`Doctor: ${report.status}`);
-  console.log(`Root: ${report.rootDir}`);
+  console.log(`${statusLabel(report.status)}: Doctor`);
+  console.log("");
+  console.log("Checks:");
   for (const check of report.checks) {
-    console.log(`[${check.status}] ${check.id}: ${check.summary}`);
-    if (check.recommendedAction) {
-      console.log(`  Next: ${check.recommendedAction}`);
+    console.log(`- [${check.status}] ${check.id}: ${check.summary}`);
+  }
+
+  console.log("");
+  console.log("Result:");
+  console.log(`- Root: ${report.rootDir}`);
+  console.log(`- Status: ${report.status}`);
+
+  const nextActions = uniqueStrings(
+    report.checks.flatMap((check) => [
+      ...(check.recommendedAction ? [check.recommendedAction] : []),
+      ...(check.suggestions ?? []).map((suggestion) => `${suggestion.command.join(" ")} - ${suggestion.reason}`)
+    ])
+  );
+
+  if (nextActions.length > 0) {
+    console.log("");
+    console.log("Next:");
+    for (const action of nextActions) {
+      console.log(`- ${action}`);
     }
-    for (const suggestion of check.suggestions ?? []) {
-      console.log(`  Suggestion: ${suggestion.command.join(" ")}`);
-    }
+  } else {
+    const hasJiraChecks = report.checks.some((check) => check.id.startsWith("jira_"));
+    console.log("");
+    console.log("Next:");
+    console.log(hasJiraChecks ? "- tlo run ISSUE-KEY - read a Jira issue and start the planner run." : '- tlo run "task instruction" - start a planner run from direct text.');
   }
 }
 
@@ -340,7 +392,7 @@ async function initCommand(args: ParsedArgs): Promise<void> {
 async function jiraCommand(args: ParsedArgs): Promise<void> {
   const subcommand = args.positional[0];
   if (subcommand !== "setup") {
-    throw new Error("jira requires a subcommand: setup.");
+    throw new Error("jira requires a subcommand: setup. Prefer: tlo setup jira.");
   }
 
   const report = await jiraSetupCommand(args);
@@ -377,11 +429,15 @@ async function jiraSetupCommand(args: ParsedArgs): Promise<JiraSetupReport> {
 }
 
 function printJiraSetupReport(report: JiraSetupReport): void {
-  console.log(`Jira setup: ${report.status}`);
-  console.log(`Env file: ${report.envFile}`);
-  console.log(`Auth mode: ${report.authMode}`);
-  console.log(`MCP check: ${report.mcpCheck.status} - ${report.mcpCheck.summary}`);
-  console.log(`Next: ${report.nextCommand}`);
+  console.log(`${report.status === "ready" ? "Success" : "Warning"}: Jira setup`);
+  console.log("");
+  console.log("Result:");
+  console.log(`- Env file: ${report.envFile}`);
+  console.log(`- Auth mode: ${report.authMode}`);
+  console.log(`- MCP check: [${report.mcpCheck.status}] ${report.mcpCheck.summary}`);
+  console.log("");
+  console.log("Next:");
+  console.log(`- ${report.nextCommand} - ${report.status === "ready" ? "start a run from a Jira issue." : "check Jira MCP setup before starting a run."}`);
 }
 
 async function promptValue(label: string, defaultValue?: string): Promise<string> {
@@ -431,10 +487,9 @@ class HiddenPromptOutput extends Writable {
 }
 
 async function runCommand(args: ParsedArgs): Promise<void> {
-  const jiraKey = stringFlag(args.flags, "jira");
-  const title = args.positional.join(" ").trim();
-  if (!title && !jiraKey) {
-    throw new Error("run requires a title.");
+  const input = parseRunInput(args);
+  if (input.kind === "direct" && !input.title) {
+    throw new Error('run requires a Jira issue key or direct task instruction. Examples: tlo run OUC-10, tlo run "직접 작업 설명".');
   }
 
   const store = new FileRunStore(process.cwd());
@@ -443,11 +498,11 @@ async function runCommand(args: ParsedArgs): Promise<void> {
   const executorMode = stringFlag(args.flags, "executor") ? executorFlag(stringFlag(args.flags, "executor")) : config.executor;
   const reviewerMode = stringFlag(args.flags, "reviewer") ? reviewerFlag(stringFlag(args.flags, "reviewer")) : config.reviewer;
   const permissionMode = stringFlag(args.flags, "permission") ? permissionFlag(stringFlag(args.flags, "permission")) : config.permissionMode;
-  const taskSpec = jiraKey
-    ? await createTaskSpecFromJiraKey(jiraKey, permissionMode, jiraConfig)
+  const taskSpec = input.kind === "jira" && input.jiraKey
+    ? await createTaskSpecFromJiraKey(input.jiraKey, permissionMode, jiraConfig, input.note)
     : createTaskSpec({
-        title,
-        description: stringFlag(args.flags, "description"),
+        title: input.title ?? "",
+        description: stringFlag(args.flags, "description") ?? input.note,
         permissionMode
       });
   const orchestrator = new RootOrchestrator({
@@ -464,40 +519,137 @@ async function runCommand(args: ParsedArgs): Promise<void> {
     return;
   }
 
-  console.log(`Run ${run.id}: ${run.status}`);
-  console.log(`Iterations: ${run.iterations}`);
-  console.log(`Subtasks: ${run.graph.subtasks.length}`);
-  console.log(`Saved: ${store.pathForRun(run.id)}`);
+  printRunReport(run, store, input, executorMode, reviewerMode);
 }
 
-async function createTaskSpecFromJiraKey(jiraKey: string, permissionMode: PermissionMode, jiraConfig: JiraConfig) {
+function parseRunInput(args: ParsedArgs): RunInput {
+  const explicitJiraKey = stringFlag(args.flags, "jira");
+  const flagNote = stringFlag(args.flags, "note");
+  if (explicitJiraKey) {
+    const inlineNote = args.positional.join(" ").trim();
+    return {
+      kind: "jira",
+      jiraKey: explicitJiraKey,
+      note: flagNote ?? (inlineNote || undefined)
+    };
+  }
+
+  const [first, ...rest] = args.positional;
+  if (isJiraIssueKey(first)) {
+    const restNote = rest[0] === "with" ? rest.slice(1).join(" ").trim() : rest.join(" ").trim();
+    return {
+      kind: "jira",
+      jiraKey: first,
+      note: flagNote ?? (restNote || undefined)
+    };
+  }
+
+  return {
+    kind: "direct",
+    title: args.positional.join(" ").trim(),
+    note: flagNote
+  };
+}
+
+function isJiraIssueKey(value: string | undefined): boolean {
+  return typeof value === "string" && jiraIssueKeyPattern.test(value);
+}
+
+async function createTaskSpecFromJiraKey(
+  jiraKey: string,
+  permissionMode: PermissionMode,
+  jiraConfig: JiraConfig,
+  note?: string
+) {
   const primaryProvider =
     jiraConfig.provider === "mcp-atlassian"
       ? new JiraMcpProvider(jiraConfig.mcp, process.cwd())
       : new JiraCliProvider(process.cwd());
   const issue = await primaryProvider.getIssue(jiraKey);
   if (issue) {
-    return createTaskSpecFromJiraIssue(issue, permissionMode);
+    return createTaskSpecFromJiraIssue(issue, permissionMode, note);
   }
 
   if (jiraConfig.provider === "mcp-atlassian" && jiraConfig.fallback === "cli") {
     const fallbackIssue = await new JiraCliProvider(process.cwd()).getIssue(jiraKey);
     if (fallbackIssue) {
-      return createTaskSpecFromJiraIssue(fallbackIssue, permissionMode);
+      return createTaskSpecFromJiraIssue(fallbackIssue, permissionMode, note);
     }
   }
 
   if (jiraConfig.provider === "mcp-atlassian") {
     throw new Error(
-      `Jira issue ${jiraKey} was not found or could not be read. Configure Jira MCP with ` +
-        `JIRA_URL, JIRA_USERNAME, and JIRA_API_TOKEN, then verify the MCP server exposes ${jiraConfig.mcp.toolName}.`
+      [
+        "Failed: Run from Jira issue",
+        "",
+        "Reason:",
+        `- Jira issue ${jiraKey} was not found or could not be read.`,
+        `- Jira MCP did not return ${jiraConfig.mcp.toolName}, and Jira CLI fallback did not read the issue.`,
+        "",
+        "Next:",
+        "- tlo doctor jira - check Jira credentials, uvx, MCP server startup, and tool exposure.",
+        `- Confirm that ${jiraKey} exists and your Jira account can read it.`
+      ].join("\n")
     );
   }
 
   throw new Error(
-    `Jira issue ${jiraKey} was not found or could not be read. Install and authenticate the Jira CLI with ` +
-      `brew install jira-cli and jira init, then verify jira issue view ${jiraKey} --raw works.`
+    [
+      "Failed: Run from Jira issue",
+      "",
+      "Reason:",
+      `- Jira issue ${jiraKey} was not found or could not be read through Jira CLI.`,
+      "",
+      "Next:",
+      "- jira init - authenticate the Jira CLI.",
+      `- jira issue view ${jiraKey} --raw - verify that the issue is readable.`
+    ].join("\n")
   );
+}
+
+function printRunReport(
+  run: Awaited<ReturnType<RootOrchestrator["runTask"]>>,
+  store: FileRunStore,
+  input: RunInput,
+  executorMode: ExecutorMode,
+  reviewerMode: ReviewerMode
+): void {
+  const completed = run.graph.subtasks.filter((subtask) => subtask.status === "completed").length;
+  const label = run.status === "completed" ? "Success" : run.status === "failed" ? "Failed" : "Warning";
+
+  console.log(`${label}: Run ${run.status}`);
+  console.log("");
+  console.log("Input:");
+  if (input.kind === "jira") {
+    console.log(`- Source: Jira issue ${input.jiraKey}`);
+    if (input.note) {
+      console.log(`- Note: ${input.note}`);
+    }
+  } else {
+    console.log(`- Source: direct instruction`);
+  }
+  console.log(`- Task: ${run.spec.title}`);
+
+  console.log("");
+  console.log("Planner:");
+  console.log("- Provider: mock");
+  console.log(`- Subtasks: ${run.graph.subtasks.length}`);
+
+  console.log("");
+  console.log("Result:");
+  console.log(`- Run ID: ${run.id}`);
+  console.log(`- Iterations: ${run.iterations}`);
+  console.log(`- Subtasks completed: ${completed}/${run.graph.subtasks.length}`);
+  console.log(`- Executor: ${executorMode}`);
+  console.log(`- Reviewer: ${reviewerMode}`);
+  console.log(`- Saved: ${store.pathForRun(run.id)}`);
+
+  console.log("");
+  console.log("Next:");
+  console.log(`- tlo status ${run.id} - inspect this run.`);
+  if (run.status !== "completed") {
+    console.log(`- tlo resume ${run.id} - continue the run.`);
+  }
 }
 
 async function statusCommand(args: ParsedArgs): Promise<void> {
@@ -510,7 +662,7 @@ async function statusCommand(args: ParsedArgs): Promise<void> {
       printJson("status", {
         status: "not_found",
         run: null,
-        message: "No runs found. Start one with task-loop-orchestrator run <title> --json."
+        message: 'No runs found. Start one with tlo run "task instruction" --json.'
       });
       return;
     }
@@ -564,7 +716,7 @@ async function resumeCommand(args: ParsedArgs): Promise<void> {
       throw error;
     }
 
-    const message = `Run ${runId} was not found. Use task-loop-orchestrator status --json to inspect the latest run, or start one with task-loop-orchestrator run <title> --json.`;
+    const message = `Run ${runId} was not found. Use tlo status --json to inspect the latest run, or start one with tlo run "task instruction" --json.`;
     if (args.flags.json === true) {
       printJson("resume", {
         status: "not_found",
@@ -1230,6 +1382,12 @@ async function main(): Promise<void> {
 
   if (args.command === "jira") {
     await jiraCommand(args);
+    return;
+  }
+
+  if (args.command === "setup" && args.positional[0] === "jira") {
+    const report = await jiraSetupCommand(args);
+    printJiraSetupReport(report);
     return;
   }
 

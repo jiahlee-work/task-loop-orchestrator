@@ -466,12 +466,17 @@ async function closeMcpSession(session: McpClientSession | undefined): Promise<v
   }
 }
 
-export function createTaskSpecFromJiraIssue(issue: JiraIssue, permissionMode: PermissionMode = "write"): TaskSpec {
+export function createTaskSpecFromJiraIssue(
+  issue: JiraIssue,
+  permissionMode: PermissionMode = "write",
+  note?: string
+): TaskSpec {
   const description = [
     issue.url ? `Jira: ${issue.url}` : undefined,
     issue.status ? `Status: ${issue.status}` : undefined,
     issue.issueType ? `Type: ${issue.issueType}` : undefined,
     issue.description,
+    note?.trim() ? `User note:\n${note.trim()}` : undefined,
     issue.comments.length > 0
       ? `Comments:\n${issue.comments.map((comment) => `- ${comment.author ? `${comment.author}: ` : ""}${comment.body}`).join("\n")}`
       : undefined

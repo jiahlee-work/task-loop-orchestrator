@@ -22,6 +22,7 @@ async function main() {
   const packageVersion = await readPackageVersion();
   let tarballPath = "";
   let bin = "";
+  let shortBin = "";
   let loopReport;
 
   try {
@@ -37,13 +38,17 @@ async function main() {
       bin = process.platform === "win32"
         ? join(installDir, "node_modules", ".bin", "task-loop-orchestrator.cmd")
         : join(installDir, "node_modules", ".bin", "task-loop-orchestrator");
+      shortBin = process.platform === "win32"
+        ? join(installDir, "node_modules", ".bin", "tlo.cmd")
+        : join(installDir, "node_modules", ".bin", "tlo");
     });
 
     await runStep("help", async () => {
       const help = await run(bin, ["--help"], { cwd: projectDir });
       assertIncludes(help.stdout, "task-loop-orchestrator init", "help output should include init usage");
-      assertIncludes(help.stdout, "task-loop-orchestrator jira setup", "help output should include jira setup usage");
+      assertIncludes(help.stdout, "task-loop-orchestrator setup jira", "help output should include setup jira usage");
       assertIncludes(help.stdout, "task-loop-orchestrator doctor", "help output should include doctor usage");
+      assertIncludes(help.stdout, "tlo setup jira", "help output should include tlo setup alias usage");
       assertIncludes(help.stdout, "task-loop-orchestrator execution-audit", "help output should include execution-audit usage");
       assertIncludes(help.stdout, "task-loop-orchestrator write-readiness", "help output should include write-readiness usage");
       assertIncludes(help.stdout, "task-loop-orchestrator write-runner", "help output should include write-runner usage");
@@ -60,6 +65,9 @@ async function main() {
 
       const shortVersion = await run(bin, ["-v"], { cwd: projectDir });
       assertEqual(shortVersion.stdout.trim(), version.stdout.trim(), "installed binary -v should match --version");
+
+      const aliasVersion = await run(shortBin, ["--version"], { cwd: projectDir });
+      assertEqual(aliasVersion.stdout.trim(), version.stdout.trim(), "installed tlo alias --version should match package.json");
     });
 
     await runStep("pre-init doctor", async () => {
@@ -73,8 +81,8 @@ async function main() {
           github: "pass"
         },
         suggestions: {
-          config: ["task-loop-orchestrator", "init"],
-          gitignore: ["task-loop-orchestrator", "init"]
+          config: ["tlo", "init"],
+          gitignore: ["tlo", "init"]
         }
       });
     });
@@ -171,7 +179,7 @@ async function main() {
     });
 
     await runStep("jira issue run json", async () => {
-      const jiraRun = await run(bin, ["run", "--jira", "ABC-123", "--max-iterations", "1", "--json"], {
+      const jiraRun = await run(shortBin, ["run", "ABC-123", "--note", "Include package smoke note.", "--max-iterations", "1", "--json"], {
         cwd: projectDir,
         env: prependPath(fakeBinDir)
       });
@@ -191,6 +199,11 @@ async function main() {
         jiraRunReport.run.spec.description,
         "Package smoke issue description.",
         "Jira run should preserve issue description"
+      );
+      assertIncludes(
+        jiraRunReport.run.spec.description,
+        "User note:\nInclude package smoke note.",
+        "Jira run should preserve user note in the task description"
       );
       assertEqual(
         JSON.stringify(jiraRunReport.run.spec.acceptanceCriteria),
@@ -506,7 +519,7 @@ async function main() {
 
     console.log("Package smoke passed:");
     console.log(`- tarball: ${tarballPath}`);
-    console.log("- help output includes init, jira setup, execution-audit, and version usage");
+    console.log("- help output includes init, setup jira, execution-audit, and version usage");
     console.log("- installed binary version matches package.json");
     console.log("- doctor reports pre-init warnings and post-init readiness");
     console.log("- init creates config and .gitignore");
@@ -515,7 +528,7 @@ async function main() {
     console.log(
       "- MVP first-run flow init/doctor/run/status/resume/status works through the installed binary with the actual runId"
     );
-    console.log("- Jira issue read provider feeds --jira issue data into the installed binary run flow");
+    console.log("- Jira issue read provider feeds issue data into the installed tlo run flow");
     console.log("- status no-run and resume missing-run JSON guidance work through the installed binary");
     console.log("- checkpoint/pr-plan/pr-exec/approve-pr JSON fields work through the installed binary");
     console.log(
@@ -924,7 +937,7 @@ function assertStatusNotFoundReport(report) {
   assertEnvelope(report, "status");
   assertEqual(report.status, "not_found", "empty status JSON should report not_found");
   assertEqual(report.run, null, "empty status JSON should set run to null");
-  assertIncludes(report.message, "run <title> --json", "empty status JSON should suggest starting a run");
+  assertIncludes(report.message, 'tlo run "task instruction" --json', "empty status JSON should suggest starting a run");
 }
 
 function assertResumeNotFoundReport(report, runId) {
@@ -933,7 +946,7 @@ function assertResumeNotFoundReport(report, runId) {
   assertEqual(report.runId, runId, "missing resume JSON should preserve requested runId");
   assertEqual(report.run, null, "missing resume JSON should set run to null");
   assertIncludes(report.message, "status --json", "missing resume JSON should suggest checking status");
-  assertIncludes(report.message, "run <title> --json", "missing resume JSON should suggest starting a run");
+  assertIncludes(report.message, 'tlo run "task instruction" --json', "missing resume JSON should suggest starting a run");
 }
 
 function assertRawStatusReport(report, runId) {

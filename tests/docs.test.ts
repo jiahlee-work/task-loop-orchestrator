@@ -15,10 +15,11 @@ describe("quickstart documentation", () => {
       "corepack enable",
       "pnpm install --frozen-lockfile",
       "pnpm run build",
+      "pnpm link --global",
       "node dist/cli.js --help",
       "node dist/cli.js --version",
-      'export TLO="/absolute/path/to/task-loop-orchestrator/dist/cli.js"',
-      'node "$TLO" doctor --json'
+      "tlo --help",
+      "tlo doctor"
     ]);
   });
 
@@ -26,19 +27,22 @@ describe("quickstart documentation", () => {
     const quickstart = await readQuickstart();
 
     expectContainsAll(quickstart, [
-      'node "$TLO" init',
-      'node "$TLO" doctor --json',
-      'node "$TLO" run "Quickstart smoke" --max-iterations 1 --json',
-      'node "$TLO" status "$run_id" --json',
-      'node "$TLO" resume "$run_id" --max-iterations 1 --json',
+      "tlo init",
+      "tlo doctor",
+      "tlo setup jira",
+      "tlo doctor jira",
+      "tlo run OUC-10",
+      'tlo run OUC-10 --note "이번에는 UI 문구까지 같이 정리해줘"',
+      'tlo run "README의 설치 흐름을 현재 CLI 기준으로 정리해줘"',
+      'tlo run "Quickstart smoke" --max-iterations 1 --json',
+      'tlo status "$run_id" --json',
       "`run --json`이 반환한 `runId`",
-      'node "$TLO" status "$run_id" --json',
       "run_json=",
       "run_id=",
       "node -e",
       "`init`은 다시 실행해도",
-      "node \"$TLO\" init",
-      'node "$TLO" checks HEAD --json',
+      "tlo init",
+      "tlo checks HEAD --json",
       "GitHub remote",
       "check-run",
       "unknown",
@@ -608,19 +612,21 @@ describe("documentation role boundaries", () => {
       "corepack enable",
       "pnpm install --frozen-lockfile",
       "pnpm run build",
+      "pnpm link --global",
       "node dist/cli.js --help",
       "node dist/cli.js --version",
-      'export TLO="/absolute/path/to/task-loop-orchestrator/dist/cli.js"',
-      'node "$TLO" doctor --json',
-      'node "$TLO" init',
-      'node "$TLO" run "Quickstart smoke" --max-iterations 1 --json',
-      'node "$TLO" status "$run_id" --json',
-      'node "$TLO" resume "$run_id" --max-iterations 1 --json',
+      "tlo doctor",
+      "tlo init",
+      "tlo setup jira",
+      "tlo doctor jira",
+      "tlo run OUC-10",
+      'tlo run "Quickstart smoke" --max-iterations 1 --json',
+      'tlo status "$run_id" --json',
       "`run --json`이 반환한 `runId`",
       "기본 패턴",
       "node -e",
       "`init`은 다시 실행해도",
-      "설정이 이상해 보일 때는 `doctor --json`"
+      "설정이 이상해 보일 때는 `tlo doctor`"
     ]);
     expect(readme).not.toContain("npx task-loop-orchestrator write-runner --intent intent_xxx --preflight readiness-preflight.json --simulate --json");
     expect(readme).not.toContain("npx task-loop-orchestrator execution-audit --all");
@@ -806,10 +812,10 @@ describe("command reference documentation", () => {
       "--help",
       "--version",
       "init [--force] [--json]",
-      "jira setup [--url url] [--username email] [--api-token token|--personal-token token] [--skip-check]",
-      "doctor [--github none|gh-cli] [--jira] [--json]",
-      "run <title> [--description text] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]",
-      "run --jira ISSUE-KEY [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]",
+      "setup jira [--url url] [--username email] [--api-token token|--personal-token token] [--skip-check]",
+      "doctor [jira] [--github none|gh-cli] [--json]",
+      "run ISSUE-KEY [--note text] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]",
+      "run <instruction> [--description text] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]",
       "status [runId] [--json] [--raw]",
       "resume <runId> [--max-iterations n] [--json]",
       "checkpoint [runId] [--github none|gh-cli] [--json]",
@@ -825,7 +831,7 @@ describe("command reference documentation", () => {
       "--help",
       "--version",
       "init",
-      "jira",
+      "setup",
       "doctor",
       "run",
       "resume",
@@ -887,7 +893,7 @@ describe("command reference documentation", () => {
       .sort();
 
     expect(supportedInDocs).toEqual([...cliJsonCommands].sort());
-    expect(unsupportedInDocs).toEqual(["--help", "--version", "jira"]);
+    expect(unsupportedInDocs).toEqual(["--help", "--version", "setup"]);
   });
 
   it("keeps per-command write-side boundaries explicit", async () => {
@@ -896,7 +902,7 @@ describe("command reference documentation", () => {
 
     expectSectionContains(sections, "--help", ["read-only", "no files or external systems are modified"]);
     expectSectionContains(sections, "--version", ["read-only", "no files or external systems are modified"]);
-    expectSectionContains(sections, "jira", [".orchestrator/jira.env", "`0600`", "MCP server exposes the Jira issue read tool"]);
+    expectSectionContains(sections, "setup", [".orchestrator/jira.env", "`0600`", "MCP server exposes the Jira issue read tool"]);
     expectSectionContains(sections, "doctor", [
       "read-only",
       "read-only GitHub CLI diagnostics",
@@ -990,7 +996,10 @@ describe("command reference documentation", () => {
       const commandExamples = examples.get(command) ?? [];
       expect(commandExamples.length, `Missing example command for ${command}`).toBeGreaterThan(0);
       for (const example of commandExamples) {
-        expect(example.startsWith("task-loop-orchestrator "), `Example should start with binary name: ${example}`).toBe(true);
+        expect(
+          example.startsWith("task-loop-orchestrator ") || example.startsWith("tlo "),
+          `Example should start with a CLI binary name: ${example}`
+        ).toBe(true);
       }
     }
 
@@ -1027,7 +1036,7 @@ describe("command reference documentation", () => {
       "config",
       "gitignore",
       "store_path",
-      '"task-loop-orchestrator", "init"',
+      '"tlo", "init"',
       '"run", "Smoke task", "--max-iterations", "1", "--json"',
       '"resume", loopReport.runId, "--max-iterations", "1", "--json"',
       '"status", "--json"',

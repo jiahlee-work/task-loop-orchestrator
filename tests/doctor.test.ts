@@ -35,11 +35,11 @@ describe("doctor", () => {
     });
     expect(check(report.checks, "config")).toMatchObject({
       status: "warn",
-      recommendedAction: "Run task-loop-orchestrator init.",
+      recommendedAction: "Run tlo init.",
       suggestions: [
         {
           label: "Initialize orchestrator project",
-          command: ["task-loop-orchestrator", "init"],
+          command: ["tlo", "init"],
           reason: "Create orchestrator config and ignore local state.",
           destructive: false
         }
@@ -47,11 +47,11 @@ describe("doctor", () => {
     });
     expect(check(report.checks, "gitignore")).toMatchObject({
       status: "warn",
-      recommendedAction: "Run task-loop-orchestrator init.",
+      recommendedAction: "Run tlo init.",
       suggestions: [
         {
           label: "Initialize orchestrator project",
-          command: ["task-loop-orchestrator", "init"],
+          command: ["tlo", "init"],
           reason: "Create .gitignore and add .orchestrator/.",
           destructive: false
         }
@@ -67,7 +67,7 @@ describe("doctor", () => {
       suggestions: [
         {
           label: "Check GitHub read access",
-          command: ["task-loop-orchestrator", "doctor", "--github", "gh-cli"],
+          command: ["tlo", "doctor", "--github", "gh-cli"],
           reason: "Re-run doctor with read-only GitHub diagnostics enabled.",
           destructive: false
         }
@@ -185,11 +185,11 @@ describe("doctor", () => {
     expect(jiraReport.status).toBe("warn");
     expect(check(jiraReport.checks, "jira_mcp_credentials")).toMatchObject({
       status: "warn",
-      recommendedAction: "Run task-loop-orchestrator jira setup to save local Jira MCP credentials.",
+      recommendedAction: "Run tlo setup jira to save local Jira MCP credentials.",
       suggestions: [
         {
           label: "Set up Jira MCP",
-          command: ["task-loop-orchestrator", "jira", "setup"],
+          command: ["tlo", "setup", "jira"],
           reason: "Save local Jira MCP credentials in .orchestrator/jira.env.",
           destructive: false
         }
@@ -197,7 +197,7 @@ describe("doctor", () => {
     });
     expect(check(jiraReport.checks, "jira_cli_fallback")).toMatchObject({
       status: "warn",
-      recommendedAction: "Install and authenticate the Jira CLI before using run --jira.",
+      recommendedAction: "Install and authenticate the Jira CLI before using tlo run ISSUE-KEY.",
       suggestions: [
         {
           label: "Install Jira CLI with Homebrew",
@@ -337,7 +337,7 @@ describe("doctor", () => {
   it("shows doctor in CLI usage", async () => {
     const cliSource = await readFile(join(process.cwd(), "src", "cli.ts"), "utf8");
 
-    expect(cliSource).toContain("task-loop-orchestrator doctor [--github none|gh-cli] [--jira] [--json]");
+    expect(cliSource).toContain("task-loop-orchestrator doctor [jira] [--github none|gh-cli] [--json]");
   });
 });
 

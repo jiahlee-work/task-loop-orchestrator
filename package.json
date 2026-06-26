@@ -5,7 +5,8 @@
   "type": "module",
   "packageManager": "pnpm@11.5.2",
   "bin": {
-    "task-loop-orchestrator": "./dist/cli.js"
+    "task-loop-orchestrator": "./dist/cli.js",
+    "tlo": "./dist/cli.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

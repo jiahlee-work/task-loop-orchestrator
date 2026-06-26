@@ -335,17 +335,21 @@ describe("JiraCliProvider", () => {
   });
 
   it("converts a Jira issue into a TaskSpec for planner input", () => {
-    const spec = createTaskSpecFromJiraIssue({
-      key: "ABC-123",
-      title: "Add billing export",
-      description: "Users need a CSV export from billing.",
-      status: "To Do",
-      issueType: "Story",
-      url: "https://jira.example.com/browse/ABC-123",
-      labels: [],
-      comments: [{ author: "Designer", body: "Keep the button near the existing download action." }],
-      acceptanceCriteria: ["Export includes invoice id", "Export includes amount"]
-    });
+    const spec = createTaskSpecFromJiraIssue(
+      {
+        key: "ABC-123",
+        title: "Add billing export",
+        description: "Users need a CSV export from billing.",
+        status: "To Do",
+        issueType: "Story",
+        url: "https://jira.example.com/browse/ABC-123",
+        labels: [],
+        comments: [{ author: "Designer", body: "Keep the button near the existing download action." }],
+        acceptanceCriteria: ["Export includes invoice id", "Export includes amount"]
+      },
+      "write",
+      "Prefer a CSV-compatible filename."
+    );
 
     expect(spec).toMatchObject({
       id: "ABC-123",
@@ -356,6 +360,7 @@ describe("JiraCliProvider", () => {
     expect(spec.description).toContain("Jira: https://jira.example.com/browse/ABC-123");
     expect(spec.description).toContain("Status: To Do");
     expect(spec.description).toContain("Users need a CSV export from billing.");
+    expect(spec.description).toContain("User note:\nPrefer a CSV-compatible filename.");
     expect(spec.description).toContain("Designer: Keep the button near the existing download action.");
   });
 });

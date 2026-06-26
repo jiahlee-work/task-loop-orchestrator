@@ -34,7 +34,7 @@ The envelope applies to every current JSON-capable command:
 
 - `init --json`
 - `doctor --json`
-- `run <title> --json`
+- `run "task instruction" --json`
 - `resume <runId> --json`
 - `status [runId] --json`
 - `status [runId] --json --raw`
@@ -53,7 +53,7 @@ The envelope applies to every current JSON-capable command:
 
 ## Raw Status
 
-`status --json` returns the latest stable run report shape used by `run --json` and `resume --json`. When no runs exist, it returns `status: "not_found"`, `run: null`, and a short `message` that points users back to `run <title> --json`.
+`status --json` returns the latest stable run report shape used by `run --json` and `resume --json`. When no runs exist, it returns `status: "not_found"`, `run: null`, and a short `message` that points users back to `tlo run "task instruction" --json`.
 
 `status --json --raw` returns the stored raw `LoopRun` shape with the same metadata fields added at the top level.
 
@@ -61,7 +61,7 @@ The envelope applies to every current JSON-capable command:
 
 The first command-specific schema extension covers the stable run report payload returned by:
 
-- `run <title> --json`
+- `run "task instruction" --json`
 - `resume <runId> --json`
 - `status [runId] --json`
 

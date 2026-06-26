@@ -20,16 +20,17 @@ cd task-loop-orchestrator
 corepack enable
 pnpm install --frozen-lockfile
 pnpm run build
+pnpm link --global
 node dist/cli.js --help
 node dist/cli.js --version
 ```
 
-다른 로컬 프로젝트에서 쓰려면 빌드된 CLI 경로를 지정해 두면 편합니다.
+이후 다른 로컬 프로젝트에서는 `tlo` 명령으로 실행합니다.
 
 ```bash
-export TLO="/absolute/path/to/task-loop-orchestrator/dist/cli.js"
 cd /path/to/your-git-project
-node "$TLO" doctor --json
+tlo --help
+tlo doctor
 ```
 
 ## 첫 사용 흐름
@@ -37,20 +38,31 @@ node "$TLO" doctor --json
 대상 프로젝트에서 아래 순서로 실행합니다.
 
 ```bash
-node "$TLO" init
-node "$TLO" doctor --json
+tlo init
+tlo doctor
+tlo setup jira
+tlo doctor jira
+tlo run OUC-10
+```
 
-run_json="$(node "$TLO" run "Quickstart smoke" --max-iterations 1 --json)"
+Jira 이슈에 설명을 덧붙이거나, Jira 없이 직접 작업 설명만 넘길 수도 있습니다.
+
+```bash
+tlo run OUC-10 --note "이번에는 UI 문구까지 같이 정리해줘"
+tlo run "README의 설치 흐름을 현재 CLI 기준으로 정리해줘"
+```
+
+자동화나 스크립트에서 run id를 정확히 꺼내야 할 때만 `--json`을 붙이면 됩니다.
+
+```bash
+run_json="$(tlo run "Quickstart smoke" --max-iterations 1 --json)"
 run_id="$(printf '%s' "$run_json" | node -e 'let input=""; process.stdin.on("data", c => input += c); process.stdin.on("end", () => console.log(JSON.parse(input).runId));')"
-
-node "$TLO" status "$run_id" --json
-node "$TLO" resume "$run_id" --max-iterations 1 --json
-node "$TLO" status "$run_id" --json
+tlo status "$run_id" --json
 ```
 
 `run --json`이 반환한 `runId`를 `status <runId>`와 `resume <runId>`에 넘기는 것이 기본 패턴입니다. 실행 기록은 대상 프로젝트의 `.orchestrator/runs/<runId>.json`에 저장됩니다.
 
-`init`은 다시 실행해도 기존 `orchestrator.config.json`을 덮어쓰지 않습니다. `.orchestrator/`가 `.gitignore`에 빠져 있으면 추가하고, 이미 있으면 그대로 둡니다. 설정이 이상해 보일 때는 `doctor --json`을 먼저 실행해 다음 조치 안내를 확인하세요.
+`init`은 다시 실행해도 기존 `orchestrator.config.json`을 덮어쓰지 않습니다. `.orchestrator/`가 `.gitignore`에 빠져 있으면 추가하고, 이미 있으면 그대로 둡니다. 설정이 이상해 보일 때는 `tlo doctor` 또는 `tlo doctor jira`를 먼저 실행해 다음 조치 안내를 확인하세요.
 
 ## 자주 쓰는 개발 명령
 

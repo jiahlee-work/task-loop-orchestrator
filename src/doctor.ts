@@ -72,7 +72,7 @@ export async function runDoctor(rootDir: string = process.cwd(), options: Doctor
       suggestions: [
         commandSuggestion(
           "Check GitHub read access",
-          ["task-loop-orchestrator", "doctor", "--github", "gh-cli"],
+          ["tlo", "doctor", "--github", "gh-cli"],
           "Re-run doctor with read-only GitHub diagnostics enabled."
         )
       ]
@@ -167,7 +167,7 @@ async function checkConfig(rootDir: string): Promise<DoctorCheck> {
         status: "warn",
         summary: "orchestrator.config.json is missing.",
         details: { path },
-        recommendedAction: "Run task-loop-orchestrator init.",
+        recommendedAction: "Run tlo init.",
         suggestions: [initSuggestion("Create orchestrator config and ignore local state.")]
       };
     }
@@ -177,11 +177,11 @@ async function checkConfig(rootDir: string): Promise<DoctorCheck> {
       status: "fail",
       summary: "orchestrator.config.json could not be loaded.",
       details: { path, error: errorMessage(error) },
-      recommendedAction: "Fix orchestrator.config.json or regenerate it with task-loop-orchestrator init --force.",
+      recommendedAction: "Fix orchestrator.config.json or regenerate it with tlo init --force.",
       suggestions: [
         commandSuggestion(
           "Regenerate orchestrator config",
-          ["task-loop-orchestrator", "init", "--force"],
+          ["tlo", "init", "--force"],
           "Overwrite the invalid config with the default orchestrator config.",
           true
         )
@@ -208,7 +208,7 @@ async function checkGitignore(rootDir: string): Promise<DoctorCheck> {
       status: "warn",
       summary: ".gitignore does not ignore .orchestrator/.",
       details: { path },
-      recommendedAction: "Run task-loop-orchestrator init to append .orchestrator/.",
+      recommendedAction: "Run tlo init to append .orchestrator/.",
       suggestions: [initSuggestion("Append .orchestrator/ to .gitignore without rewriting existing entries.")]
     };
   } catch (error) {
@@ -218,7 +218,7 @@ async function checkGitignore(rootDir: string): Promise<DoctorCheck> {
         status: "warn",
         summary: ".gitignore is missing.",
         details: { path },
-        recommendedAction: "Run task-loop-orchestrator init.",
+        recommendedAction: "Run tlo init.",
         suggestions: [initSuggestion("Create .gitignore and add .orchestrator/.")]
       };
     }
@@ -328,7 +328,7 @@ async function checkGitHub(github: GitHubProvider): Promise<DoctorCheck[]> {
               ghAuthStatusSuggestion(),
               commandSuggestion(
                 "Re-run GitHub doctor",
-                ["task-loop-orchestrator", "doctor", "--github", "gh-cli"],
+                ["tlo", "doctor", "--github", "gh-cli"],
                 "Re-check read-only GitHub diagnostics after authentication or check availability changes."
               )
             ]
@@ -345,7 +345,7 @@ async function checkGitHub(github: GitHubProvider): Promise<DoctorCheck[]> {
         ghAuthStatusSuggestion(),
         commandSuggestion(
           "Re-run GitHub doctor",
-          ["task-loop-orchestrator", "doctor", "--github", "gh-cli"],
+          ["tlo", "doctor", "--github", "gh-cli"],
           "Re-check read-only GitHub diagnostics after authentication or check availability changes."
         )
       ]
@@ -388,11 +388,11 @@ async function checkJiraMcp(
         status: "warn",
         summary: "Jira MCP credentials are not configured.",
         details: { required: ["JIRA_URL", "JIRA_USERNAME and JIRA_API_TOKEN, or JIRA_PERSONAL_TOKEN"] },
-        recommendedAction: "Run task-loop-orchestrator jira setup to save local Jira MCP credentials.",
+        recommendedAction: "Run tlo setup jira to save local Jira MCP credentials.",
         suggestions: [
           commandSuggestion(
             "Set up Jira MCP",
-            ["task-loop-orchestrator", "jira", "setup"],
+            ["tlo", "setup", "jira"],
             "Save local Jira MCP credentials in .orchestrator/jira.env."
           )
         ]
@@ -429,7 +429,7 @@ async function checkJiraMcp(
         commandSuggestion("Run Jira MCP server", [jiraConfig.mcp.command, ...jiraConfig.mcp.args], "Start the configured MCP server directly."),
         commandSuggestion(
           "Re-run Jira doctor",
-          ["task-loop-orchestrator", "doctor", "--jira"],
+          ["tlo", "doctor", "jira"],
           "Re-check Jira MCP after fixing server or credential issues."
         )
       ]
@@ -469,7 +469,7 @@ async function checkJiraMcp(
             commandSuggestion("Run Jira MCP server", [jiraConfig.mcp.command, ...jiraConfig.mcp.args], "Inspect the configured MCP server output."),
             commandSuggestion(
               "Re-run Jira doctor",
-              ["task-loop-orchestrator", "doctor", "--jira"],
+              ["tlo", "doctor", "jira"],
               "Re-check Jira MCP after updating the server or tool configuration."
             )
           ]
@@ -535,7 +535,7 @@ async function checkJiraCli(rootDir: string, commandRunner: CommandRunner, id = 
     details: {
       stderr: result.stderr.trim() || undefined
     },
-    recommendedAction: "Install and authenticate the Jira CLI before using run --jira.",
+    recommendedAction: "Install and authenticate the Jira CLI before using tlo run ISSUE-KEY.",
     suggestions: [
       commandSuggestion(
         "Install Jira CLI with Homebrew",
@@ -575,7 +575,7 @@ function errorMessage(error: unknown): string {
 }
 
 function initSuggestion(reason: string): DoctorCommandSuggestion {
-  return commandSuggestion("Initialize orchestrator project", ["task-loop-orchestrator", "init"], reason);
+  return commandSuggestion("Initialize orchestrator project", ["tlo", "init"], reason);
 }
 
 function ghAuthStatusSuggestion(): DoctorCommandSuggestion {

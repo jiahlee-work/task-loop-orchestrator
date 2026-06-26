@@ -1,6 +1,6 @@
 # CLI Command Reference
 
-This reference covers the commands currently implemented by `task-loop-orchestrator`. Commands that produce JSON include the common CLI JSON metadata described in [json-output.md](json-output.md).
+This reference covers the commands currently implemented by `task-loop-orchestrator`. The preferred installed command is `tlo`; the longer `task-loop-orchestrator` binary remains available for compatibility. Commands that produce JSON include the common CLI JSON metadata described in [json-output.md](json-output.md).
 
 The current CLI does not create GitHub PRs, merge, push, publish, create tags, or create GitHub releases. PR-related commands produce decision-ready plans, stored approvals, and dry-run or blocked preflight reports.
 
@@ -13,7 +13,7 @@ Purpose: Print command usage.
 Example:
 
 ```bash
-task-loop-orchestrator --help
+tlo --help
 ```
 
 JSON: not supported.
@@ -27,7 +27,7 @@ Purpose: Print the installed CLI version.
 Example:
 
 ```bash
-task-loop-orchestrator --version
+tlo --version
 ```
 
 JSON: not supported.
@@ -43,37 +43,37 @@ Purpose: Prepare a project for local orchestrator state.
 Example:
 
 ```bash
-task-loop-orchestrator init --json
+tlo init --json
 ```
 
 JSON: supported with `--json`.
 
 Behavior: writes local bootstrap files only. It creates `orchestrator.config.json` when missing and ensures `.gitignore` contains `.orchestrator/`. Existing config is skipped unless `--force` is provided, so rerunning `init` is safe.
 
-### `jira setup [--url url] [--username email] [--api-token token|--personal-token token] [--skip-check]`
+### `setup jira [--url url] [--username email] [--api-token token|--personal-token token] [--skip-check]`
 
 Purpose: Save local Jira MCP credentials for the current project.
 
 Example:
 
 ```bash
-task-loop-orchestrator jira setup
-task-loop-orchestrator jira setup --url https://company.atlassian.net --username me@company.com --api-token "$JIRA_API_TOKEN"
+tlo setup jira
+tlo setup jira --url https://company.atlassian.net --username me@company.com --api-token "$JIRA_API_TOKEN"
 ```
 
 JSON: not supported.
 
 Behavior: writes `.orchestrator/jira.env` with file mode `0600`, so only the local file owner can read or update it. The file is under `.orchestrator/`, which `init` adds to `.gitignore`. By default the command verifies that the configured MCP server exposes the Jira issue read tool; use `--skip-check` to save credentials without starting the MCP server.
 
-### `doctor [--github none|gh-cli] [--jira] [--json]`
+### `doctor [jira] [--github none|gh-cli] [--json]`
 
 Purpose: Diagnose whether the current project is ready to use the orchestrator.
 
 Example:
 
 ```bash
-task-loop-orchestrator doctor --github gh-cli --json
-task-loop-orchestrator doctor --jira --json
+tlo doctor --github gh-cli --json
+tlo doctor jira
 ```
 
 JSON: supported with `--json`.
@@ -82,21 +82,24 @@ Behavior: read-only. It checks Node.js, Git repository presence, config loading,
 
 ## Run Loop
 
-### `run <title> [options] [--json]`
+### `run ISSUE-KEY [--note text] [options] [--json]`
 
 Purpose: Start a new closed-loop orchestrator run.
 
 Example:
 
 ```bash
-task-loop-orchestrator run "Quickstart smoke" --max-iterations 1 --json
-task-loop-orchestrator run --jira ABC-123 --max-iterations 1 --json
+tlo run ABC-123
+tlo run ABC-123 --note "이번에는 UI 문구까지 같이 정리해줘"
+tlo run "README의 설치 흐름을 현재 CLI 기준으로 정리해줘"
+tlo run "Quickstart smoke" --max-iterations 1 --json
 ```
 
 Useful options:
 
 - `--description text`
 - `--jira ISSUE-KEY`
+- `--note text`
 - `--permission read|write|maintainer`
 - `--executor mock|codex-cli-dry-run|codex-cli`
 - `--reviewer mock|local-evidence`
@@ -104,7 +107,7 @@ Useful options:
 
 JSON: supported with `--json`.
 
-Behavior: writes run state under `.orchestrator/runs/`. With `--jira`, the command reads one Jira issue through the configured Jira provider and converts it into the run `TaskSpec`. The default provider launches the `mcp-atlassian` MCP server directly through stdio when `JIRA_URL` and Jira auth environment variables are present; local Jira CLI remains a fallback. If issue reading fails, run `task-loop-orchestrator doctor --jira --json` and follow the suggested setup commands. Default mock roles and dry-run adapters do not call external write-side systems.
+Behavior: writes run state under `.orchestrator/runs/`. When the first argument looks like a Jira issue key, the command reads that issue through the configured Jira provider and converts the issue plus optional `--note` into the run `TaskSpec`. The default provider launches the `mcp-atlassian` MCP server directly through stdio when `JIRA_URL` and Jira auth environment variables are present; local Jira CLI remains a fallback. If issue reading fails, run `tlo doctor jira` and follow the suggested setup commands. Default mock roles and dry-run adapters do not call external write-side systems.
 
 ### `resume <runId> [--max-iterations n] [--json]`
 
@@ -133,7 +136,7 @@ task-loop-orchestrator status <runId> --json --raw
 
 JSON: supported with `--json`. Use `--json --raw` to print the stored raw `LoopRun` shape.
 
-Behavior: read-only. It does not modify local state or external systems. Without `runId`, it reports the latest run; with `runId`, it reports that specific run. In an empty project, `status --json` returns `status: "not_found"` and `run: null` with a message that points back to `run <title> --json`.
+Behavior: read-only. It does not modify local state or external systems. Without `runId`, it reports the latest run; with `runId`, it reports that specific run. In an empty project, `status --json` returns `status: "not_found"` and `run: null` with a message that points back to `tlo run "task instruction" --json`.
 
 ## Integration Status
 

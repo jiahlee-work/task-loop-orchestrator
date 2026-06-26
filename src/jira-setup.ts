@@ -44,7 +44,7 @@ export async function setupJiraMcp(options: JiraSetupOptions): Promise<JiraSetup
         status: "skipped",
         summary: "Jira MCP check skipped."
       },
-      nextCommand: "task-loop-orchestrator doctor --jira"
+      nextCommand: "tlo doctor jira"
     };
   }
 
@@ -60,9 +60,9 @@ export async function setupJiraMcp(options: JiraSetupOptions): Promise<JiraSetup
       status: mcpReady ? "pass" : "warn",
       summary: mcpReady
         ? `Jira MCP server exposes ${mcpConfig.toolName}.`
-        : `Jira MCP server could not be verified. Run task-loop-orchestrator doctor --jira for details.`
+        : `Jira MCP server could not be verified. Run tlo doctor jira for details.`
     },
-    nextCommand: mcpReady ? "task-loop-orchestrator run --jira ISSUE-KEY" : "task-loop-orchestrator doctor --jira"
+    nextCommand: mcpReady ? "tlo run ISSUE-KEY" : "tlo doctor jira"
   };
 }
 
