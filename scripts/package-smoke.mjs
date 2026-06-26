@@ -47,6 +47,7 @@ async function main() {
       const help = await run(bin, ["--help"], { cwd: projectDir });
       assertIncludes(help.stdout, "task-loop-orchestrator init", "help output should include init usage");
       assertIncludes(help.stdout, "task-loop-orchestrator setup jira", "help output should include setup jira usage");
+      assertIncludes(help.stdout, "task-loop-orchestrator setup gemini", "help output should include setup gemini usage");
       assertIncludes(help.stdout, "task-loop-orchestrator doctor", "help output should include doctor usage");
       assertIncludes(help.stdout, "tlo setup jira", "help output should include tlo setup alias usage");
       assertIncludes(help.stdout, "task-loop-orchestrator execution-audit", "help output should include execution-audit usage");
@@ -129,7 +130,7 @@ async function main() {
       assertEqual(missingResume.exitCode, "1", "resume missing run should exit non-zero");
       assertResumeNotFoundReport(parseJson(missingResume), "run_missing");
 
-      const loop = await run(bin, ["run", "Smoke task", "--max-iterations", "1", "--json"], { cwd: projectDir });
+      const loop = await run(bin, ["run", "Smoke task", "--planner", "mock", "--max-iterations", "1", "--json"], { cwd: projectDir });
       loopReport = parseJson(loop);
       assertRunReport(loopReport, "run", {
         status: "completed",
@@ -179,7 +180,7 @@ async function main() {
     });
 
     await runStep("jira issue run json", async () => {
-      const jiraRun = await run(shortBin, ["run", "ABC-123", "--note", "Include package smoke note.", "--max-iterations", "1", "--json"], {
+      const jiraRun = await run(shortBin, ["run", "ABC-123", "--note", "Include package smoke note.", "--planner", "mock", "--max-iterations", "1", "--json"], {
         cwd: projectDir,
         env: prependPath(fakeBinDir)
       });

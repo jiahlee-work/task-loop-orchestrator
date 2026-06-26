@@ -1,6 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ExecutorMode, GitHubProviderMode, JiraProviderMode, PermissionMode, ReviewerMode } from "./domain.js";
+import type {
+  ExecutorMode,
+  GitHubProviderMode,
+  JiraProviderMode,
+  PermissionMode,
+  PlannerMode,
+  ReviewerMode
+} from "./domain.js";
 
 export interface JiraMcpConfig {
   command: string;
@@ -16,11 +23,19 @@ export interface JiraConfig {
   mcp: JiraMcpConfig;
 }
 
+export interface GeminiConfig {
+  endpoint: string;
+  model: string;
+  apiKey?: string;
+}
+
 export interface OrchestratorConfig {
+  planner: PlannerMode;
   executor: ExecutorMode;
   reviewer: ReviewerMode;
   github: GitHubProviderMode;
   jira: JiraConfig;
+  gemini: GeminiConfig;
   permissionMode: PermissionMode;
   worktree: {
     enabled: boolean;
@@ -29,6 +44,7 @@ export interface OrchestratorConfig {
 }
 
 export const defaultOrchestratorConfig: OrchestratorConfig = {
+  planner: "gemini",
   executor: "mock",
   reviewer: "mock",
   github: "none",
@@ -42,6 +58,10 @@ export const defaultOrchestratorConfig: OrchestratorConfig = {
       issueKeyArgument: "issue_key",
       env: {}
     }
+  },
+  gemini: {
+    endpoint: "https://generativelanguage.googleapis.com",
+    model: "gemini-2.5-flash"
   },
   permissionMode: "write",
   worktree: {
@@ -66,10 +86,12 @@ export async function loadOrchestratorConfig(rootDir: string = process.cwd()): P
 
 export function normalizeConfig(input: Partial<OrchestratorConfig>): OrchestratorConfig {
   return {
+    planner: normalizePlannerMode(input.planner),
     executor: normalizeExecutorMode(input.executor),
     reviewer: normalizeReviewerMode(input.reviewer),
     github: normalizeGitHubProviderMode(input.github),
     jira: normalizeJiraConfig(input.jira),
+    gemini: normalizeGeminiConfig(input.gemini),
     permissionMode: normalizePermissionMode(input.permissionMode),
     worktree: {
       enabled: typeof input.worktree?.enabled === "boolean" ? input.worktree.enabled : defaultOrchestratorConfig.worktree.enabled
@@ -79,6 +101,14 @@ export function normalizeConfig(input: Partial<OrchestratorConfig>): Orchestrato
         ? input.maxIterations
         : defaultOrchestratorConfig.maxIterations
   };
+}
+
+export function normalizePlannerMode(value: unknown): PlannerMode {
+  if (value === "mock" || value === "gemini") {
+    return value;
+  }
+
+  return defaultOrchestratorConfig.planner;
 }
 
 export function normalizeExecutorMode(value: unknown): ExecutorMode {
@@ -123,6 +153,24 @@ export function normalizeJiraConfig(value: unknown): JiraConfig {
     provider: normalizeJiraProviderMode(value.provider),
     fallback,
     mcp: normalizeJiraMcpConfig(value.mcp)
+  };
+}
+
+export function normalizeGeminiConfig(value: unknown): GeminiConfig {
+  if (!isRecord(value)) {
+    return defaultOrchestratorConfig.gemini;
+  }
+
+  return {
+    endpoint:
+      typeof value.endpoint === "string" && value.endpoint.trim()
+        ? value.endpoint.trim().replace(/\/+$/, "")
+        : defaultOrchestratorConfig.gemini.endpoint,
+    model:
+      typeof value.model === "string" && value.model.trim()
+        ? value.model.trim()
+        : defaultOrchestratorConfig.gemini.model,
+    apiKey: typeof value.apiKey === "string" && value.apiKey.trim() ? value.apiKey.trim() : undefined
   };
 }
 

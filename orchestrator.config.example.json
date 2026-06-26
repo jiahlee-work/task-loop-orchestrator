@@ -1,4 +1,5 @@
 {
+  "planner": "gemini",
   "executor": "mock",
   "reviewer": "mock",
   "github": "none",
@@ -14,6 +15,10 @@
       "issueKeyArgument": "issue_key",
       "env": {}
     }
+  },
+  "gemini": {
+    "endpoint": "https://generativelanguage.googleapis.com",
+    "model": "gemini-2.5-flash"
   },
   "permissionMode": "write",
   "worktree": {

@@ -49,11 +49,11 @@ This is a candidate backlog for work after the `0.1.0 - Unreleased` candidate. I
 - Safety boundary: expand read-only APIs first. PR creation, mutation, merge, release, and issue operations remain out of scope until the approval-gated write model is implemented.
 - First useful slice: enrich checkpoint reports with read-only PR list context when a matching branch or ref exists.
 
-### P2: Jira Provider Skeleton To Read-Only Adapter
+### P2: Jira Checkpoint Evidence Expansion
 
-- Why: Jira status can inform owner-decision items and external workflow state, but write transitions are high-risk.
-- Safety boundary: start with read-only issue lookup and status summaries. Jira transitions remain decision-ready candidates only.
-- First useful slice: define a mockable Jira read provider and include optional read-only issue status evidence in checkpoints.
+- Why: Jira issue reading is now available for `run`; checkpoint reports can still use richer Jira status evidence for handoff and owner-decision summaries.
+- Safety boundary: keep Jira transitions blocked. Jira status evidence remains read-only.
+- First useful slice: include optional read-only issue status evidence in checkpoints when the run was started from a Jira issue.
 
 ### P2: Packaging And Publish Workflow
 

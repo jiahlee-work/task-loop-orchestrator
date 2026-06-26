@@ -2,7 +2,7 @@
 
 아직 npm에 배포하지 않았습니다. 지금은 GitHub 저장소를 clone한 뒤 pnpm으로 빌드해서 사용합니다. 명령별 자세한 옵션은 [commands.md](commands.md)를 보세요.
 
-현재 MVP는 로컬 프로젝트에 `.orchestrator/` 상태를 만들고, mock 기반 작업 루프를 실행한 뒤 저장된 run을 조회하고 이어 실행하는 흐름을 확인하는 단계입니다. 브랜치 생성, 커밋, 푸시, PR 생성, 릴리스, npm publish는 하지 않습니다.
+현재 MVP는 로컬 프로젝트에 `.orchestrator/` 상태를 만들고, Jira 이슈를 읽어 Gemini Planner로 작업을 나눈 뒤 저장된 run을 조회하고 이어 실행하는 흐름을 확인하는 단계입니다. Executor와 Reviewer는 아직 mock 기반입니다. 브랜치 생성, 커밋, 푸시, PR 생성, 릴리스, npm publish는 하지 않습니다.
 
 ## 요구 사항
 
@@ -20,7 +20,9 @@ cd task-loop-orchestrator
 corepack enable
 pnpm install --frozen-lockfile
 pnpm run build
-pnpm link --global
+pnpm setup
+source ~/.zshrc
+pnpm add -g .
 node dist/cli.js --help
 node dist/cli.js --version
 ```
@@ -41,7 +43,9 @@ tlo doctor
 tlo init
 tlo doctor
 tlo setup jira
+tlo setup gemini
 tlo doctor jira
+tlo doctor gemini
 tlo run OUC-10
 ```
 
@@ -76,7 +80,7 @@ GitHub 정보가 없거나 인증이 부족하면 실패 대신 `unknown` 또는
 
 ## 릴리스 검증용 패키지 확인
 
-일반 사용 흐름은 clone 후 `node dist/cli.js` 또는 `node "$TLO"`로 실행하는 방식입니다. 패키지에 포함될 파일이나 설치된 바이너리 동작을 확인해야 할 때만 아래 명령을 사용하세요.
+일반 사용 흐름은 clone 후 `pnpm add -g .`로 `tlo`를 등록해 실행하는 방식입니다. 패키지에 포함될 파일이나 설치된 바이너리 동작을 확인해야 할 때만 아래 명령을 사용하세요.
 
 ```bash
 pnpm run package:artifacts

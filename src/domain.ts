@@ -1,5 +1,7 @@
 export type PermissionMode = "read" | "write" | "maintainer";
 
+export type PlannerMode = "mock" | "gemini";
+
 export type ExecutorMode = "mock" | "codex-cli-dry-run" | "codex-cli";
 
 export type ReviewerMode = "mock" | "local-evidence";

@@ -50,22 +50,24 @@ JSON: supported with `--json`.
 
 Behavior: writes local bootstrap files only. It creates `orchestrator.config.json` when missing and ensures `.gitignore` contains `.orchestrator/`. Existing config is skipped unless `--force` is provided, so rerunning `init` is safe.
 
-### `setup jira [--url url] [--username email] [--api-token token|--personal-token token] [--skip-check]`
+### `setup jira|gemini [options]`
 
-Purpose: Save local Jira MCP credentials for the current project.
+Purpose: Save local provider credentials for the current project.
 
 Example:
 
 ```bash
 tlo setup jira
 tlo setup jira --url https://company.atlassian.net --username me@company.com --api-token "$JIRA_API_TOKEN"
+tlo setup gemini
+tlo setup gemini --api-key "$GEMINI_API_KEY" --model gemini-2.5-flash
 ```
 
 JSON: not supported.
 
-Behavior: writes `.orchestrator/jira.env` with file mode `0600`, so only the local file owner can read or update it. The file is under `.orchestrator/`, which `init` adds to `.gitignore`. By default the command verifies that the configured MCP server exposes the Jira issue read tool; use `--skip-check` to save credentials without starting the MCP server.
+Behavior: writes provider env files such as `.orchestrator/jira.env` and `.orchestrator/gemini.env` with file mode `0600`, so only the local file owner can read or update them. The files are under `.orchestrator/`, which `init` adds to `.gitignore`. By default the command verifies that the configured MCP server exposes the Jira issue read tool or that the Gemini planner model responds; use `--skip-check` to save credentials without a live verification call.
 
-### `doctor [jira] [--github none|gh-cli] [--json]`
+### `doctor [jira|gemini] [--github none|gh-cli] [--json]`
 
 Purpose: Diagnose whether the current project is ready to use the orchestrator.
 
@@ -74,11 +76,12 @@ Example:
 ```bash
 tlo doctor --github gh-cli --json
 tlo doctor jira
+tlo doctor gemini
 ```
 
 JSON: supported with `--json`.
 
-Behavior: read-only. It checks Node.js, Git repository presence, config loading, `.gitignore`, store path access, optional read-only GitHub CLI diagnostics, and optional Jira MCP availability instead of writing repository state. Jira MCP diagnostics distinguish missing `.orchestrator/jira.env` credentials, missing `uvx`, MCP server startup/query failures, and a missing `jira_get_issue` tool. When MCP is unavailable and CLI fallback is enabled, it also reports local Jira CLI availability. Warnings and failures include a short recommended action and safe command suggestions where available.
+Behavior: read-only. It checks Node.js, Git repository presence, config loading, `.gitignore`, store path access, optional read-only GitHub CLI diagnostics, optional Jira MCP availability, and optional Gemini planner availability instead of writing repository state. Jira MCP diagnostics distinguish missing `.orchestrator/jira.env` credentials, missing `uvx`, MCP server startup/query failures, and a missing `jira_get_issue` tool. Gemini diagnostics distinguish missing `.orchestrator/gemini.env` credentials from model/API verification failures. When MCP is unavailable and CLI fallback is enabled, it also reports local Jira CLI availability. Warnings and failures include a short recommended action and safe command suggestions where available.
 
 ## Run Loop
 
@@ -100,6 +103,7 @@ Useful options:
 - `--description text`
 - `--jira ISSUE-KEY`
 - `--note text`
+- `--planner mock|gemini`
 - `--permission read|write|maintainer`
 - `--executor mock|codex-cli-dry-run|codex-cli`
 - `--reviewer mock|local-evidence`

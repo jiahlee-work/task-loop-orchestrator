@@ -30,6 +30,7 @@ describe("loadOrchestratorConfig", () => {
       join(root, "orchestrator.config.json"),
       JSON.stringify({
         executor: "codex-cli-dry-run",
+        planner: "mock",
         reviewer: "local-evidence",
         github: "gh-cli",
         jira: {
@@ -45,6 +46,11 @@ describe("loadOrchestratorConfig", () => {
             }
           }
         },
+        gemini: {
+          endpoint: "https://example.test/gemini",
+          model: "custom-gemini-model",
+          apiKey: "inline-key"
+        },
         permissionMode: "maintainer",
         worktree: {
           enabled: true
@@ -56,6 +62,7 @@ describe("loadOrchestratorConfig", () => {
 
     await expect(loadOrchestratorConfig(root)).resolves.toEqual({
       executor: "codex-cli-dry-run",
+      planner: "mock",
       reviewer: "local-evidence",
       github: "gh-cli",
       jira: {
@@ -70,6 +77,11 @@ describe("loadOrchestratorConfig", () => {
             JIRA_URL: "https://jira.example.com"
           }
         }
+      },
+      gemini: {
+        endpoint: "https://example.test/gemini",
+        model: "custom-gemini-model",
+        apiKey: "inline-key"
       },
       permissionMode: "maintainer",
       worktree: {

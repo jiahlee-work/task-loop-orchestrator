@@ -217,6 +217,29 @@ describe("doctor", () => {
     expect(calls.some((call) => call.command === "uvx")).toBe(false);
   });
 
+  it("reports missing Gemini planner credentials only when Gemini diagnostics are enabled", async () => {
+    const root = await tempRoot();
+
+    const defaultReport = await runDoctor(root);
+    expect(defaultReport.checks.some((item) => item.id.startsWith("gemini_"))).toBe(false);
+
+    const geminiReport = await runDoctor(root, { gemini: true });
+
+    expect(geminiReport.status).toBe("warn");
+    expect(check(geminiReport.checks, "gemini_credentials")).toMatchObject({
+      status: "warn",
+      recommendedAction: "Run tlo setup gemini to save local Gemini planner credentials.",
+      suggestions: [
+        {
+          label: "Set up Gemini Planner",
+          command: ["tlo", "setup", "gemini"],
+          reason: "Save local Gemini API credentials in .orchestrator/gemini.env.",
+          destructive: false
+        }
+      ]
+    });
+  });
+
   it("reports missing uvx before trying to start the Jira MCP server", async () => {
     const root = await tempRoot();
     let sessionStarted = false;
@@ -337,7 +360,7 @@ describe("doctor", () => {
   it("shows doctor in CLI usage", async () => {
     const cliSource = await readFile(join(process.cwd(), "src", "cli.ts"), "utf8");
 
-    expect(cliSource).toContain("task-loop-orchestrator doctor [jira] [--github none|gh-cli] [--json]");
+    expect(cliSource).toContain("task-loop-orchestrator doctor [jira|gemini] [--github none|gh-cli] [--json]");
   });
 });
 

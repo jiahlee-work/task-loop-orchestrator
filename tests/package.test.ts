@@ -59,7 +59,7 @@ describe("package metadata", () => {
     expect(cliSource).toContain('args.command === "--version" || args.command === "-v"');
     expect(readme).toContain("node dist/cli.js --version");
     expect(quickstart).toContain("node dist/cli.js --version");
-    expect(quickstart).toContain("pnpm link --global");
+    expect(quickstart).toContain("pnpm add -g .");
   });
 
   it("documents package smoke coverage and diagnostics", async () => {

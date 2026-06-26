@@ -2,7 +2,7 @@
 
 AI 작업을 역할별로 나누고, 계획부터 검증까지의 진행 상태를 로컬 파일에 남기는 CLI 오케스트레이터입니다.
 
-현재 MVP는 실제 코드를 대신 작성하거나 GitHub에 변경을 올리는 도구가 아닙니다. 먼저 `init`, `doctor`, `run`, `status`, `resume` 흐름으로 “작업 루프를 만들고, 저장하고, 이어서 확인하는” 기본 사용성을 검증하는 단계입니다.
+현재 MVP는 Jira 이슈를 읽고 Gemini Planner로 작업을 나눈 뒤, 실행 상태를 로컬 파일에 저장하는 단계입니다. 실제 코드 작성, 커밋, 푸시, PR 생성은 아직 하지 않습니다.
 
 ## 요구 사항
 
@@ -20,7 +20,9 @@ cd task-loop-orchestrator
 corepack enable
 pnpm install --frozen-lockfile
 pnpm run build
-pnpm link --global
+pnpm setup
+source ~/.zshrc
+pnpm add -g .
 node dist/cli.js --help
 node dist/cli.js --version
 ```
@@ -41,7 +43,9 @@ tlo doctor
 tlo init
 tlo doctor
 tlo setup jira
+tlo setup gemini
 tlo doctor jira
+tlo doctor gemini
 tlo run OUC-10
 ```
 
@@ -82,11 +86,13 @@ pnpm run release:check
 
 ## MVP 범위
 
-MVP에서 확인하는 것은 다음 네 가지입니다.
+MVP에서 확인하는 것은 다음 흐름입니다.
 
 - 프로젝트 초기화: `init`
 - 로컬 설정 진단: `doctor`
-- mock 기반 작업 루프 실행과 저장: `run`
+- Jira MCP 기반 이슈 읽기
+- Gemini Planner 기반 subtask 생성
+- mock Executor/Reviewer 기반 루프 실행과 저장: `run`
 - 저장된 run 조회와 이어 실행: `status`, `resume`
 
 반대로 아래 작업은 현재 MVP 범위가 아닙니다.
@@ -115,4 +121,4 @@ MVP에서 확인하는 것은 다음 네 가지입니다.
 
 Root Orchestrator가 context와 graph를 관리합니다. Planner, Executor, Reviewer는 각자의 보고서와 context delta만 반환하고, context와 graph를 직접 수정하지 않습니다.
 
-기본 executor와 reviewer는 mock 기반입니다. 외부 GitHub, Jira, Codex 연동은 provider 인터페이스나 읽기 전용 진단 경계로만 다룹니다.
+기본 Planner는 Gemini를 사용합니다. Executor와 Reviewer는 아직 mock 기반이며, 외부 GitHub/Jira 쓰기와 Codex 실제 실행은 안전 경계 밖에 둡니다.

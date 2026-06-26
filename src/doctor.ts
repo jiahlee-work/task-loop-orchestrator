@@ -1,7 +1,8 @@
 import { access, readFile, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join } from "node:path";
-import { defaultOrchestratorConfig, loadOrchestratorConfig, type JiraConfig } from "./config.js";
+import { defaultOrchestratorConfig, loadOrchestratorConfig, type GeminiConfig, type JiraConfig } from "./config.js";
+import { GeminiPlanner } from "./gemini-planner.js";
 import type { GitHubProviderMode } from "./domain.js";
 import {
   GitHubCliProvider,
@@ -42,6 +43,8 @@ export interface DoctorOptions {
   githubMode?: GitHubProviderMode;
   jira?: boolean;
   jiraConfig?: JiraConfig;
+  gemini?: boolean;
+  geminiConfig?: GeminiConfig;
   jiraMcpSessionFactory?: McpClientSessionFactory;
   commandRunner?: CommandRunner;
   githubProvider?: GitHubProvider;
@@ -88,6 +91,10 @@ export async function runDoctor(rootDir: string = process.cwd(), options: Doctor
         options.jiraMcpSessionFactory
       ))
     );
+  }
+
+  if (options.gemini === true) {
+    checks.push(await checkGemini(options.geminiConfig ?? defaultOrchestratorConfig.gemini));
   }
 
   return {
@@ -153,6 +160,7 @@ async function checkConfig(rootDir: string): Promise<DoctorCheck> {
       summary: "orchestrator.config.json exists and loads successfully.",
       details: {
         path,
+        planner: config.planner,
         executor: config.executor,
         reviewer: config.reviewer,
         github: config.github,
@@ -353,6 +361,59 @@ async function checkGitHub(github: GitHubProvider): Promise<DoctorCheck[]> {
   }
 
   return checks;
+}
+
+async function checkGemini(geminiConfig: GeminiConfig): Promise<DoctorCheck> {
+  if (!geminiConfig.apiKey?.trim()) {
+    return {
+      id: "gemini_credentials",
+      status: "warn",
+      summary: "Gemini API key is not configured.",
+      details: {
+        model: geminiConfig.model,
+        endpoint: geminiConfig.endpoint
+      },
+      recommendedAction: "Run tlo setup gemini to save local Gemini planner credentials.",
+      suggestions: [
+        commandSuggestion(
+          "Set up Gemini Planner",
+          ["tlo", "setup", "gemini"],
+          "Save local Gemini API credentials in .orchestrator/gemini.env."
+        )
+      ]
+    };
+  }
+
+  const check = await new GeminiPlanner({ config: geminiConfig }).checkConnection();
+  if (check.ok) {
+    return {
+      id: "gemini_planner",
+      status: "pass",
+      summary: check.summary,
+      details: {
+        model: geminiConfig.model,
+        endpoint: geminiConfig.endpoint
+      }
+    };
+  }
+
+  return {
+    id: "gemini_planner",
+    status: "warn",
+    summary: `Gemini planner could not be verified: ${check.summary}`,
+    details: {
+      model: geminiConfig.model,
+      endpoint: geminiConfig.endpoint
+    },
+    recommendedAction: "Check the Gemini API key, model, and network access.",
+    suggestions: [
+      commandSuggestion(
+        "Re-run Gemini doctor",
+        ["tlo", "doctor", "gemini"],
+        "Re-check Gemini planner after fixing credentials or model settings."
+      )
+    ]
+  };
 }
 
 async function checkJira(

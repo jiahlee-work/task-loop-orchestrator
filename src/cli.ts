@@ -18,6 +18,7 @@ import type {
   ExecutorMode,
   GitHubProviderMode,
   PermissionMode,
+  PlannerMode,
   ReviewerMode,
   WriteReadinessErrorReport,
   WriteRunnerErrorReport
@@ -34,6 +35,9 @@ import {
   summarizeExecutionAuditBundles,
   summarizeExecutionAuditList
 } from "./execution-intents.js";
+import { loadGeminiConfigWithLocalEnv, readGeminiEnvFile } from "./gemini-env.js";
+import { GeminiPlanner } from "./gemini-planner.js";
+import { setupGemini, type GeminiSetupReport } from "./gemini-setup.js";
 import { initProject } from "./init.js";
 import { createIntegrationCheckpoint } from "./integration.js";
 import { loadJiraConfigWithLocalEnv, readJiraEnvFile } from "./jira-env.js";
@@ -130,15 +134,20 @@ function githubFlag(value: string | undefined): GitHubProviderMode {
   return normalizeGitHubProviderMode(value);
 }
 
+function plannerFlag(value: string | undefined): PlannerMode {
+  return value === "mock" || value === "gemini" ? value : "gemini";
+}
+
 function printUsage(): void {
   console.log(`Usage:
   task-loop-orchestrator --help
   task-loop-orchestrator --version
   task-loop-orchestrator init [--force] [--json]
   task-loop-orchestrator setup jira [--url url] [--username email] [--api-token token|--personal-token token] [--skip-check]
-  task-loop-orchestrator doctor [jira] [--github none|gh-cli] [--json]
-  task-loop-orchestrator run ISSUE-KEY [--note text] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]
-  task-loop-orchestrator run <instruction> [--description text] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]
+  task-loop-orchestrator setup gemini [--api-key key] [--model model] [--skip-check]
+  task-loop-orchestrator doctor [jira|gemini] [--github none|gh-cli] [--json]
+  task-loop-orchestrator run ISSUE-KEY [--note text] [--planner mock|gemini] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]
+  task-loop-orchestrator run <instruction> [--description text] [--planner mock|gemini] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]
   task-loop-orchestrator status [runId] [--json] [--raw]
   task-loop-orchestrator resume <runId> [--max-iterations n] [--json]
   task-loop-orchestrator checkpoint [runId] [--github none|gh-cli] [--json]
@@ -152,7 +161,9 @@ function printUsage(): void {
 
 Short alias:
   tlo setup jira
+  tlo setup gemini
   tlo doctor jira
+  tlo doctor gemini
   tlo run ISSUE-KEY
   tlo run ISSUE-KEY --note "additional context"
   tlo run "direct task instruction"`);
@@ -190,6 +201,25 @@ function statusLabel(status: "pass" | "warn" | "fail"): "Success" | "Warning" | 
 
 function uniqueStrings(values: string[]): string[] {
   return [...new Set(values.filter((value) => value.trim().length > 0))];
+}
+
+function uniqueSuggestionLines(
+  suggestions: Array<{ command: string[]; reason: string }>
+): Array<{ command: string; reason: string }> {
+  const seen = new Set<string>();
+  const result: Array<{ command: string; reason: string }> = [];
+  for (const suggestion of suggestions) {
+    const command = suggestion.command.join(" ");
+    const key = `${command}\n${suggestion.reason}`;
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    result.push({ command, reason: suggestion.reason });
+  }
+
+  return result;
 }
 
 function printExecutionAuditError(
@@ -318,13 +348,23 @@ function printPlainWriteRunnerError(
 async function doctorCommand(args: ParsedArgs): Promise<void> {
   const githubMode = stringFlag(args.flags, "github") ? githubFlag(stringFlag(args.flags, "github")) : "none";
   const jiraEnabled = args.flags.jira === true || args.positional.includes("jira");
+  const geminiEnabled = args.flags.gemini === true || args.positional.includes("gemini");
   const config =
-    jiraEnabled
+    jiraEnabled || geminiEnabled
       ? await loadOrchestratorConfig(process.cwd())
-          .then((loadedConfig) => loadJiraConfigWithLocalEnv(process.cwd(), loadedConfig.jira))
+          .then(async (loadedConfig) => ({
+            jira: await loadJiraConfigWithLocalEnv(process.cwd(), loadedConfig.jira),
+            gemini: await loadGeminiConfigWithLocalEnv(process.cwd(), loadedConfig.gemini)
+          }))
           .catch(() => undefined)
       : undefined;
-  const report = await runDoctor(process.cwd(), { githubMode, jira: jiraEnabled, jiraConfig: config });
+  const report = await runDoctor(process.cwd(), {
+    githubMode,
+    jira: jiraEnabled,
+    jiraConfig: config?.jira,
+    gemini: geminiEnabled,
+    geminiConfig: config?.gemini
+  });
 
   if (args.flags.json === true) {
     printJson("doctor", report);
@@ -347,24 +387,25 @@ function printDoctorReport(report: DoctorReport): void {
   console.log(`- Root: ${report.rootDir}`);
   console.log(`- Status: ${report.status}`);
 
-  const nextActions = uniqueStrings(
-    report.checks.flatMap((check) => [
-      ...(check.recommendedAction ? [check.recommendedAction] : []),
-      ...(check.suggestions ?? []).map((suggestion) => `${suggestion.command.join(" ")} - ${suggestion.reason}`)
-    ])
-  );
+  const nextActions = uniqueStrings(report.checks.flatMap((check) => (check.recommendedAction ? [check.recommendedAction] : [])));
+  const suggestions = uniqueSuggestionLines(report.checks.flatMap((check) => check.suggestions ?? []));
 
-  if (nextActions.length > 0) {
+  if (nextActions.length > 0 || suggestions.length > 0) {
     console.log("");
     console.log("Next:");
     for (const action of nextActions) {
       console.log(`- ${action}`);
     }
+    for (const suggestion of suggestions) {
+      console.log(`- ${suggestion.reason}`);
+      console.log(`  ${suggestion.command}`);
+    }
   } else {
     const hasJiraChecks = report.checks.some((check) => check.id.startsWith("jira_"));
     console.log("");
     console.log("Next:");
-    console.log(hasJiraChecks ? "- tlo run ISSUE-KEY - read a Jira issue and start the planner run." : '- tlo run "task instruction" - start a planner run from direct text.');
+    console.log(hasJiraChecks ? "- Start a run from a Jira issue:" : "- Start a run from direct text:");
+    console.log(hasJiraChecks ? "  tlo run ISSUE-KEY" : '  tlo run "task instruction"');
   }
 }
 
@@ -397,6 +438,23 @@ async function jiraCommand(args: ParsedArgs): Promise<void> {
 
   const report = await jiraSetupCommand(args);
   printJiraSetupReport(report);
+}
+
+async function setupCommand(args: ParsedArgs): Promise<void> {
+  const target = args.positional[0];
+  if (target === "jira") {
+    const report = await jiraSetupCommand(args);
+    printJiraSetupReport(report);
+    return;
+  }
+
+  if (target === "gemini") {
+    const report = await geminiSetupCommand(args);
+    printGeminiSetupReport(report);
+    return;
+  }
+
+  throw new Error("setup requires a target: jira or gemini.");
 }
 
 async function jiraSetupCommand(args: ParsedArgs): Promise<JiraSetupReport> {
@@ -437,7 +495,39 @@ function printJiraSetupReport(report: JiraSetupReport): void {
   console.log(`- MCP check: [${report.mcpCheck.status}] ${report.mcpCheck.summary}`);
   console.log("");
   console.log("Next:");
-  console.log(`- ${report.nextCommand} - ${report.status === "ready" ? "start a run from a Jira issue." : "check Jira MCP setup before starting a run."}`);
+  console.log(`- ${report.status === "ready" ? "Start a run from a Jira issue:" : "Check Jira MCP setup before starting a run:"}`);
+  console.log(`  ${report.nextCommand}`);
+}
+
+async function geminiSetupCommand(args: ParsedArgs): Promise<GeminiSetupReport> {
+  const existingEnv = await readGeminiEnvFile(process.cwd());
+  const apiKey =
+    stringFlag(args.flags, "api-key") ??
+    (await promptSecret("Gemini API key", existingEnv.GEMINI_API_KEY ? "leave blank to keep existing" : undefined)) ??
+    existingEnv.GEMINI_API_KEY;
+  const model = stringFlag(args.flags, "model") ?? existingEnv.GEMINI_MODEL;
+  const endpoint = stringFlag(args.flags, "endpoint") ?? existingEnv.GEMINI_ENDPOINT;
+
+  return setupGemini({
+    rootDir: process.cwd(),
+    apiKey,
+    model,
+    endpoint,
+    skipCheck: args.flags["skip-check"] === true
+  });
+}
+
+function printGeminiSetupReport(report: GeminiSetupReport): void {
+  console.log(`${report.status === "ready" ? "Success" : "Warning"}: Gemini setup`);
+  console.log("");
+  console.log("Result:");
+  console.log(`- Env file: ${report.envFile}`);
+  console.log(`- Model: ${report.model}`);
+  console.log(`- Planner check: [${report.check.status}] ${report.check.summary}`);
+  console.log("");
+  console.log("Next:");
+  console.log(`- ${report.status === "ready" ? "Start a run from a Jira issue or direct instruction:" : "Check Gemini planner setup:"}`);
+  console.log(`  ${report.nextCommand}`);
 }
 
 async function promptValue(label: string, defaultValue?: string): Promise<string> {
@@ -495,6 +585,8 @@ async function runCommand(args: ParsedArgs): Promise<void> {
   const store = new FileRunStore(process.cwd());
   const config = await loadOrchestratorConfig(process.cwd());
   const jiraConfig = await loadJiraConfigWithLocalEnv(process.cwd(), config.jira);
+  const geminiConfig = await loadGeminiConfigWithLocalEnv(process.cwd(), config.gemini);
+  const plannerMode = stringFlag(args.flags, "planner") ? plannerFlag(stringFlag(args.flags, "planner")) : config.planner;
   const executorMode = stringFlag(args.flags, "executor") ? executorFlag(stringFlag(args.flags, "executor")) : config.executor;
   const reviewerMode = stringFlag(args.flags, "reviewer") ? reviewerFlag(stringFlag(args.flags, "reviewer")) : config.reviewer;
   const permissionMode = stringFlag(args.flags, "permission") ? permissionFlag(stringFlag(args.flags, "permission")) : config.permissionMode;
@@ -507,7 +599,7 @@ async function runCommand(args: ParsedArgs): Promise<void> {
       });
   const orchestrator = new RootOrchestrator({
     store,
-    roles: createRoleProviders(executorMode, reviewerMode),
+    roles: createRoleProviders(plannerMode, geminiConfig, executorMode, reviewerMode),
     tools: createGitToolProviders(process.cwd()),
     maxIterations: numberFlag(args.flags, "max-iterations") ?? config.maxIterations,
     worktreeEnabled: config.worktree.enabled
@@ -519,7 +611,7 @@ async function runCommand(args: ParsedArgs): Promise<void> {
     return;
   }
 
-  printRunReport(run, store, input, executorMode, reviewerMode);
+  printRunReport(run, store, input, plannerMode, geminiConfig.model, executorMode, reviewerMode);
 }
 
 function parseRunInput(args: ParsedArgs): RunInput {
@@ -611,6 +703,8 @@ function printRunReport(
   run: Awaited<ReturnType<RootOrchestrator["runTask"]>>,
   store: FileRunStore,
   input: RunInput,
+  plannerMode: PlannerMode,
+  plannerModel: string,
   executorMode: ExecutorMode,
   reviewerMode: ReviewerMode
 ): void {
@@ -632,7 +726,10 @@ function printRunReport(
 
   console.log("");
   console.log("Planner:");
-  console.log("- Provider: mock");
+  console.log(`- Provider: ${plannerMode}`);
+  if (plannerMode === "gemini") {
+    console.log(`- Model: ${plannerModel}`);
+  }
   console.log(`- Subtasks: ${run.graph.subtasks.length}`);
 
   console.log("");
@@ -646,9 +743,11 @@ function printRunReport(
 
   console.log("");
   console.log("Next:");
-  console.log(`- tlo status ${run.id} - inspect this run.`);
+  console.log("- View the saved run:");
+  console.log(`  tlo status ${run.id}`);
   if (run.status !== "completed") {
-    console.log(`- tlo resume ${run.id} - continue the run.`);
+    console.log("- Continue the run:");
+    console.log(`  tlo resume ${run.id}`);
   }
 }
 
@@ -701,9 +800,10 @@ async function resumeCommand(args: ParsedArgs): Promise<void> {
 
   const store = new FileRunStore(process.cwd());
   const config = await loadOrchestratorConfig(process.cwd());
+  const geminiConfig = await loadGeminiConfigWithLocalEnv(process.cwd(), config.gemini);
   const orchestrator = new RootOrchestrator({
     store,
-    roles: createRoleProviders(config.executor, config.reviewer),
+    roles: createRoleProviders(config.planner, geminiConfig, config.executor, config.reviewer),
     tools: createGitToolProviders(process.cwd()),
     maxIterations: numberFlag(args.flags, "max-iterations") ?? config.maxIterations,
     worktreeEnabled: config.worktree.enabled
@@ -1385,9 +1485,8 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (args.command === "setup" && args.positional[0] === "jira") {
-    const report = await jiraSetupCommand(args);
-    printJiraSetupReport(report);
+  if (args.command === "setup") {
+    await setupCommand(args);
     return;
   }
 
@@ -1472,8 +1571,14 @@ main().catch((error: unknown) => {
   process.exitCode = 1;
 });
 
-function createRoleProviders(executorMode: ExecutorMode, reviewerMode: ReviewerMode): RoleProviders {
+function createRoleProviders(
+  plannerMode: PlannerMode,
+  geminiConfig: Awaited<ReturnType<typeof loadGeminiConfigWithLocalEnv>>,
+  executorMode: ExecutorMode,
+  reviewerMode: ReviewerMode
+): RoleProviders {
   const roles = createMockRoleProviders();
+  const planner = plannerMode === "mock" ? roles.planner : new GeminiPlanner({ config: geminiConfig });
   const executor =
     executorMode === "mock"
       ? roles.executor
@@ -1485,6 +1590,7 @@ function createRoleProviders(executorMode: ExecutorMode, reviewerMode: ReviewerM
 
   return {
     ...roles,
+    planner,
     executor,
     reviewer
   };
