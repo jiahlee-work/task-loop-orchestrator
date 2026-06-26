@@ -55,6 +55,15 @@ export interface McpClientSession {
 
 export type McpClientSessionFactory = (config: JiraMcpConfig, rootDir: string) => Promise<McpClientSession>;
 
+export type JiraMcpToolStatus = "server_unavailable" | "tool_missing" | "tool_available";
+
+export interface JiraMcpToolCheck {
+  status: JiraMcpToolStatus;
+  toolName: string;
+  availableTools: string[];
+  error?: string;
+}
+
 export interface ToolProviders {
   repo: RepoProvider;
   github?: GitHubProvider;
@@ -351,13 +360,37 @@ export class JiraMcpProvider implements JiraProvider {
       return false;
     }
 
+    const result = await this.checkIssueTool();
+    return result.status === "tool_available";
+  }
+
+  async checkIssueTool(): Promise<JiraMcpToolCheck> {
+    if (!hasJiraMcpEnvironment(this.config)) {
+      return {
+        status: "server_unavailable",
+        toolName: this.config.toolName,
+        availableTools: [],
+        error: "Jira MCP environment is not configured."
+      };
+    }
+
     let session: McpClientSession | undefined;
     try {
       session = await this.sessionFactory(this.config, this.rootDir);
       const result = await session.listTools();
-      return result.tools.some((tool) => tool.name === this.config.toolName);
-    } catch {
-      return false;
+      const availableTools = result.tools.map((tool) => tool.name);
+      return {
+        status: availableTools.includes(this.config.toolName) ? "tool_available" : "tool_missing",
+        toolName: this.config.toolName,
+        availableTools
+      };
+    } catch (error) {
+      return {
+        status: "server_unavailable",
+        toolName: this.config.toolName,
+        availableTools: [],
+        error: errorMessage(error)
+      };
     } finally {
       await closeMcpSession(session);
     }
@@ -502,6 +535,10 @@ function parseJson(value: string): unknown {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function normalizeJiraIssue(fallbackKey: string, value: Record<string, unknown>): JiraIssue | undefined {

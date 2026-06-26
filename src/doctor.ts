@@ -365,8 +365,8 @@ async function checkJira(
     return [await checkJiraCli(rootDir, commandRunner)];
   }
 
-  const checks = [await checkJiraMcp(rootDir, jiraConfig, jiraMcpSessionFactory)];
-  if (jiraConfig.fallback === "cli" && checks[0]?.status !== "pass") {
+  const checks = await checkJiraMcp(rootDir, commandRunner, jiraConfig, jiraMcpSessionFactory);
+  if (jiraConfig.fallback === "cli" && checks.some((check) => check.status !== "pass")) {
     checks.push(await checkJiraCli(rootDir, commandRunner, "jira_cli_fallback"));
   }
 
@@ -375,55 +375,143 @@ async function checkJira(
 
 async function checkJiraMcp(
   rootDir: string,
+  commandRunner: CommandRunner,
   jiraConfig: JiraConfig,
   jiraMcpSessionFactory?: McpClientSessionFactory
-): Promise<DoctorCheck> {
-  const hasEnv = hasJiraMcpEnvironment(jiraConfig.mcp);
-  const provider = new JiraMcpProvider(jiraConfig.mcp, rootDir, jiraMcpSessionFactory);
-  const hasIssueTool = await provider.hasIssueTool();
-  if (hasIssueTool) {
-    return {
-      id: "jira_mcp",
-      status: "pass",
-      summary: `Jira MCP server exposes ${jiraConfig.mcp.toolName}.`,
-      details: {
-        command: jiraConfig.mcp.command,
-        args: jiraConfig.mcp.args,
-        toolName: jiraConfig.mcp.toolName
-      }
-    };
-  }
+): Promise<DoctorCheck[]> {
+  const checks: DoctorCheck[] = [];
 
-  return {
-    id: "jira_mcp",
-    status: "warn",
-    summary: hasEnv
-      ? "Jira MCP server could not be verified or does not expose the issue read tool."
-      : "Jira MCP credentials are not configured.",
-    details: {
-      command: jiraConfig.mcp.command,
-      args: jiraConfig.mcp.args,
-      toolName: jiraConfig.mcp.toolName
-    },
-    recommendedAction: hasEnv
-      ? "Check that uvx and mcp-atlassian can start, and confirm Jira credentials are valid."
-      : "Run task-loop-orchestrator jira setup to save local Jira MCP credentials.",
-    suggestions: hasEnv
-      ? [
-          commandSuggestion("Run Jira MCP server", [jiraConfig.mcp.command, ...jiraConfig.mcp.args], "Start the configured MCP server directly."),
-          commandSuggestion(
-            "Re-run Jira doctor",
-            ["task-loop-orchestrator", "doctor", "--jira"],
-            "Re-check Jira MCP after fixing server or credential issues."
-          )
-        ]
-      : [
+  if (!hasJiraMcpEnvironment(jiraConfig.mcp)) {
+    return [
+      {
+        id: "jira_mcp_credentials",
+        status: "warn",
+        summary: "Jira MCP credentials are not configured.",
+        details: { required: ["JIRA_URL", "JIRA_USERNAME and JIRA_API_TOKEN, or JIRA_PERSONAL_TOKEN"] },
+        recommendedAction: "Run task-loop-orchestrator jira setup to save local Jira MCP credentials.",
+        suggestions: [
           commandSuggestion(
             "Set up Jira MCP",
             ["task-loop-orchestrator", "jira", "setup"],
             "Save local Jira MCP credentials in .orchestrator/jira.env."
           )
         ]
+      }
+    ];
+  }
+
+  checks.push({
+    id: "jira_mcp_credentials",
+    status: "pass",
+    summary: "Jira MCP credentials are configured."
+  });
+
+  const commandCheck = await checkJiraMcpCommand(rootDir, commandRunner, jiraConfig);
+  checks.push(commandCheck);
+  if (commandCheck.status !== "pass") {
+    return checks;
+  }
+
+  const provider = new JiraMcpProvider(jiraConfig.mcp, rootDir, jiraMcpSessionFactory);
+  const toolCheck = await provider.checkIssueTool();
+  if (toolCheck.status === "server_unavailable") {
+    checks.push({
+      id: "jira_mcp_server",
+      status: "warn",
+      summary: "Jira MCP server could not be started or queried.",
+      details: {
+        command: jiraConfig.mcp.command,
+        args: jiraConfig.mcp.args,
+        error: toolCheck.error
+      },
+      recommendedAction: "Check that uvx and mcp-atlassian can start, and confirm Jira credentials are valid.",
+      suggestions: [
+        commandSuggestion("Run Jira MCP server", [jiraConfig.mcp.command, ...jiraConfig.mcp.args], "Start the configured MCP server directly."),
+        commandSuggestion(
+          "Re-run Jira doctor",
+          ["task-loop-orchestrator", "doctor", "--jira"],
+          "Re-check Jira MCP after fixing server or credential issues."
+        )
+      ]
+    });
+    return checks;
+  }
+
+  checks.push({
+    id: "jira_mcp_server",
+    status: "pass",
+    summary: "Jira MCP server starts and returns a tool list.",
+    details: {
+      command: jiraConfig.mcp.command,
+      args: jiraConfig.mcp.args,
+      availableTools: toolCheck.availableTools
+    }
+  });
+
+  checks.push(
+    toolCheck.status === "tool_available"
+      ? {
+          id: "jira_mcp_tool",
+          status: "pass",
+          summary: `Jira MCP server exposes ${jiraConfig.mcp.toolName}.`,
+          details: { toolName: jiraConfig.mcp.toolName }
+        }
+      : {
+          id: "jira_mcp_tool",
+          status: "warn",
+          summary: `Jira MCP server does not expose ${jiraConfig.mcp.toolName}.`,
+          details: {
+            expectedTool: jiraConfig.mcp.toolName,
+            availableTools: toolCheck.availableTools
+          },
+          recommendedAction: "Confirm the mcp-atlassian version and Jira tool configuration.",
+          suggestions: [
+            commandSuggestion("Run Jira MCP server", [jiraConfig.mcp.command, ...jiraConfig.mcp.args], "Inspect the configured MCP server output."),
+            commandSuggestion(
+              "Re-run Jira doctor",
+              ["task-loop-orchestrator", "doctor", "--jira"],
+              "Re-check Jira MCP after updating the server or tool configuration."
+            )
+          ]
+        }
+  );
+
+  return checks;
+}
+
+async function checkJiraMcpCommand(rootDir: string, commandRunner: CommandRunner, jiraConfig: JiraConfig): Promise<DoctorCheck> {
+  const result = await commandRunner(jiraConfig.mcp.command, ["--version"], rootDir);
+  if (result.exitCode === 0) {
+    return {
+      id: "jira_mcp_command",
+      status: "pass",
+      summary: `Jira MCP command is available: ${jiraConfig.mcp.command}.`,
+      details: {
+        command: jiraConfig.mcp.command,
+        version: result.stdout.trim() || undefined
+      }
+    };
+  }
+
+  return {
+    id: "jira_mcp_command",
+    status: "warn",
+    summary: `Jira MCP command is not available: ${jiraConfig.mcp.command}.`,
+    details: {
+      command: jiraConfig.mcp.command,
+      stderr: result.stderr.trim() || undefined
+    },
+    recommendedAction: jiraConfig.mcp.command === "uvx" ? "Install uv so the uvx command is available." : "Install the configured MCP command.",
+    suggestions:
+      jiraConfig.mcp.command === "uvx"
+        ? [commandSuggestion("Install uv with Homebrew", ["brew", "install", "uv"], "Install uvx for running mcp-atlassian.")]
+        : [
+            commandSuggestion(
+              "Check MCP command",
+              [jiraConfig.mcp.command, "--version"],
+              "Verify that the configured MCP command is available on PATH."
+            )
+          ]
   };
 }
 

@@ -171,7 +171,7 @@ describe("doctor", () => {
 
     const defaultReport = await runDoctor(root, { commandRunner });
     expect(defaultReport.checks.some((item) => item.id === "jira_cli")).toBe(false);
-    expect(defaultReport.checks.some((item) => item.id === "jira_mcp")).toBe(false);
+    expect(defaultReport.checks.some((item) => item.id.startsWith("jira_mcp"))).toBe(false);
     expect(calls.some((call) => call.command === "jira")).toBe(false);
 
     const jiraReport = await runDoctor(root, {
@@ -183,7 +183,7 @@ describe("doctor", () => {
     });
 
     expect(jiraReport.status).toBe("warn");
-    expect(check(jiraReport.checks, "jira_mcp")).toMatchObject({
+    expect(check(jiraReport.checks, "jira_mcp_credentials")).toMatchObject({
       status: "warn",
       recommendedAction: "Run task-loop-orchestrator jira setup to save local Jira MCP credentials.",
       suggestions: [
@@ -214,6 +214,96 @@ describe("doctor", () => {
       ]
     });
     expect(calls.map((call) => [call.command, ...call.args])).toContainEqual(["jira", "version"]);
+    expect(calls.some((call) => call.command === "uvx")).toBe(false);
+  });
+
+  it("reports missing uvx before trying to start the Jira MCP server", async () => {
+    const root = await tempRoot();
+    let sessionStarted = false;
+
+    const report = await runDoctor(root, {
+      commandRunner: async (command) => {
+        if (command === "git") {
+          return { exitCode: 0, stdout: "true\n", stderr: "" };
+        }
+        if (command === "uvx") {
+          return { exitCode: 1, stdout: "", stderr: "uvx: command not found" };
+        }
+        return { exitCode: 0, stdout: "", stderr: "" };
+      },
+      jira: true,
+      jiraConfig: jiraMcpConfig(),
+      jiraMcpSessionFactory: async () => {
+        sessionStarted = true;
+        throw new Error("should not start");
+      }
+    });
+
+    expect(check(report.checks, "jira_mcp_credentials")).toMatchObject({ status: "pass" });
+    expect(check(report.checks, "jira_mcp_command")).toMatchObject({
+      status: "warn",
+      recommendedAction: "Install uv so the uvx command is available.",
+      suggestions: [
+        {
+          label: "Install uv with Homebrew",
+          command: ["brew", "install", "uv"],
+          reason: "Install uvx for running mcp-atlassian.",
+          destructive: false
+        }
+      ]
+    });
+    expect(sessionStarted).toBe(false);
+  });
+
+  it("reports Jira MCP server startup failures separately from missing tools", async () => {
+    const root = await tempRoot();
+
+    const report = await runDoctor(root, {
+      commandRunner: async (command) =>
+        command === "git" || command === "uvx"
+          ? { exitCode: 0, stdout: "ok\n", stderr: "" }
+          : { exitCode: 0, stdout: "", stderr: "" },
+      jira: true,
+      jiraConfig: jiraMcpConfig(),
+      jiraMcpSessionFactory: async () => {
+        throw new Error("server failed");
+      }
+    });
+
+    expect(check(report.checks, "jira_mcp_command")).toMatchObject({ status: "pass" });
+    expect(check(report.checks, "jira_mcp_server")).toMatchObject({
+      status: "warn",
+      recommendedAction: "Check that uvx and mcp-atlassian can start, and confirm Jira credentials are valid."
+    });
+    expect(report.checks.some((item) => item.id === "jira_mcp_tool")).toBe(false);
+  });
+
+  it("reports a missing jira_get_issue tool after the MCP server starts", async () => {
+    const root = await tempRoot();
+
+    const report = await runDoctor(root, {
+      commandRunner: async (command) =>
+        command === "git" || command === "uvx"
+          ? { exitCode: 0, stdout: "ok\n", stderr: "" }
+          : { exitCode: 0, stdout: "", stderr: "" },
+      jira: true,
+      jiraConfig: jiraMcpConfig(),
+      jiraMcpSessionFactory: async () => ({
+        async listTools() {
+          return { tools: [{ name: "jira_search" }] };
+        },
+        async callTool() {
+          return { content: [] };
+        },
+        async close() {}
+      })
+    });
+
+    expect(check(report.checks, "jira_mcp_server")).toMatchObject({ status: "pass" });
+    expect(check(report.checks, "jira_mcp_tool")).toMatchObject({
+      status: "warn",
+      recommendedAction: "Confirm the mcp-atlassian version and Jira tool configuration."
+    });
   });
 
   it("passes Jira MCP diagnostics when the issue read tool is available", async () => {
@@ -221,23 +311,11 @@ describe("doctor", () => {
 
     const report = await runDoctor(root, {
       commandRunner: async (command) =>
-        command === "git" ? { exitCode: 0, stdout: "true\n", stderr: "" } : { exitCode: 0, stdout: "", stderr: "" },
+        command === "git" || command === "uvx"
+          ? { exitCode: 0, stdout: "true\n", stderr: "" }
+          : { exitCode: 0, stdout: "", stderr: "" },
       jira: true,
-      jiraConfig: {
-        provider: "mcp-atlassian",
-        fallback: "cli",
-        mcp: {
-          command: "uvx",
-          args: ["mcp-atlassian"],
-          toolName: "jira_get_issue",
-          issueKeyArgument: "issue_key",
-          env: {
-            JIRA_URL: "https://jira.example.com",
-            JIRA_USERNAME: "bot@example.com",
-            JIRA_API_TOKEN: "token"
-          }
-        }
-      },
+      jiraConfig: jiraMcpConfig(),
       jiraMcpSessionFactory: async () => ({
         async listTools() {
           return { tools: [{ name: "jira_get_issue" }] };
@@ -249,7 +327,10 @@ describe("doctor", () => {
       })
     });
 
-    expect(check(report.checks, "jira_mcp")).toMatchObject({ status: "pass" });
+    expect(check(report.checks, "jira_mcp_credentials")).toMatchObject({ status: "pass" });
+    expect(check(report.checks, "jira_mcp_command")).toMatchObject({ status: "pass" });
+    expect(check(report.checks, "jira_mcp_server")).toMatchObject({ status: "pass" });
+    expect(check(report.checks, "jira_mcp_tool")).toMatchObject({ status: "pass" });
     expect(report.checks.some((item) => item.id === "jira_cli_fallback")).toBe(false);
   });
 
@@ -288,6 +369,24 @@ function mockGitHubProvider(input: {
     },
     async getCheckStatus() {
       return input.checks;
+    }
+  };
+}
+
+function jiraMcpConfig() {
+  return {
+    provider: "mcp-atlassian" as const,
+    fallback: "cli" as const,
+    mcp: {
+      command: "uvx",
+      args: ["mcp-atlassian"],
+      toolName: "jira_get_issue",
+      issueKeyArgument: "issue_key",
+      env: {
+        JIRA_URL: "https://jira.example.com",
+        JIRA_USERNAME: "bot@example.com",
+        JIRA_API_TOKEN: "token"
+      }
     }
   };
 }
