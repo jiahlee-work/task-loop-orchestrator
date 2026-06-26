@@ -130,6 +130,14 @@ async function main() {
       assertEqual(missingResume.exitCode, "1", "resume missing run should exit non-zero");
       assertResumeNotFoundReport(parseJson(missingResume), "run_missing");
 
+      const missingGemini = await runAllowFailure(bin, ["run", "Smoke task", "--json"], { cwd: projectDir });
+      assertEqual(missingGemini.exitCode, "1", "default Gemini run without setup should exit non-zero");
+      assertRunPreflightFailureReport(parseJson(missingGemini), {
+        errorCode: "gemini_setup_required",
+        provider: "gemini",
+        nextCommand: "tlo setup gemini"
+      });
+
       const loop = await run(bin, ["run", "Smoke task", "--planner", "mock", "--max-iterations", "1", "--json"], { cwd: projectDir });
       loopReport = parseJson(loop);
       assertRunReport(loopReport, "run", {
@@ -526,6 +534,7 @@ async function main() {
     console.log("- init creates config and .gitignore");
     console.log("- init is idempotent on second run");
     console.log("- all JSON smoke commands include schema metadata");
+    console.log("- default Gemini run fails before saving a run when Gemini setup is missing");
     console.log(
       "- MVP first-run flow init/doctor/run/status/resume/status works through the installed binary with the actual runId"
     );
@@ -932,6 +941,19 @@ function assertRunReport(report, command, expected) {
   assertObject(report.task, `${command} JSON should include task summary`);
   assertObject(report.run, `${command} JSON should include raw run`);
   assertIncludes(report.savedPath, report.runId, `${command} JSON should include saved path`);
+}
+
+function assertRunPreflightFailureReport(report, expected) {
+  assertEnvelope(report, "run");
+  assertEqual(report.status, "failed", "run preflight JSON should report failed");
+  assertEqual(report.errorCode, expected.errorCode, "run preflight JSON should include the expected error code");
+  assertEqual(report.provider, expected.provider, "run preflight JSON should include the blocked provider");
+  assertArray(report.reasons, "run preflight JSON should include reasons");
+  assertArray(report.next, "run preflight JSON should include next actions");
+  const nextCommands = report.next.map((item) => item.command).filter(Boolean);
+  if (!nextCommands.includes(expected.nextCommand)) {
+    throw new Error(`run preflight JSON should suggest ${expected.nextCommand}`);
+  }
 }
 
 function assertStatusNotFoundReport(report) {

@@ -111,7 +111,7 @@ Useful options:
 
 JSON: supported with `--json`.
 
-Behavior: writes run state under `.orchestrator/runs/`. When the first argument looks like a Jira issue key, the command reads that issue through the configured Jira provider and converts the issue plus optional `--note` into the run `TaskSpec`. The default provider launches the `mcp-atlassian` MCP server directly through stdio when `JIRA_URL` and Jira auth environment variables are present; local Jira CLI remains a fallback. If issue reading fails, run `tlo doctor jira` and follow the suggested setup commands. Default mock roles and dry-run adapters do not call external write-side systems.
+Behavior: `run` is the normal starting point. It checks required provider setup before creating a run file. If the default Gemini Planner is selected and Gemini credentials are missing, it exits with `Failed: Run`, explains the missing setup, and suggests `tlo setup gemini`. When the first argument looks like a Jira issue key, the command reads that issue through the configured Jira provider and converts the issue plus optional `--note` into the run `TaskSpec`. The default provider launches the `mcp-atlassian` MCP server directly through stdio when `JIRA_URL` and Jira auth environment variables are present; local Jira CLI remains a fallback. If issue reading fails, the output suggests `tlo doctor jira` or the specific setup command to run next. When setup is valid, the command writes run state under `.orchestrator/runs/`. Default mock roles and dry-run adapters do not call external write-side systems.
 
 ### `resume <runId> [--max-iterations n] [--json]`
 

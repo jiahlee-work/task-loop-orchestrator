@@ -41,13 +41,12 @@ tlo doctor
 
 ```bash
 tlo init
-tlo doctor
-tlo setup jira
-tlo setup gemini
-tlo doctor jira
-tlo doctor gemini
 tlo run OUC-10
 ```
+
+`tlo run`은 필요한 provider 설정을 먼저 확인합니다. Gemini나 Jira 설정이 빠져 있으면 run을 저장하지 않고 실패 이유와 다음에 실행할 명령을 안내합니다.
+
+예를 들어 Gemini 설정이 없으면 `tlo setup gemini`를 안내하고, Jira 설정이나 연결 상태가 의심되면 `tlo setup jira` 또는 `tlo doctor jira`를 안내합니다. Gemini 연결만 따로 확인하고 싶을 때는 `tlo doctor gemini`를 실행합니다. 설정이 끝난 프로젝트에서는 `tlo run OUC-10`만 바로 실행하면 됩니다.
 
 Jira 이슈에 설명을 덧붙이거나, Jira 없이 직접 작업 설명만 넘길 수도 있습니다.
 

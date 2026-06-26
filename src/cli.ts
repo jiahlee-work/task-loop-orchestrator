@@ -45,7 +45,14 @@ import { setupJiraMcp, type JiraSetupReport } from "./jira-setup.js";
 import { RootOrchestrator, createTaskSpec } from "./orchestrator.js";
 import { checkPermission } from "./permission.js";
 import { createPullRequestPlan } from "./pr-plan.js";
-import { createGitToolProviders, createTaskSpecFromJiraIssue, GitHubCliProvider, JiraCliProvider, JiraMcpProvider } from "./providers.js";
+import {
+  createGitToolProviders,
+  createTaskSpecFromJiraIssue,
+  GitHubCliProvider,
+  hasJiraMcpEnvironment,
+  JiraCliProvider,
+  JiraMcpProvider
+} from "./providers.js";
 import { LocalEvidenceReviewer } from "./reviewers.js";
 import { createMockRoleProviders, type RoleProviders } from "./roles.js";
 import { createRunCliReport } from "./run-report.js";
@@ -75,6 +82,16 @@ interface RunInput {
   title?: string;
   jiraKey?: string;
   note?: string;
+}
+
+interface RunPreflightFailure {
+  title: string;
+  reasons: string[];
+  next: Array<{ description: string; command?: string }>;
+  json: {
+    errorCode: string;
+    provider: "gemini" | "jira";
+  };
 }
 
 const jiraIssueKeyPattern = /^[A-Z][A-Z0-9]+-\d+$/;
@@ -590,6 +607,13 @@ async function runCommand(args: ParsedArgs): Promise<void> {
   const executorMode = stringFlag(args.flags, "executor") ? executorFlag(stringFlag(args.flags, "executor")) : config.executor;
   const reviewerMode = stringFlag(args.flags, "reviewer") ? reviewerFlag(stringFlag(args.flags, "reviewer")) : config.reviewer;
   const permissionMode = stringFlag(args.flags, "permission") ? permissionFlag(stringFlag(args.flags, "permission")) : config.permissionMode;
+  const preflightFailure = preflightRunDependencies(input, plannerMode, geminiConfig, jiraConfig);
+  if (preflightFailure) {
+    printRunPreflightFailure(preflightFailure, args.flags.json === true);
+    process.exitCode = 1;
+    return;
+  }
+
   const taskSpec = input.kind === "jira" && input.jiraKey
     ? await createTaskSpecFromJiraKey(input.jiraKey, permissionMode, jiraConfig, input.note)
     : createTaskSpec({
@@ -612,6 +636,90 @@ async function runCommand(args: ParsedArgs): Promise<void> {
   }
 
   printRunReport(run, store, input, plannerMode, geminiConfig.model, executorMode, reviewerMode);
+}
+
+function preflightRunDependencies(
+  input: RunInput,
+  plannerMode: PlannerMode,
+  geminiConfig: Awaited<ReturnType<typeof loadGeminiConfigWithLocalEnv>>,
+  jiraConfig: JiraConfig
+): RunPreflightFailure | undefined {
+  if (plannerMode === "gemini" && !geminiConfig.apiKey?.trim()) {
+    return {
+      title: "Run",
+      reasons: ["Gemini Planner is selected, but Gemini credentials are not configured for this project."],
+      next: [
+        {
+          description: "Save Gemini API credentials for this project:",
+          command: "tlo setup gemini"
+        },
+        {
+          description: "Then run the task again:",
+          command: input.kind === "jira" && input.jiraKey ? `tlo run ${input.jiraKey}` : 'tlo run "task instruction"'
+        }
+      ],
+      json: {
+        errorCode: "gemini_setup_required",
+        provider: "gemini"
+      }
+    };
+  }
+
+  if (
+    input.kind === "jira" &&
+    jiraConfig.provider === "mcp-atlassian" &&
+    jiraConfig.fallback === "none" &&
+    !hasJiraMcpEnvironment(jiraConfig.mcp)
+  ) {
+    return {
+      title: "Run from Jira issue",
+      reasons: ["This task starts from a Jira issue, but Jira MCP credentials are not configured for this project."],
+      next: [
+        {
+          description: "Save Jira URL and credentials for this project:",
+          command: "tlo setup jira"
+        },
+        {
+          description: "Then run the task again:",
+          command: input.jiraKey ? `tlo run ${input.jiraKey}` : "tlo run ISSUE-KEY"
+        }
+      ],
+      json: {
+        errorCode: "jira_setup_required",
+        provider: "jira"
+      }
+    };
+  }
+
+  return undefined;
+}
+
+function printRunPreflightFailure(failure: RunPreflightFailure, json: boolean): void {
+  if (json) {
+    printJson("run", {
+      status: "failed",
+      errorCode: failure.json.errorCode,
+      provider: failure.json.provider,
+      reasons: failure.reasons,
+      next: failure.next
+    });
+    return;
+  }
+
+  console.log(`Failed: ${failure.title}`);
+  console.log("");
+  console.log("Reason:");
+  for (const reason of failure.reasons) {
+    console.log(`- ${reason}`);
+  }
+  console.log("");
+  console.log("Next:");
+  for (const item of failure.next) {
+    console.log(`- ${item.description}`);
+    if (item.command) {
+      console.log(`  ${item.command}`);
+    }
+  }
 }
 
 function parseRunInput(args: ParsedArgs): RunInput {

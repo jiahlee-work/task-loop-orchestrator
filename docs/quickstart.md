@@ -41,13 +41,10 @@ tlo doctor
 
 ```bash
 tlo init
-tlo doctor
-tlo setup jira
-tlo setup gemini
-tlo doctor jira
-tlo doctor gemini
 tlo run OUC-10
 ```
+
+`tlo run`은 실행 전에 필요한 provider 설정을 확인합니다. Gemini나 Jira 설정이 빠져 있으면 run 파일을 만들지 않고 실패 이유와 다음 명령을 보여 줍니다. 예를 들어 `tlo setup gemini`, `tlo setup jira`, `tlo doctor jira`처럼 필요한 명령을 `Next`에 표시합니다. 설정이 끝난 프로젝트에서는 `tlo run OUC-10`만 바로 실행하면 됩니다.
 
 Jira 이슈에 설명을 덧붙이거나, Jira 없이 직접 작업 설명만 넘길 수도 있습니다.
 
@@ -68,7 +65,7 @@ tlo status "$run_id" --json
 
 `init`은 다시 실행해도 기존 `orchestrator.config.json`을 덮어쓰지 않습니다. `.orchestrator/`가 `.gitignore`에 빠져 있으면 추가하고, 이미 있으면 그대로 둡니다.
 
-`tlo doctor`는 설정, `.gitignore`, Git 상태 같은 준비 상태를 `pass`, `warn`, `fail`로 알려 줍니다. `init` 전에는 설정과 gitignore 관련 warning이 나올 수 있고, 이때는 `tlo init`을 먼저 실행하면 됩니다.
+`tlo doctor`는 설정, `.gitignore`, Git 상태 같은 준비 상태를 `pass`, `warn`, `fail`로 알려 줍니다. `init` 전에는 설정과 gitignore 관련 warning이 나올 수 있고, 이때는 `tlo init`을 먼저 실행하면 됩니다. Jira나 Gemini 연결을 따로 점검하고 싶을 때만 `tlo doctor jira`, `tlo doctor gemini`를 실행하세요.
 
 GitHub remote와 읽을 수 있는 check-run이 있는 프로젝트에서는 CI 상태도 읽기 전용으로 확인할 수 있습니다.
 
