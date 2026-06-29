@@ -113,6 +113,19 @@ pnpm run release:check
 패키지에 포함될 파일 목록만 확인하려면 `pnpm run package:artifacts`를 실행합니다.
 `pnpm run package:smoke`는 현재 checkout을 tarball로 묶은 뒤 임시 프로젝트에 설치해, 실제 설치된 바이너리 기준으로 MVP 흐름을 검증합니다.
 
+### Playground에서 직접 확인하기
+
+이 저장소 안에서 대상 레포를 흉내 내며 수동 테스트할 때는 `playground/target-repo`를 사용합니다. 이 폴더는 `.gitignore` 대상이라 테스트 결과가 커밋에 섞이지 않습니다.
+
+```bash
+pnpm playground:reset
+pnpm playground:tlo -- init
+pnpm playground:tlo -- setup
+pnpm playground:tlo -- run "직접 작업 설명"
+```
+
+`pnpm playground:reset`은 `playground/target-repo` 폴더 자체는 유지하고 내부 내용만 지운 뒤, 최소 Git 레포로 다시 만듭니다. `pnpm playground:tlo -- ...`는 현재 루트에서 실행해도 `playground/target-repo`를 작업 디렉터리로 삼아 로컬 `dist/cli.js`를 실행합니다.
+
 ## MVP 범위
 
 MVP에서 확인하는 것은 다음 흐름입니다.
