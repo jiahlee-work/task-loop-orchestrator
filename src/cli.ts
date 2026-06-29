@@ -2,10 +2,12 @@
 import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
-import { appendEvent } from "./audit.js";
+import { appendEvent, appendStatusEvent } from "./audit.js";
 import { createPullRequestApproval, preparePullRequestExecution } from "./approval.js";
 import {
+  type CodexConfig,
   type JiraConfig,
+  type OpenAIConfig,
   loadOrchestratorConfig,
   normalizeExecutorMode,
   normalizeGitHubProviderMode,
@@ -17,6 +19,7 @@ import type {
   ExecutionAuditErrorReport,
   ExecutorMode,
   GitHubProviderMode,
+  LoopRun,
   PermissionMode,
   PlannerMode,
   ReviewerMode,
@@ -42,6 +45,11 @@ import { initProject } from "./init.js";
 import { createIntegrationCheckpoint } from "./integration.js";
 import { loadJiraConfigWithLocalEnv, readJiraEnvFile } from "./jira-env.js";
 import { setupJiraMcp, type JiraSetupReport } from "./jira-setup.js";
+import { createEmptyGraph } from "./graph.js";
+import { createId, nowIso } from "./ids.js";
+import { loadOpenAIConfigWithLocalEnv, readOpenAIEnvFile } from "./openai-env.js";
+import { OpenAIReviewer } from "./openai-reviewer.js";
+import { setupOpenAI, type OpenAISetupReport } from "./openai-setup.js";
 import { RootOrchestrator, createTaskSpec } from "./orchestrator.js";
 import { checkPermission } from "./permission.js";
 import { createPullRequestPlan } from "./pr-plan.js";
@@ -90,7 +98,7 @@ interface RunPreflightFailure {
   next: Array<{ description: string; command?: string }>;
   json: {
     errorCode: string;
-    provider: "gemini" | "jira";
+    provider: "gemini" | "jira" | "codex" | "openai";
   };
 }
 
@@ -162,9 +170,10 @@ function printUsage(): void {
   task-loop-orchestrator init [--force] [--json]
   task-loop-orchestrator setup jira [--url url] [--username email] [--api-token token|--personal-token token] [--skip-check]
   task-loop-orchestrator setup gemini [--api-key key] [--model model] [--skip-check]
-  task-loop-orchestrator doctor [jira|gemini] [--github none|gh-cli] [--json]
-  task-loop-orchestrator run ISSUE-KEY [--note text] [--planner mock|gemini] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]
-  task-loop-orchestrator run <instruction> [--description text] [--planner mock|gemini] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence] [--max-iterations n] [--json]
+  task-loop-orchestrator setup openai [--api-key key] [--model model] [--skip-check]
+  task-loop-orchestrator doctor [jira|gemini|openai] [--github none|gh-cli] [--json]
+  task-loop-orchestrator run ISSUE-KEY [--note text] [--planner mock|gemini] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence|openai] [--max-iterations n] [--json]
+  task-loop-orchestrator run <instruction> [--description text] [--planner mock|gemini] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence|openai] [--max-iterations n] [--json]
   task-loop-orchestrator status [runId] [--json] [--raw]
   task-loop-orchestrator resume <runId> [--max-iterations n] [--json]
   task-loop-orchestrator checkpoint [runId] [--github none|gh-cli] [--json]
@@ -179,8 +188,10 @@ function printUsage(): void {
 Short alias:
   tlo setup jira
   tlo setup gemini
+  tlo setup openai
   tlo doctor jira
   tlo doctor gemini
+  tlo doctor openai
   tlo run ISSUE-KEY
   tlo run ISSUE-KEY --note "additional context"
   tlo run "direct task instruction"`);
@@ -366,12 +377,14 @@ async function doctorCommand(args: ParsedArgs): Promise<void> {
   const githubMode = stringFlag(args.flags, "github") ? githubFlag(stringFlag(args.flags, "github")) : "none";
   const jiraEnabled = args.flags.jira === true || args.positional.includes("jira");
   const geminiEnabled = args.flags.gemini === true || args.positional.includes("gemini");
+  const openAIEnabled = args.flags.openai === true || args.positional.includes("openai");
   const config =
-    jiraEnabled || geminiEnabled
+    jiraEnabled || geminiEnabled || openAIEnabled
       ? await loadOrchestratorConfig(process.cwd())
           .then(async (loadedConfig) => ({
             jira: await loadJiraConfigWithLocalEnv(process.cwd(), loadedConfig.jira),
-            gemini: await loadGeminiConfigWithLocalEnv(process.cwd(), loadedConfig.gemini)
+            gemini: await loadGeminiConfigWithLocalEnv(process.cwd(), loadedConfig.gemini),
+            openai: await loadOpenAIConfigWithLocalEnv(process.cwd(), loadedConfig.openai)
           }))
           .catch(() => undefined)
       : undefined;
@@ -380,7 +393,9 @@ async function doctorCommand(args: ParsedArgs): Promise<void> {
     jira: jiraEnabled,
     jiraConfig: config?.jira,
     gemini: geminiEnabled,
-    geminiConfig: config?.gemini
+    geminiConfig: config?.gemini,
+    openai: openAIEnabled,
+    openAIConfig: config?.openai
   });
 
   if (args.flags.json === true) {
@@ -471,7 +486,13 @@ async function setupCommand(args: ParsedArgs): Promise<void> {
     return;
   }
 
-  throw new Error("setup requires a target: jira or gemini.");
+  if (target === "openai") {
+    const report = await openAISetupCommand(args);
+    printOpenAISetupReport(report);
+    return;
+  }
+
+  throw new Error("setup requires a target: jira, gemini, or openai.");
 }
 
 async function jiraSetupCommand(args: ParsedArgs): Promise<JiraSetupReport> {
@@ -547,6 +568,37 @@ function printGeminiSetupReport(report: GeminiSetupReport): void {
   console.log(`  ${report.nextCommand}`);
 }
 
+async function openAISetupCommand(args: ParsedArgs): Promise<OpenAISetupReport> {
+  const existingEnv = await readOpenAIEnvFile(process.cwd());
+  const apiKey =
+    stringFlag(args.flags, "api-key") ??
+    (await promptSecret("OpenAI API key", existingEnv.OPENAI_API_KEY ? "leave blank to keep existing" : undefined)) ??
+    existingEnv.OPENAI_API_KEY;
+  const model = stringFlag(args.flags, "model") ?? existingEnv.OPENAI_MODEL;
+  const endpoint = stringFlag(args.flags, "endpoint") ?? existingEnv.OPENAI_ENDPOINT;
+
+  return setupOpenAI({
+    rootDir: process.cwd(),
+    apiKey,
+    model,
+    endpoint,
+    skipCheck: args.flags["skip-check"] === true
+  });
+}
+
+function printOpenAISetupReport(report: OpenAISetupReport): void {
+  console.log(`${report.status === "ready" ? "Success" : "Warning"}: OpenAI setup`);
+  console.log("");
+  console.log("Result:");
+  console.log(`- Env file: ${report.envFile}`);
+  console.log(`- Model: ${report.model}`);
+  console.log(`- Reviewer check: [${report.check.status}] ${report.check.summary}`);
+  console.log("");
+  console.log("Next:");
+  console.log(`- ${report.status === "ready" ? "Start a run from a Jira issue or direct instruction:" : "Check OpenAI reviewer setup:"}`);
+  console.log(`  ${report.nextCommand}`);
+}
+
 async function promptValue(label: string, defaultValue?: string): Promise<string> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     throw new Error(`${label} is required. Pass it with a flag in non-interactive mode.`);
@@ -582,6 +634,20 @@ async function promptSecret(label: string, hint?: string): Promise<string | unde
   }
 }
 
+async function promptYesNo(label: string, defaultValue: boolean = false): Promise<boolean> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new Error(`${label} requires an interactive terminal.`);
+  }
+
+  const suffix = defaultValue ? " [Y/n]" : " [y/N]";
+  const answer = (await promptValue(`${label}${suffix}`)).trim().toLowerCase();
+  if (!answer) {
+    return defaultValue;
+  }
+
+  return answer === "y" || answer === "yes";
+}
+
 class HiddenPromptOutput extends Writable {
   muted = false;
 
@@ -603,11 +669,12 @@ async function runCommand(args: ParsedArgs): Promise<void> {
   const config = await loadOrchestratorConfig(process.cwd());
   const jiraConfig = await loadJiraConfigWithLocalEnv(process.cwd(), config.jira);
   const geminiConfig = await loadGeminiConfigWithLocalEnv(process.cwd(), config.gemini);
+  const openAIConfig = await loadOpenAIConfigWithLocalEnv(process.cwd(), config.openai);
   const plannerMode = stringFlag(args.flags, "planner") ? plannerFlag(stringFlag(args.flags, "planner")) : config.planner;
   const executorMode = stringFlag(args.flags, "executor") ? executorFlag(stringFlag(args.flags, "executor")) : config.executor;
   const reviewerMode = stringFlag(args.flags, "reviewer") ? reviewerFlag(stringFlag(args.flags, "reviewer")) : config.reviewer;
   const permissionMode = stringFlag(args.flags, "permission") ? permissionFlag(stringFlag(args.flags, "permission")) : config.permissionMode;
-  const preflightFailure = preflightRunDependencies(input, plannerMode, geminiConfig, jiraConfig);
+  const preflightFailure = preflightRunDependencies(input, plannerMode, geminiConfig, jiraConfig, executorMode, config.codex, reviewerMode, openAIConfig);
   if (preflightFailure) {
     printRunPreflightFailure(preflightFailure, args.flags.json === true);
     process.exitCode = 1;
@@ -623,12 +690,25 @@ async function runCommand(args: ParsedArgs): Promise<void> {
       });
   const orchestrator = new RootOrchestrator({
     store,
-    roles: createRoleProviders(plannerMode, geminiConfig, executorMode, reviewerMode),
+    roles: createRoleProviders(plannerMode, geminiConfig, executorMode, config.codex, reviewerMode, openAIConfig),
     tools: createGitToolProviders(process.cwd()),
     maxIterations: numberFlag(args.flags, "max-iterations") ?? config.maxIterations,
     worktreeEnabled: config.worktree.enabled
   });
-  const run = await orchestrator.runTask(taskSpec);
+
+  let run: LoopRun;
+  if (args.flags.json === true) {
+    run = await orchestrator.runTask(taskSpec);
+  } else {
+    run = await runInteractiveWithPlanApproval(orchestrator, store, taskSpec, {
+      input,
+      plannerMode,
+      plannerModel: geminiConfig.model,
+      executorMode,
+      reviewerMode,
+      maxIterations: numberFlag(args.flags, "max-iterations") ?? config.maxIterations
+    });
+  }
 
   if (args.flags.json === true) {
     printJson("run", createRunCliReport(run, store));
@@ -638,11 +718,136 @@ async function runCommand(args: ParsedArgs): Promise<void> {
   printRunReport(run, store, input, plannerMode, geminiConfig.model, executorMode, reviewerMode);
 }
 
+async function runInteractiveWithPlanApproval(
+  orchestrator: RootOrchestrator,
+  store: FileRunStore,
+  taskSpec: Parameters<RootOrchestrator["runTask"]>[0],
+  options: {
+    input: RunInput;
+    plannerMode: PlannerMode;
+    plannerModel: string;
+    executorMode: ExecutorMode;
+    reviewerMode: ReviewerMode;
+    maxIterations: number;
+  }
+): Promise<LoopRun> {
+  if (options.input.kind === "jira") {
+    console.log(`Reading Jira issue ${options.input.jiraKey}...`);
+  }
+  console.log(`Creating plan with ${options.plannerMode}${options.plannerMode === "gemini" ? ` (${options.plannerModel})` : ""}...`);
+
+  let run = await orchestrator.discover(taskSpec);
+  await store.save(run);
+  run = await orchestrator.plan(run);
+  await store.save(run);
+
+  while (true) {
+    printPlanPreview(run);
+    const approved = await promptYesNo("Proceed with Codex execution?", false);
+    if (approved) {
+      break;
+    }
+
+    const revision = await promptValue("What should change in the plan? Leave blank to stop");
+    if (!revision.trim()) {
+      const blocked = appendStatusEvent(
+        {
+          ...run,
+          status: "blocked",
+          updatedAt: nowIso()
+        },
+        "run_blocked",
+        "Run stopped before execution because the plan was not approved."
+      );
+      await store.save(blocked);
+      return blocked;
+    }
+
+    run = appendEvent(
+      {
+        ...run,
+        graph: createEmptyGraph(),
+        context: {
+          ...run.context,
+          items: [
+            ...run.context.items,
+            {
+              id: createId("ctx"),
+              kind: "decision",
+              text: `Plan revision request: ${revision.trim()}`,
+              source: "root",
+              createdAt: nowIso()
+            }
+          ]
+        },
+        status: "running",
+        updatedAt: nowIso()
+      },
+      {
+        kind: "context_updated",
+        message: "Added plan revision request from user.",
+        role: "root"
+      }
+    );
+    console.log("Revising plan with Gemini...");
+    run = await orchestrator.plan(run);
+    await store.save(run);
+  }
+
+  const targetIterations = run.iterations + options.maxIterations;
+  while (run.status === "running" && run.iterations < targetIterations) {
+    const nextSubtask = orchestrator.selectNextSubtask(run);
+    if (nextSubtask) {
+      console.log(`Executing with Codex: ${nextSubtask.title}`);
+    }
+    run = await orchestrator.iterate(run);
+    await store.save(run);
+    const reviewed = run.events.at(-2)?.kind === "review_completed" || run.events.at(-1)?.kind === "review_completed";
+    if (reviewed) {
+      console.log(`Reviewed: ${nextSubtask?.title ?? "current subtask"}`);
+    }
+  }
+
+  if (run.status === "running") {
+    run = appendStatusEvent(
+      {
+        ...run,
+        status: "blocked",
+        updatedAt: nowIso()
+      },
+      "run_blocked",
+      `Run reached max additional iterations (${targetIterations}).`
+    );
+    await store.save(run);
+  }
+
+  return run;
+}
+
+function printPlanPreview(run: LoopRun): void {
+  console.log("");
+  console.log("Plan:");
+  if (run.graph.subtasks.length === 0) {
+    console.log("- No subtasks were proposed.");
+  }
+  run.graph.subtasks.forEach((subtask, index) => {
+    console.log(`${index + 1}. ${subtask.title}`);
+    if (subtask.description) {
+      console.log(`   ${subtask.description}`);
+    }
+  });
+  console.log("");
+}
+
 function preflightRunDependencies(
   input: RunInput,
   plannerMode: PlannerMode,
   geminiConfig: Awaited<ReturnType<typeof loadGeminiConfigWithLocalEnv>>,
-  jiraConfig: JiraConfig
+  jiraConfig: JiraConfig,
+  executorMode: ExecutorMode,
+  codexConfig: CodexConfig,
+  reviewerMode: ReviewerMode,
+  openAIConfig: OpenAIConfig
 ): RunPreflightFailure | undefined {
   if (plannerMode === "gemini" && !geminiConfig.apiKey?.trim()) {
     return {
@@ -665,6 +870,48 @@ function preflightRunDependencies(
       json: {
         errorCode: "gemini_setup_required",
         provider: "gemini"
+      }
+    };
+  }
+
+  if (executorMode === "codex-cli" && !codexConfig.binary.trim()) {
+    return {
+      title: "Run",
+      reasons: ["Codex CLI executor is selected, but the Codex binary is not configured."],
+      next: [
+        {
+          description: "Configure the Codex binary in orchestrator.config.json:",
+          command: '"codex": { "binary": "codex" }'
+        }
+      ],
+      json: {
+        errorCode: "codex_setup_required",
+        provider: "codex"
+      }
+    };
+  }
+
+  if (reviewerMode === "openai" && !openAIConfig.apiKey?.trim()) {
+    return {
+      title: "Run",
+      reasons: ["OpenAI Reviewer is selected, but OpenAI API credentials are not configured for this project."],
+      next: [
+        {
+          description: "Create or view an OpenAI API key:",
+          command: "https://platform.openai.com/api-keys"
+        },
+        {
+          description: "Save OpenAI API credentials for this project:",
+          command: "tlo setup openai"
+        },
+        {
+          description: "Then run the task again:",
+          command: input.kind === "jira" && input.jiraKey ? `tlo run ${input.jiraKey}` : 'tlo run "task instruction"'
+        }
+      ],
+      json: {
+        errorCode: "openai_setup_required",
+        provider: "openai"
       }
     };
   }
@@ -913,9 +1160,10 @@ async function resumeCommand(args: ParsedArgs): Promise<void> {
   const store = new FileRunStore(process.cwd());
   const config = await loadOrchestratorConfig(process.cwd());
   const geminiConfig = await loadGeminiConfigWithLocalEnv(process.cwd(), config.gemini);
+  const openAIConfig = await loadOpenAIConfigWithLocalEnv(process.cwd(), config.openai);
   const orchestrator = new RootOrchestrator({
     store,
-    roles: createRoleProviders(config.planner, geminiConfig, config.executor, config.reviewer),
+    roles: createRoleProviders(config.planner, geminiConfig, config.executor, config.codex, config.reviewer, openAIConfig),
     tools: createGitToolProviders(process.cwd()),
     maxIterations: numberFlag(args.flags, "max-iterations") ?? config.maxIterations,
     worktreeEnabled: config.worktree.enabled
@@ -1687,7 +1935,9 @@ function createRoleProviders(
   plannerMode: PlannerMode,
   geminiConfig: Awaited<ReturnType<typeof loadGeminiConfigWithLocalEnv>>,
   executorMode: ExecutorMode,
-  reviewerMode: ReviewerMode
+  codexConfig: CodexConfig,
+  reviewerMode: ReviewerMode,
+  openAIConfig: Awaited<ReturnType<typeof loadOpenAIConfigWithLocalEnv>>
 ): RoleProviders {
   const roles = createMockRoleProviders();
   const planner = plannerMode === "mock" ? roles.planner : new GeminiPlanner({ config: geminiConfig });
@@ -1696,9 +1946,19 @@ function createRoleProviders(
       ? roles.executor
       : new CodexCliExecutor({
           mode: executorMode,
-          allowExecution: false
+          codexBinary: codexConfig.binary,
+          allowExecution: executorMode === "codex-cli",
+          rootDir: process.cwd(),
+          workspaceRoot: codexConfig.workspaceRoot,
+          sandbox: codexConfig.sandbox,
+          model: codexConfig.model
         });
-  const reviewer = reviewerMode === "mock" ? roles.reviewer : new LocalEvidenceReviewer();
+  const reviewer =
+    reviewerMode === "mock"
+      ? roles.reviewer
+      : reviewerMode === "openai"
+        ? new OpenAIReviewer({ config: openAIConfig })
+        : new LocalEvidenceReviewer();
 
   return {
     ...roles,

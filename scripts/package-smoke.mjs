@@ -138,7 +138,11 @@ async function main() {
         nextCommand: "tlo setup gemini"
       });
 
-      const loop = await run(bin, ["run", "Smoke task", "--planner", "mock", "--max-iterations", "1", "--json"], { cwd: projectDir });
+      const loop = await run(
+        bin,
+        ["run", "Smoke task", "--planner", "mock", "--executor", "mock", "--reviewer", "mock", "--max-iterations", "1", "--json"],
+        { cwd: projectDir }
+      );
       loopReport = parseJson(loop);
       assertRunReport(loopReport, "run", {
         status: "completed",
@@ -188,10 +192,28 @@ async function main() {
     });
 
     await runStep("jira issue run json", async () => {
-      const jiraRun = await run(shortBin, ["run", "ABC-123", "--note", "Include package smoke note.", "--planner", "mock", "--max-iterations", "1", "--json"], {
-        cwd: projectDir,
-        env: prependPath(fakeBinDir)
-      });
+      const jiraRun = await run(
+        shortBin,
+        [
+          "run",
+          "ABC-123",
+          "--note",
+          "Include package smoke note.",
+          "--planner",
+          "mock",
+          "--executor",
+          "mock",
+          "--reviewer",
+          "mock",
+          "--max-iterations",
+          "1",
+          "--json"
+        ],
+        {
+          cwd: projectDir,
+          env: prependPath(fakeBinDir)
+        }
+      );
       const jiraRunReport = parseJson(jiraRun);
       assertRunReport(jiraRunReport, "run", {
         status: "completed",

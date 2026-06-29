@@ -1,6 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import type { Context, Graph, Subtask, TaskSpec } from "../src/domain.js";
 import { CodexCliExecutor, buildCodexCliCommand, createExecutorTaskSpec } from "../src/executors.js";
+
+const tempDirs: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
 
 const spec: TaskSpec = {
   id: "task-1",
@@ -65,7 +74,13 @@ describe("CodexCliExecutor", () => {
     expect(report.subtaskId).toBe("subtask-1");
     expect(report.contextDelta?.items[0]?.text).toContain("Dry-run command:");
     expect(report.data?.dryRun).toBe(true);
-    expect(report.data?.command).toEqual(buildCodexCliCommand(task, "codex"));
+    expect(report.data?.command).toEqual(
+      buildCodexCliCommand(task, {
+        codexBinary: "codex",
+        cwd: report.data?.workspace as string,
+        sandbox: "workspace-write"
+      })
+    );
     expect(task.worktree.branchHint).toContain("orchestrator/");
     expect(context).toEqual(contextBefore);
     expect(graph).toEqual(graphBefore);
@@ -94,4 +109,52 @@ describe("CodexCliExecutor", () => {
     expect(report.summary).toContain("disabled");
     expect(report.data?.executorMode).toBe("codex-cli");
   });
+
+  it("runs codex-cli mode in a dev workspace when execution is enabled", async () => {
+    const root = await tempRoot();
+    const task = createExecutorTaskSpec({
+      runId: "run-1",
+      spec,
+      context,
+      subtask,
+      worktreeEnabled: false
+    });
+    const calls: Array<{ command: string; args: string[]; cwd: string }> = [];
+    const executor = new CodexCliExecutor({
+      mode: "codex-cli",
+      allowExecution: true,
+      rootDir: root,
+      workspaceRoot: ".orchestrator/dev-workspaces",
+      runner: async (command, args = [], cwd = root) => {
+        calls.push({ command, args, cwd });
+        return {
+          exitCode: 0,
+          stdout: '{"event":"done"}\n',
+          stderr: ""
+        };
+      }
+    });
+
+    const report = await executor.execute({
+      runId: "run-1",
+      spec,
+      context,
+      graph,
+      subtask,
+      task
+    });
+
+    expect(report.status).toBe("ok");
+    expect(report.data?.dryRun).toBe(false);
+    expect(report.data?.workspace).toContain(".orchestrator/dev-workspaces/run-1/subtask-1");
+    expect(calls[0]?.command).toBe("codex");
+    expect(calls[0]?.args).toEqual(expect.arrayContaining(["exec", "--sandbox", "workspace-write", "--cd"]));
+    expect(calls[0]?.cwd).toContain(".orchestrator/dev-workspaces/run-1/subtask-1");
+  });
 });
+
+async function tempRoot(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), "task-loop-codex-executor-"));
+  tempDirs.push(dir);
+  return dir;
+}

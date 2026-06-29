@@ -360,7 +360,7 @@ describe("doctor", () => {
   it("shows doctor in CLI usage", async () => {
     const cliSource = await readFile(join(process.cwd(), "src", "cli.ts"), "utf8");
 
-    expect(cliSource).toContain("task-loop-orchestrator doctor [jira|gemini] [--github none|gh-cli] [--json]");
+    expect(cliSource).toContain("task-loop-orchestrator doctor [jira|gemini|openai] [--github none|gh-cli] [--json]");
   });
 });
 

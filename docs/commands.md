@@ -50,7 +50,7 @@ JSON: supported with `--json`.
 
 Behavior: writes local bootstrap files only. It creates `orchestrator.config.json` when missing and ensures `.gitignore` contains `.orchestrator/`. Existing config is skipped unless `--force` is provided, so rerunning `init` is safe.
 
-### `setup jira|gemini [options]`
+### `setup jira|gemini|openai [options]`
 
 Purpose: Save local provider credentials for the current project.
 
@@ -61,13 +61,15 @@ tlo setup jira
 tlo setup jira --url https://company.atlassian.net --username me@company.com --api-token "$JIRA_API_TOKEN"
 tlo setup gemini
 tlo setup gemini --api-key "$GEMINI_API_KEY" --model gemini-2.5-flash
+tlo setup openai
+tlo setup openai --api-key "$OPENAI_API_KEY" --model gpt-5.1
 ```
 
 JSON: not supported.
 
-Behavior: writes provider env files such as `.orchestrator/jira.env` and `.orchestrator/gemini.env` with file mode `0600`, so only the local file owner can read or update them. The files are under `.orchestrator/`, which `init` adds to `.gitignore`. Gemini setup expects a Gemini API key from [Google AI Studio API Keys](https://aistudio.google.com/app/apikey). By default the command verifies that the configured MCP server exposes the Jira issue read tool or that the Gemini planner model responds; use `--skip-check` to save credentials without a live verification call.
+Behavior: writes provider env files such as `.orchestrator/jira.env`, `.orchestrator/gemini.env`, and `.orchestrator/openai.env` with file mode `0600`, so only the local file owner can read or update them. The files are under `.orchestrator/`, which `init` adds to `.gitignore`. Gemini setup expects a Gemini API key from [Google AI Studio API Keys](https://aistudio.google.com/app/apikey). OpenAI setup expects an OpenAI API key from [OpenAI API keys](https://platform.openai.com/api-keys). By default the command verifies that the configured MCP server exposes the Jira issue read tool, that the Gemini planner model responds, or that the OpenAI reviewer model responds; use `--skip-check` to save credentials without a live verification call.
 
-### `doctor [jira|gemini] [--github none|gh-cli] [--json]`
+### `doctor [jira|gemini|openai] [--github none|gh-cli] [--json]`
 
 Purpose: Diagnose whether the current project is ready to use the orchestrator.
 
@@ -77,11 +79,12 @@ Example:
 tlo doctor --github gh-cli --json
 tlo doctor jira
 tlo doctor gemini
+tlo doctor openai
 ```
 
 JSON: supported with `--json`.
 
-Behavior: read-only. It checks Node.js, Git repository presence, config loading, `.gitignore`, store path access, optional read-only GitHub CLI diagnostics, optional Jira MCP availability, and optional Gemini planner availability instead of writing repository state. Jira MCP diagnostics distinguish missing `.orchestrator/jira.env` credentials, missing `uvx`, MCP server startup/query failures, and a missing `jira_get_issue` tool. Gemini diagnostics distinguish missing `.orchestrator/gemini.env` credentials from model/API verification failures. When MCP is unavailable and CLI fallback is enabled, it also reports local Jira CLI availability. Warnings and failures include a short recommended action and safe command suggestions where available.
+Behavior: read-only. It checks Node.js, Git repository presence, config loading, `.gitignore`, store path access, optional read-only GitHub CLI diagnostics, optional Jira MCP availability, optional Gemini planner availability, and optional OpenAI reviewer availability instead of writing repository state. Jira MCP diagnostics distinguish missing `.orchestrator/jira.env` credentials, missing `uvx`, MCP server startup/query failures, and a missing `jira_get_issue` tool. Gemini diagnostics distinguish missing `.orchestrator/gemini.env` credentials from model/API verification failures. OpenAI diagnostics distinguish missing `.orchestrator/openai.env` credentials from model/API verification failures. When MCP is unavailable and CLI fallback is enabled, it also reports local Jira CLI availability. Warnings and failures include a short recommended action and safe command suggestions where available.
 
 ## Run Loop
 
@@ -106,12 +109,12 @@ Useful options:
 - `--planner mock|gemini`
 - `--permission read|write|maintainer`
 - `--executor mock|codex-cli-dry-run|codex-cli`
-- `--reviewer mock|local-evidence`
+- `--reviewer mock|local-evidence|openai`
 - `--max-iterations n`
 
 JSON: supported with `--json`.
 
-Behavior: `run` is the normal starting point. It checks required provider setup before creating a run file. If the default Gemini Planner is selected and Gemini credentials are missing, it exits with `Failed: Run`, explains the missing setup, and suggests `tlo setup gemini`. When the first argument looks like a Jira issue key, the command reads that issue through the configured Jira provider and converts the issue plus optional `--note` into the run `TaskSpec`. The default provider launches the `mcp-atlassian` MCP server directly through stdio when `JIRA_URL` and Jira auth environment variables are present; local Jira CLI remains a fallback. If issue reading fails, the output suggests `tlo doctor jira` or the specific setup command to run next. When setup is valid, the command writes run state under `.orchestrator/runs/`. Default mock roles and dry-run adapters do not call external write-side systems.
+Behavior: `run` is the normal starting point and writes run state under `.orchestrator/runs/`. It checks required provider setup before creating a run file. If the default Gemini Planner or OpenAI Reviewer credentials are missing, it exits with `Failed: Run`, explains the missing setup, and suggests the matching setup command. In a normal terminal, `run` reads the task, creates a Gemini plan, prints the plan, and asks `Proceed with Codex execution? [y/N]`. If the user answers `n`, the CLI asks what should change and sends that revision back into planning. If the user approves, Codex CLI runs in `.orchestrator/dev-workspaces/<runId>/<subtaskId>/` with `workspace-write` sandboxing, then the OpenAI Reviewer reviews collected evidence. When the first argument looks like a Jira issue key, the command reads that issue through the configured Jira provider and converts the issue plus optional `--note` into the run `TaskSpec`. The default provider launches the `mcp-atlassian` MCP server directly through stdio when `JIRA_URL` and Jira auth environment variables are present; local Jira CLI remains a fallback. If issue reading fails, the output suggests `tlo doctor jira` or the specific setup command to run next. `--json` is intended for automation and does not ask interactive approval questions. It does not create GitHub PRs or Jira transitions; run providers do not call external write-side systems such as GitHub mutation, push, release, or publish.
 
 ### `resume <runId> [--max-iterations n] [--json]`
 

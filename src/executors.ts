@@ -1,11 +1,19 @@
+import { mkdir } from "node:fs/promises";
+import { isAbsolute, join, resolve } from "node:path";
 import type { Context, ExecutorMode, ExecutorTaskSpec, RoleReport, Subtask, TaskSpec } from "./domain.js";
 import { createContextDeltaItem } from "./context.js";
+import { runCommand, type CommandRunner } from "./providers.js";
 import type { ExecutorProvider, ExecutorProviderInput } from "./roles.js";
 
 export interface CodexCliExecutorOptions {
   mode: Extract<ExecutorMode, "codex-cli-dry-run" | "codex-cli">;
   codexBinary?: string;
   allowExecution?: boolean;
+  rootDir?: string;
+  workspaceRoot?: string;
+  sandbox?: "read-only" | "workspace-write" | "danger-full-access";
+  model?: string;
+  runner?: CommandRunner;
 }
 
 export function summarizeTaskSpec(spec: TaskSpec): string {
@@ -50,7 +58,19 @@ export function createExecutorTaskSpec(input: {
   };
 }
 
-export function buildCodexCliCommand(task: ExecutorTaskSpec, codexBinary = "codex"): string[] {
+export function buildCodexCliCommand(
+  task: ExecutorTaskSpec,
+  options:
+    | string
+    | {
+        codexBinary?: string;
+        cwd?: string;
+        sandbox?: "read-only" | "workspace-write" | "danger-full-access";
+        model?: string;
+      } = {}
+): string[] {
+  const normalizedOptions = typeof options === "string" ? { codexBinary: options } : options;
+  const codexBinary = normalizedOptions.codexBinary ?? "codex";
   const prompt = [
     "You are an Executor in a role-split task orchestrator.",
     `Run ID: ${task.runId}`,
@@ -74,22 +94,51 @@ export function buildCodexCliCommand(task: ExecutorTaskSpec, codexBinary = "code
     "Return a concise RoleReport-style summary and context_delta only."
   ].join("\n");
 
-  return [codexBinary, "exec", "--json", "--", prompt];
+  return [
+    codexBinary,
+    "exec",
+    "--json",
+    "--sandbox",
+    normalizedOptions.sandbox ?? "workspace-write",
+    "--ask-for-approval",
+    "never",
+    "--skip-git-repo-check",
+    ...(normalizedOptions.cwd ? ["--cd", normalizedOptions.cwd] : []),
+    ...(normalizedOptions.model ? ["--model", normalizedOptions.model] : []),
+    "--",
+    prompt
+  ];
 }
 
 export class CodexCliExecutor implements ExecutorProvider {
   private readonly codexBinary: string;
   private readonly allowExecution: boolean;
   private readonly mode: Extract<ExecutorMode, "codex-cli-dry-run" | "codex-cli">;
+  private readonly rootDir: string;
+  private readonly workspaceRoot: string;
+  private readonly sandbox: "read-only" | "workspace-write" | "danger-full-access";
+  private readonly model: string | undefined;
+  private readonly runner: CommandRunner;
 
   constructor(options: CodexCliExecutorOptions) {
     this.mode = options.mode;
     this.codexBinary = options.codexBinary ?? "codex";
     this.allowExecution = options.allowExecution ?? false;
+    this.rootDir = options.rootDir ?? process.cwd();
+    this.workspaceRoot = options.workspaceRoot ?? ".orchestrator/dev-workspaces";
+    this.sandbox = options.sandbox ?? "workspace-write";
+    this.model = options.model;
+    this.runner = options.runner ?? runCommand;
   }
 
   async execute(input: ExecutorProviderInput): Promise<RoleReport> {
-    const command = buildCodexCliCommand(input.task, this.codexBinary);
+    const workspace = resolveWorkspace(this.rootDir, this.workspaceRoot, input.runId, input.subtask.id);
+    const command = buildCodexCliCommand(input.task, {
+      codexBinary: this.codexBinary,
+      cwd: workspace,
+      sandbox: this.sandbox,
+      model: this.model
+    });
 
     if (this.mode === "codex-cli" && !this.allowExecution) {
       return {
@@ -110,6 +159,47 @@ export class CodexCliExecutor implements ExecutorProvider {
       };
     }
 
+    if (this.mode === "codex-cli") {
+      await mkdir(workspace, { recursive: true });
+      const [binary, ...args] = command;
+      const result = await this.runner(binary ?? this.codexBinary, args, workspace);
+      if (result.exitCode !== 0) {
+        return {
+          role: "executor",
+          status: "failed",
+          subtaskId: input.subtask.id,
+          summary: `Codex CLI failed for ${input.subtask.title}.`,
+          contextDelta: createContextDeltaItem("blocked", `Codex CLI failed in ${workspace}.`, "executor"),
+          data: {
+            executorMode: this.mode,
+            command,
+            workspace,
+            dryRun: false,
+            exitCode: result.exitCode,
+            stderr: truncate(result.stderr.trim(), 1000),
+            stdout: truncate(result.stdout.trim(), 1000)
+          }
+        };
+      }
+
+      return {
+        role: "executor",
+        status: "ok",
+        subtaskId: input.subtask.id,
+        summary: `Codex CLI completed ${input.subtask.title}.`,
+        contextDelta: createContextDeltaItem("completed", `Codex CLI completed ${input.subtask.id} in ${workspace}.`, "executor"),
+        data: {
+          executorMode: this.mode,
+          command,
+          workspace,
+          dryRun: false,
+          stdout: truncate(result.stdout.trim(), 2000),
+          stderr: truncate(result.stderr.trim(), 1000),
+          worktree: input.task.worktree
+        }
+      };
+    }
+
     return {
       role: "executor",
       status: "ok",
@@ -119,11 +209,25 @@ export class CodexCliExecutor implements ExecutorProvider {
       data: {
         executorMode: this.mode,
         command,
+        workspace,
         dryRun: true,
         worktree: input.task.worktree
       }
     };
   }
+}
+
+function resolveWorkspace(rootDir: string, workspaceRoot: string, runId: string, subtaskId: string): string {
+  const base = isAbsolute(workspaceRoot) ? workspaceRoot : join(rootDir, workspaceRoot);
+  return resolve(base, sanitizePathPart(runId), sanitizePathPart(subtaskId));
+}
+
+function sanitizePathPart(value: string): string {
+  return value.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80) || "workspace";
+}
+
+function truncate(value: string, maxLength: number): string {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
 }
 
 function createBranchHint(runId: string, subtaskId: string): string {

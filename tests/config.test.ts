@@ -51,6 +51,17 @@ describe("loadOrchestratorConfig", () => {
           model: "custom-gemini-model",
           apiKey: "inline-key"
         },
+        codex: {
+          binary: "custom-codex",
+          sandbox: "read-only",
+          workspaceRoot: ".orchestrator/custom-workspaces",
+          model: "codex-test"
+        },
+        openai: {
+          endpoint: "https://example.test/openai/v1",
+          model: "gpt-test",
+          apiKey: "openai-inline-key"
+        },
         permissionMode: "maintainer",
         worktree: {
           enabled: true
@@ -82,6 +93,17 @@ describe("loadOrchestratorConfig", () => {
         endpoint: "https://example.test/gemini",
         model: "custom-gemini-model",
         apiKey: "inline-key"
+      },
+      codex: {
+        binary: "custom-codex",
+        sandbox: "read-only",
+        workspaceRoot: ".orchestrator/custom-workspaces",
+        model: "codex-test"
+      },
+      openai: {
+        endpoint: "https://example.test/openai/v1",
+        model: "gpt-test",
+        apiKey: "openai-inline-key"
       },
       permissionMode: "maintainer",
       worktree: {

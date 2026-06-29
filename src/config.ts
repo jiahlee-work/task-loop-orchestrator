@@ -29,6 +29,19 @@ export interface GeminiConfig {
   apiKey?: string;
 }
 
+export interface CodexConfig {
+  binary: string;
+  sandbox: "read-only" | "workspace-write" | "danger-full-access";
+  workspaceRoot: string;
+  model?: string;
+}
+
+export interface OpenAIConfig {
+  endpoint: string;
+  model: string;
+  apiKey?: string;
+}
+
 export interface OrchestratorConfig {
   planner: PlannerMode;
   executor: ExecutorMode;
@@ -36,6 +49,8 @@ export interface OrchestratorConfig {
   github: GitHubProviderMode;
   jira: JiraConfig;
   gemini: GeminiConfig;
+  codex: CodexConfig;
+  openai: OpenAIConfig;
   permissionMode: PermissionMode;
   worktree: {
     enabled: boolean;
@@ -45,8 +60,8 @@ export interface OrchestratorConfig {
 
 export const defaultOrchestratorConfig: OrchestratorConfig = {
   planner: "gemini",
-  executor: "mock",
-  reviewer: "mock",
+  executor: "codex-cli",
+  reviewer: "openai",
   github: "none",
   jira: {
     provider: "mcp-atlassian",
@@ -62,6 +77,15 @@ export const defaultOrchestratorConfig: OrchestratorConfig = {
   gemini: {
     endpoint: "https://generativelanguage.googleapis.com",
     model: "gemini-2.5-flash"
+  },
+  codex: {
+    binary: "codex",
+    sandbox: "workspace-write",
+    workspaceRoot: ".orchestrator/dev-workspaces"
+  },
+  openai: {
+    endpoint: "https://api.openai.com/v1",
+    model: "gpt-5.1"
   },
   permissionMode: "write",
   worktree: {
@@ -92,6 +116,8 @@ export function normalizeConfig(input: Partial<OrchestratorConfig>): Orchestrato
     github: normalizeGitHubProviderMode(input.github),
     jira: normalizeJiraConfig(input.jira),
     gemini: normalizeGeminiConfig(input.gemini),
+    codex: normalizeCodexConfig(input.codex),
+    openai: normalizeOpenAIConfig(input.openai),
     permissionMode: normalizePermissionMode(input.permissionMode),
     worktree: {
       enabled: typeof input.worktree?.enabled === "boolean" ? input.worktree.enabled : defaultOrchestratorConfig.worktree.enabled
@@ -120,7 +146,7 @@ export function normalizeExecutorMode(value: unknown): ExecutorMode {
 }
 
 export function normalizeReviewerMode(value: unknown): ReviewerMode {
-  if (value === "mock" || value === "local-evidence") {
+  if (value === "mock" || value === "local-evidence" || value === "openai") {
     return value;
   }
 
@@ -170,6 +196,46 @@ export function normalizeGeminiConfig(value: unknown): GeminiConfig {
       typeof value.model === "string" && value.model.trim()
         ? value.model.trim()
         : defaultOrchestratorConfig.gemini.model,
+    apiKey: typeof value.apiKey === "string" && value.apiKey.trim() ? value.apiKey.trim() : undefined
+  };
+}
+
+export function normalizeCodexConfig(value: unknown): CodexConfig {
+  if (!isRecord(value)) {
+    return defaultOrchestratorConfig.codex;
+  }
+
+  return {
+    binary:
+      typeof value.binary === "string" && value.binary.trim()
+        ? value.binary.trim()
+        : defaultOrchestratorConfig.codex.binary,
+    sandbox:
+      value.sandbox === "read-only" || value.sandbox === "workspace-write" || value.sandbox === "danger-full-access"
+        ? value.sandbox
+        : defaultOrchestratorConfig.codex.sandbox,
+    workspaceRoot:
+      typeof value.workspaceRoot === "string" && value.workspaceRoot.trim()
+        ? value.workspaceRoot.trim()
+        : defaultOrchestratorConfig.codex.workspaceRoot,
+    model: typeof value.model === "string" && value.model.trim() ? value.model.trim() : undefined
+  };
+}
+
+export function normalizeOpenAIConfig(value: unknown): OpenAIConfig {
+  if (!isRecord(value)) {
+    return defaultOrchestratorConfig.openai;
+  }
+
+  return {
+    endpoint:
+      typeof value.endpoint === "string" && value.endpoint.trim()
+        ? value.endpoint.trim().replace(/\/+$/, "")
+        : defaultOrchestratorConfig.openai.endpoint,
+    model:
+      typeof value.model === "string" && value.model.trim()
+        ? value.model.trim()
+        : defaultOrchestratorConfig.openai.model,
     apiKey: typeof value.apiKey === "string" && value.apiKey.trim() ? value.apiKey.trim() : undefined
   };
 }

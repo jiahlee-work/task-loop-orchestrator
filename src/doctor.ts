@@ -1,8 +1,9 @@
 import { access, readFile, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join } from "node:path";
-import { defaultOrchestratorConfig, loadOrchestratorConfig, type GeminiConfig, type JiraConfig } from "./config.js";
+import { defaultOrchestratorConfig, loadOrchestratorConfig, type GeminiConfig, type JiraConfig, type OpenAIConfig } from "./config.js";
 import { GeminiPlanner } from "./gemini-planner.js";
+import { OpenAIReviewer } from "./openai-reviewer.js";
 import type { GitHubProviderMode } from "./domain.js";
 import {
   GitHubCliProvider,
@@ -45,6 +46,8 @@ export interface DoctorOptions {
   jiraConfig?: JiraConfig;
   gemini?: boolean;
   geminiConfig?: GeminiConfig;
+  openai?: boolean;
+  openAIConfig?: OpenAIConfig;
   jiraMcpSessionFactory?: McpClientSessionFactory;
   commandRunner?: CommandRunner;
   githubProvider?: GitHubProvider;
@@ -95,6 +98,10 @@ export async function runDoctor(rootDir: string = process.cwd(), options: Doctor
 
   if (options.gemini === true) {
     checks.push(await checkGemini(options.geminiConfig ?? defaultOrchestratorConfig.gemini));
+  }
+
+  if (options.openai === true) {
+    checks.push(await checkOpenAI(options.openAIConfig ?? defaultOrchestratorConfig.openai));
   }
 
   return {
@@ -411,6 +418,59 @@ async function checkGemini(geminiConfig: GeminiConfig): Promise<DoctorCheck> {
         "Re-run Gemini doctor",
         ["tlo", "doctor", "gemini"],
         "Re-check Gemini planner after fixing credentials or model settings."
+      )
+    ]
+  };
+}
+
+async function checkOpenAI(openAIConfig: OpenAIConfig): Promise<DoctorCheck> {
+  if (!openAIConfig.apiKey?.trim()) {
+    return {
+      id: "openai_credentials",
+      status: "warn",
+      summary: "OpenAI API key is not configured.",
+      details: {
+        model: openAIConfig.model,
+        endpoint: openAIConfig.endpoint
+      },
+      recommendedAction: "Run tlo setup openai to save local OpenAI reviewer credentials.",
+      suggestions: [
+        commandSuggestion(
+          "Set up OpenAI Reviewer",
+          ["tlo", "setup", "openai"],
+          "Save local OpenAI API credentials in .orchestrator/openai.env."
+        )
+      ]
+    };
+  }
+
+  const check = await new OpenAIReviewer({ config: openAIConfig }).checkConnection();
+  if (check.ok) {
+    return {
+      id: "openai_reviewer",
+      status: "pass",
+      summary: check.summary,
+      details: {
+        model: openAIConfig.model,
+        endpoint: openAIConfig.endpoint
+      }
+    };
+  }
+
+  return {
+    id: "openai_reviewer",
+    status: "warn",
+    summary: `OpenAI reviewer could not be verified: ${check.summary}`,
+    details: {
+      model: openAIConfig.model,
+      endpoint: openAIConfig.endpoint
+    },
+    recommendedAction: "Check the OpenAI API key, model, and network access.",
+    suggestions: [
+      commandSuggestion(
+        "Re-run OpenAI doctor",
+        ["tlo", "doctor", "openai"],
+        "Re-check OpenAI reviewer after fixing credentials or model settings."
       )
     ]
   };

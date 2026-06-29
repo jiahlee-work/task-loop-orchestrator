@@ -4,7 +4,7 @@ export type PlannerMode = "mock" | "gemini";
 
 export type ExecutorMode = "mock" | "codex-cli-dry-run" | "codex-cli";
 
-export type ReviewerMode = "mock" | "local-evidence";
+export type ReviewerMode = "mock" | "local-evidence" | "openai";
 
 export type GitHubProviderMode = "none" | "gh-cli";
 

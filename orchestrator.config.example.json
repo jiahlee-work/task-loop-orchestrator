@@ -1,7 +1,7 @@
 {
   "planner": "gemini",
-  "executor": "mock",
-  "reviewer": "mock",
+  "executor": "codex-cli",
+  "reviewer": "openai",
   "github": "none",
   "jira": {
     "provider": "mcp-atlassian",
@@ -19,6 +19,15 @@
   "gemini": {
     "endpoint": "https://generativelanguage.googleapis.com",
     "model": "gemini-2.5-flash"
+  },
+  "codex": {
+    "binary": "codex",
+    "sandbox": "workspace-write",
+    "workspaceRoot": ".orchestrator/dev-workspaces"
+  },
+  "openai": {
+    "endpoint": "https://api.openai.com/v1",
+    "model": "gpt-5.1"
   },
   "permissionMode": "write",
   "worktree": {
