@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
@@ -545,6 +545,17 @@ interface SetupAllReport {
   };
 }
 
+type SetupProvider = "jira" | "gemini" | "codex" | "openai";
+
+type SetupStepStatus = "ready" | "saved" | "skipped";
+
+interface SetupResumeState {
+  version: 1;
+  steps: Partial<Record<SetupProvider, SetupStepStatus>>;
+  blockedAt?: SetupProvider;
+  updatedAt: string;
+}
+
 type SetupAllJiraReport =
   | JiraSetupReport
   | {
@@ -566,12 +577,16 @@ interface SetupAllJiraChoice {
 async function setupAllCommand(args: ParsedArgs): Promise<SetupAllReport> {
   const rootDir = await resolveTargetRoot();
   const config = await loadOrchestratorConfig(rootDir);
+  const resumeState = await readSetupResumeState(rootDir);
   console.log(`Target repo: ${rootDir}`);
+  if (resumeState.blockedAt) {
+    console.log(`Resuming setup from previous ${formatProviderName(resumeState.blockedAt)} block.`);
+  }
   console.log("");
   console.log("Step 1/4: Jira (optional)");
-  const jiraChoice = await promptSetupAllJiraChoice(args, rootDir);
-  const jira = await setupJiraFromSetupAll(args, jiraChoice);
+  const jira = await setupOrResumeJira(args, rootDir, resumeState);
   if (jira.status === "needs_attention") {
+    await writeSetupResumeState(rootDir, markSetupBlocked(resumeState, "jira"));
     return stopSetupAll(rootDir, jira, undefined, undefined, undefined, {
       provider: "jira",
       reason: jira.mcpCheck.summary,
@@ -581,8 +596,9 @@ async function setupAllCommand(args: ParsedArgs): Promise<SetupAllReport> {
 
   console.log("");
   console.log("Step 2/4: Gemini");
-  const gemini = await geminiSetupCommand(args);
+  const gemini = await setupOrResumeGemini(args, rootDir, resumeState);
   if (gemini.status === "needs_attention") {
+    await writeSetupResumeState(rootDir, markSetupBlocked(markSetupStep(resumeState, "jira", setupStepStatusFromJira(jira)), "gemini"));
     return stopSetupAll(rootDir, jira, gemini, undefined, undefined, {
       provider: "gemini",
       reason: gemini.check.summary,
@@ -592,10 +608,12 @@ async function setupAllCommand(args: ParsedArgs): Promise<SetupAllReport> {
 
   console.log("");
   console.log("Step 3/4: Codex CLI");
-  console.log("- Checking local Codex CLI command and login...");
-  const codex = await checkCodex(rootDir, runProviderCommand, config.codex);
-  printInlineCodexSetupStatus(codex);
+  const codex = await setupOrResumeCodex(rootDir, config.codex, resumeState);
   if (!codex.every((check) => check.status === "pass")) {
+    await writeSetupResumeState(
+      rootDir,
+      markSetupBlocked(markSetupStep(markSetupStep(resumeState, "jira", setupStepStatusFromJira(jira)), "gemini", gemini.status), "codex")
+    );
     return stopSetupAll(rootDir, jira, gemini, codex, undefined, {
       provider: "codex",
       reason: firstBlockingCheckSummary(codex),
@@ -605,8 +623,19 @@ async function setupAllCommand(args: ParsedArgs): Promise<SetupAllReport> {
 
   console.log("");
   console.log("Step 4/4: OpenAI");
-  const openai = await openAISetupCommand(args);
+  const openai = await setupOrResumeOpenAI(args, rootDir, resumeState);
   if (openai.status === "needs_attention") {
+    await writeSetupResumeState(
+      rootDir,
+      markSetupBlocked(
+        markSetupStep(
+          markSetupStep(markSetupStep(resumeState, "jira", setupStepStatusFromJira(jira)), "gemini", gemini.status),
+          "codex",
+          "ready"
+        ),
+        "openai"
+      )
+    );
     return stopSetupAll(rootDir, jira, gemini, codex, openai, {
       provider: "openai",
       reason: openai.check.summary,
@@ -622,6 +651,15 @@ async function setupAllCommand(args: ParsedArgs): Promise<SetupAllReport> {
       ? "ready"
       : "needs_attention";
 
+  await writeSetupResumeState(
+    rootDir,
+    markSetupStep(
+      markSetupStep(markSetupStep(markSetupStep(resumeState, "jira", setupStepStatusFromJira(jira)), "gemini", gemini.status), "codex", "ready"),
+      "openai",
+      openai.status
+    )
+  );
+
   return {
     rootDir,
     status,
@@ -630,6 +668,223 @@ async function setupAllCommand(args: ParsedArgs): Promise<SetupAllReport> {
     gemini,
     openai
   };
+}
+
+async function setupOrResumeJira(args: ParsedArgs, rootDir: string, state: SetupResumeState): Promise<SetupAllJiraReport> {
+  const completed = state.steps.jira;
+  if (completed) {
+    const existingEnv = await readJiraEnvFile(rootDir);
+    console.log(`- Previously completed: ${completed}.`);
+    return completed === "skipped" ? skippedJiraSetupReport(Boolean(existingEnv.JIRA_URL)) : resumedJiraSetupReport(rootDir, existingEnv);
+  }
+
+  const jiraChoice = await promptSetupAllJiraChoice(args, rootDir);
+  const report = await setupJiraFromSetupAll(args, jiraChoice);
+  if (report.status !== "needs_attention") {
+    await writeSetupResumeState(rootDir, markSetupStep(state, "jira", setupStepStatusFromJira(report)));
+  }
+  return report;
+}
+
+async function setupOrResumeGemini(args: ParsedArgs, rootDir: string, state: SetupResumeState): Promise<GeminiSetupReport> {
+  const completed = state.steps.gemini;
+  if (completed) {
+    console.log(`- Previously completed: ${completed}.`);
+    return resumedGeminiSetupReport(rootDir, await readGeminiEnvFile(rootDir), completed);
+  }
+
+  const report = await geminiSetupCommand(args);
+  if (report.status !== "needs_attention") {
+    await writeSetupResumeState(rootDir, markSetupStep(state, "gemini", report.status));
+  }
+  return report;
+}
+
+async function setupOrResumeCodex(rootDir: string, codexConfig: CodexConfig, state: SetupResumeState): Promise<DoctorCheck[]> {
+  if (state.steps.codex) {
+    console.log(`- Previously completed: ${state.steps.codex}.`);
+    return resumedCodexChecks(codexConfig);
+  }
+
+  console.log("- Checking local Codex CLI command and login...");
+  const checks = await checkCodex(rootDir, runProviderCommand, codexConfig);
+  printInlineCodexSetupStatus(checks);
+  if (checks.every((check) => check.status === "pass")) {
+    await writeSetupResumeState(rootDir, markSetupStep(state, "codex", "ready"));
+  }
+  return checks;
+}
+
+async function setupOrResumeOpenAI(args: ParsedArgs, rootDir: string, state: SetupResumeState): Promise<OpenAISetupReport> {
+  const completed = state.steps.openai;
+  if (completed) {
+    console.log(`- Previously completed: ${completed}.`);
+    return resumedOpenAISetupReport(rootDir, await readOpenAIEnvFile(rootDir), completed);
+  }
+
+  const report = await openAISetupCommand(args);
+  if (report.status !== "needs_attention") {
+    await writeSetupResumeState(rootDir, markSetupStep(state, "openai", report.status));
+  }
+  return report;
+}
+
+function setupStatePath(rootDir: string): string {
+  return join(rootDir, ".orchestrator", "setup-state.json");
+}
+
+async function readSetupResumeState(rootDir: string): Promise<SetupResumeState> {
+  try {
+    const parsed = JSON.parse(await readFile(setupStatePath(rootDir), "utf8")) as Partial<SetupResumeState>;
+    return {
+      version: 1,
+      steps: normalizeSetupSteps(parsed.steps),
+      blockedAt: isSetupProvider(parsed.blockedAt) ? parsed.blockedAt : undefined,
+      updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : nowIso()
+    };
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      return emptySetupResumeState();
+    }
+    throw error;
+  }
+}
+
+async function writeSetupResumeState(rootDir: string, state: SetupResumeState): Promise<void> {
+  const path = setupStatePath(rootDir);
+  await mkdir(join(rootDir, ".orchestrator"), { recursive: true });
+  await writeFile(path, `${JSON.stringify({ ...state, updatedAt: nowIso() }, null, 2)}\n`, "utf8");
+}
+
+function emptySetupResumeState(): SetupResumeState {
+  return {
+    version: 1,
+    steps: {},
+    updatedAt: nowIso()
+  };
+}
+
+function normalizeSetupSteps(steps: unknown): SetupResumeState["steps"] {
+  if (typeof steps !== "object" || steps === null) {
+    return {};
+  }
+
+  const record = steps as Record<string, unknown>;
+  const normalized: SetupResumeState["steps"] = {};
+  for (const provider of ["jira", "gemini", "codex", "openai"] satisfies SetupProvider[]) {
+    const status = record[provider];
+    if (status === "ready" || status === "saved" || status === "skipped") {
+      normalized[provider] = status;
+    }
+  }
+  return normalized;
+}
+
+function isSetupProvider(value: unknown): value is SetupProvider {
+  return value === "jira" || value === "gemini" || value === "codex" || value === "openai";
+}
+
+function markSetupStep(state: SetupResumeState, provider: SetupProvider, status: SetupStepStatus): SetupResumeState {
+  return {
+    ...state,
+    steps: {
+      ...state.steps,
+      [provider]: status
+    },
+    blockedAt: undefined
+  };
+}
+
+function markSetupBlocked(state: SetupResumeState, provider: SetupProvider): SetupResumeState {
+  return {
+    ...state,
+    blockedAt: provider
+  };
+}
+
+function setupStepStatusFromJira(report: SetupAllJiraReport): SetupStepStatus {
+  if (report.status === "skipped") {
+    return "skipped";
+  }
+  if (report.status === "ready") {
+    return "ready";
+  }
+
+  return "saved";
+}
+
+function skippedJiraSetupReport(hasExistingCredentials: boolean): SetupAllJiraReport {
+  const summary = hasExistingCredentials
+    ? "Jira setup was skipped previously. Existing Jira credentials were left unchanged."
+    : "Jira setup was skipped previously. Direct task runs do not need Jira credentials.";
+  return {
+    status: "skipped",
+    envFile: hasExistingCredentials ? ".orchestrator/jira.env" : "not configured",
+    authMode: hasExistingCredentials ? "unchanged" : "not-configured",
+    mcpCheck: {
+      status: "skipped",
+      summary
+    },
+    nextCommand: "tlo setup jira"
+  };
+}
+
+function resumedJiraSetupReport(rootDir: string, env: Record<string, string>): JiraSetupReport {
+  return {
+    status: "ready",
+    envFile: jiraEnvPathForDisplay(rootDir),
+    authMode: env.JIRA_PERSONAL_TOKEN ? "personal-token" : "cloud-api-token",
+    mcpCheck: {
+      status: "skipped",
+      summary: "Jira setup was completed previously."
+    },
+    nextCommand: "tlo run ISSUE-KEY"
+  };
+}
+
+function resumedGeminiSetupReport(rootDir: string, env: Record<string, string>, status: SetupStepStatus): GeminiSetupReport {
+  return {
+    status: status === "skipped" ? "saved" : status,
+    envFile: join(rootDir, ".orchestrator", "gemini.env"),
+    model: env.GEMINI_MODEL || "configured",
+    check: {
+      status: "skipped",
+      summary: "Gemini setup was completed previously."
+    },
+    nextCommand: status === "ready" ? "tlo run ISSUE-KEY" : "tlo doctor gemini"
+  };
+}
+
+function resumedCodexChecks(codexConfig: CodexConfig): DoctorCheck[] {
+  return [
+    {
+      id: "codex_cli_command",
+      status: "pass",
+      summary: `Codex CLI was verified previously: ${codexConfig.binary || "codex"}.`
+    },
+    {
+      id: "codex_cli_auth",
+      status: "pass",
+      summary: "Codex CLI auth was verified previously; tlo will reuse the local Codex login."
+    }
+  ];
+}
+
+function resumedOpenAISetupReport(rootDir: string, env: Record<string, string>, status: SetupStepStatus): OpenAISetupReport {
+  return {
+    status: status === "skipped" ? "saved" : status,
+    envFile: join(rootDir, ".orchestrator", "openai.env"),
+    model: env.OPENAI_MODEL || "configured",
+    check: {
+      status: "skipped",
+      summary: "OpenAI setup was completed previously."
+    },
+    nextCommand: status === "ready" ? "tlo run ISSUE-KEY" : "tlo doctor openai"
+  };
+}
+
+function jiraEnvPathForDisplay(rootDir: string): string {
+  return join(rootDir, ".orchestrator", "jira.env");
 }
 
 function printSetupAllReport(report: SetupAllReport): void {
