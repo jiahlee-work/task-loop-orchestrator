@@ -65,6 +65,7 @@ import {
 } from "./providers.js";
 import { LocalEvidenceReviewer } from "./reviewers.js";
 import { createMockRoleProviders, type RoleProviders } from "./roles.js";
+import { parseRunInput, type RunInput } from "./run-input.js";
 import { createRunCliReport } from "./run-report.js";
 import { FileRunStore } from "./store.js";
 import {
@@ -87,13 +88,6 @@ interface ParsedArgs {
   flags: Record<string, string | boolean>;
 }
 
-interface RunInput {
-  kind: "direct" | "jira";
-  title?: string;
-  jiraKey?: string;
-  note?: string;
-}
-
 interface RunPreflightFailure {
   title: string;
   reasons: string[];
@@ -103,8 +97,6 @@ interface RunPreflightFailure {
     provider: "gemini" | "jira" | "codex" | "openai";
   };
 }
-
-const jiraIssueKeyPattern = /^[A-Z][A-Z0-9]+-\d+$/;
 
 function parseArgs(argv: string[]): ParsedArgs {
   const [command, ...rest] = argv;
@@ -1140,39 +1132,6 @@ function printRunPreflightFailure(failure: RunPreflightFailure, json: boolean): 
       console.log(`  ${item.command}`);
     }
   }
-}
-
-function parseRunInput(args: ParsedArgs): RunInput {
-  const explicitJiraKey = stringFlag(args.flags, "jira");
-  const flagNote = stringFlag(args.flags, "note");
-  if (explicitJiraKey) {
-    const inlineNote = args.positional.join(" ").trim();
-    return {
-      kind: "jira",
-      jiraKey: explicitJiraKey,
-      note: flagNote ?? (inlineNote || undefined)
-    };
-  }
-
-  const [first, ...rest] = args.positional;
-  if (isJiraIssueKey(first)) {
-    const restNote = rest[0] === "with" ? rest.slice(1).join(" ").trim() : rest.join(" ").trim();
-    return {
-      kind: "jira",
-      jiraKey: first,
-      note: flagNote ?? (restNote || undefined)
-    };
-  }
-
-  return {
-    kind: "direct",
-    title: args.positional.join(" ").trim(),
-    note: flagNote
-  };
-}
-
-function isJiraIssueKey(value: string | undefined): boolean {
-  return typeof value === "string" && jiraIssueKeyPattern.test(value);
 }
 
 async function createTaskSpecFromJiraKey(
