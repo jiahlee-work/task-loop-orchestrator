@@ -297,8 +297,10 @@ describe("release readiness documentation", () => {
     expectContainsAll(design, [
       "# Root Planning Tree Model",
       "Status: design draft",
-      "initial run directory artifact storage implemented",
-      "it does not mean Gemini already produces the final root contract or that the full tree executor is implemented",
+      "initial run directory artifact storage and Gemini root-contract/task-tree output implemented",
+      "Gemini root-contract/task-tree output implemented",
+      "Gemini Planner now requests `rootContract` and `taskTree` JSON",
+      "This does not mean the full tree executor is implemented",
       "LLM의 대화 기억에 의존하지 않는다",
       "root가 만든 계약 문서를 파일로 고정한다",
       "tlo run OUC-10",

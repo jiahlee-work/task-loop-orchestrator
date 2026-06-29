@@ -176,7 +176,9 @@ export class RootOrchestrator {
       role: "planner",
       data: {
         proposedSubtasks: report.proposedSubtasks?.length ?? 0,
-        status: report.status
+        status: report.status,
+        ...(report.data?.rootContract ? { rootContract: report.data.rootContract } : {}),
+        ...(report.data?.taskTree ? { taskTree: report.data.taskTree } : {})
       }
     });
   }

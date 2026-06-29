@@ -30,18 +30,29 @@ describe("Gemini planner", () => {
                     {
                       text: JSON.stringify({
                         summary: "Plan shell refactor",
-                        subtasks: [
-                          {
-                            title: "Extract sidebar shell",
-                            description: "Move sidebar layout into a bounded shell component.",
-                            dependsOn: []
-                          },
-                          {
-                            title: "Wire chat content",
-                            description: "Connect chat body to the new shell.",
-                            dependsOn: ["Extract sidebar shell"]
-                          }
-                        ]
+                        rootContract: {
+                          goal: "Refactor chat shell and sidebar structure",
+                          nonGoals: ["Do not redesign the chat UI"],
+                          mustFollow: ["Keep the shell layout stable"],
+                          acceptanceCriteria: ["Shell layout remains stable.", "Sidebar behavior remains unchanged."],
+                          contextGuard: ["Reject executor output that changes visible layout unexpectedly."],
+                          repoConstraints: ["Do not create commits or PRs."],
+                          userDecisions: ["User asked to preserve UI behavior."]
+                        },
+                        taskTree: {
+                          tasks: [
+                            {
+                              title: "Extract sidebar shell",
+                              description: "Move sidebar layout into a bounded shell component.",
+                              dependsOn: []
+                            },
+                            {
+                              title: "Wire chat content",
+                              description: "Connect chat body to the new shell.",
+                              dependsOn: ["Extract sidebar shell"]
+                            }
+                          ]
+                        }
                       })
                     }
                   ]
@@ -70,7 +81,25 @@ describe("Gemini planner", () => {
     expect(report.proposedSubtasks?.[1]?.dependsOn).toEqual([report.proposedSubtasks?.[0]?.id]);
     expect(report.data).toMatchObject({
       provider: "gemini",
-      model: "gemini-test"
+      model: "gemini-test",
+      rootContract: {
+        goal: "Refactor chat shell and sidebar structure",
+        nonGoals: ["Do not redesign the chat UI"],
+        acceptanceCriteria: ["Shell layout remains stable.", "Sidebar behavior remains unchanged."],
+        contextGuard: ["Reject executor output that changes visible layout unexpectedly."]
+      },
+      taskTree: {
+        tasks: [
+          {
+            title: "Extract sidebar shell",
+            sourceDependsOn: []
+          },
+          {
+            title: "Wire chat content",
+            sourceDependsOn: ["Extract sidebar shell"]
+          }
+        ]
+      }
     });
   });
 

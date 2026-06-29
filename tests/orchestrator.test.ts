@@ -254,4 +254,84 @@ describe("RootOrchestrator", () => {
 
     expect(runs.filter((candidate) => candidate.id === run.id)).toHaveLength(1);
   });
+
+  it("persists planner root contract and task tree artifacts from planner output", async () => {
+    const root = await tempRoot();
+    const store = new FileRunStore(root);
+    const roles: RoleProviders = {
+      planner: {
+        async plan(): Promise<RoleReport> {
+          const createdAt = "2026-06-22T00:00:00.000Z";
+          return {
+            role: "planner",
+            status: "ok",
+            summary: "Planned with root contract.",
+            proposedSubtasks: [
+              {
+                id: "contract-task",
+                title: "Apply contract",
+                description: "Implement only the approved root goal.",
+                dependsOn: [],
+                assignedRole: "executor",
+                createdAt,
+                updatedAt: createdAt
+              }
+            ],
+            data: {
+              rootContract: {
+                goal: "Approved root goal",
+                nonGoals: ["Do not redesign UI"],
+                mustFollow: ["Preserve existing behavior"],
+                acceptanceCriteria: ["Behavior is preserved"],
+                contextGuard: ["Reject unrelated UI changes"],
+                repoConstraints: ["No commits"],
+                userDecisions: ["User approved bounded scope"]
+              },
+              taskTree: {
+                tasks: [
+                  {
+                    id: "contract-task",
+                    title: "Apply contract",
+                    description: "Implement only the approved root goal."
+                  }
+                ]
+              }
+            }
+          };
+        }
+      },
+      executor: new MockExecutor(),
+      reviewer: {
+        async review(input: { subtask: Subtask; executorReport: RoleReport }): Promise<RoleReport> {
+          return {
+            role: "reviewer",
+            status: "ok",
+            subtaskId: input.subtask.id,
+            summary: `Verified ${input.executorReport.summary}`
+          };
+        }
+      }
+    };
+    const orchestrator = new RootOrchestrator({ store, roles });
+
+    const run = await orchestrator.runTask(createTaskSpec({ title: "Fallback title" }));
+    const rootContract = JSON.parse(await readFile(store.pathForRootContract(run.id), "utf8"));
+    const taskTree = JSON.parse(await readFile(store.pathForTaskTree(run.id), "utf8"));
+
+    expect(rootContract).toMatchObject({
+      goal: "Approved root goal",
+      nonGoals: ["Do not redesign UI"],
+      mustFollow: ["Preserve existing behavior", "Mock closed-loop run completes at least one bounded subtask."],
+      acceptanceCriteria: ["Behavior is preserved"],
+      contextGuard: ["Reject unrelated UI changes"],
+      repoConstraints: ["No commits"],
+      userDecisions: ["User approved bounded scope"]
+    });
+    expect(taskTree.tasks[0]).toMatchObject({
+      id: "contract-task",
+      title: "Apply contract",
+      description: "Implement only the approved root goal.",
+      status: "completed"
+    });
+  });
 });

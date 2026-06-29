@@ -70,28 +70,43 @@ const defaultRepoConstraints = [
 ];
 
 export function createRootContractArtifact(run: LoopRun): RootContractArtifact {
+  const plannerContract = latestPlannerRootContract(run);
+
   return {
     schemaVersion: 1,
     runId: run.id,
     taskId: run.spec.id,
-    goal: run.spec.title,
-    description: run.spec.description,
-    nonGoals: [],
-    mustFollow: [...run.spec.acceptanceCriteria],
-    acceptanceCriteria: [...run.spec.acceptanceCriteria],
-    contextGuard: [...defaultContextGuard],
-    repoConstraints: [...defaultRepoConstraints],
-    userDecisions: userDecisionSummaries(run),
+    goal: nonEmptyString(plannerContract?.goal) ?? run.spec.title,
+    description: nonEmptyString(plannerContract?.description) ?? run.spec.description,
+    nonGoals: stringArray(plannerContract?.nonGoals),
+    mustFollow: uniqueStrings([...stringArray(plannerContract?.mustFollow), ...run.spec.acceptanceCriteria]),
+    acceptanceCriteria: stringArray(plannerContract?.acceptanceCriteria).length > 0
+      ? stringArray(plannerContract?.acceptanceCriteria)
+      : [...run.spec.acceptanceCriteria],
+    contextGuard: stringArray(plannerContract?.contextGuard).length > 0
+      ? stringArray(plannerContract?.contextGuard)
+      : [...defaultContextGuard],
+    repoConstraints: stringArray(plannerContract?.repoConstraints).length > 0
+      ? stringArray(plannerContract?.repoConstraints)
+      : [...defaultRepoConstraints],
+    userDecisions: uniqueStrings([...stringArray(plannerContract?.userDecisions), ...userDecisionSummaries(run)]),
     permissionMode: run.permissionMode,
     updatedAt: run.updatedAt
   };
 }
 
 export function createTaskTreeArtifact(run: LoopRun): TaskTreeArtifact {
+  const plannerTasks = latestPlannerTaskTreeTasks(run);
+  const plannerTaskById = new Map(
+    plannerTasks
+      .map((task) => [nonEmptyString(task.id), task] as const)
+      .filter((entry): entry is readonly [string, Record<string, unknown>] => Boolean(entry[0]))
+  );
+
   return {
     schemaVersion: 1,
     runId: run.id,
-    tasks: run.graph.subtasks.map(subtaskToTaskTreeNode),
+    tasks: run.graph.subtasks.map((subtask) => subtaskToTaskTreeNode(subtask, plannerTaskById.get(subtask.id))),
     conflicts: run.graph.conflicts.map((conflict) => ({
       id: conflict.id,
       subtaskId: conflict.subtaskId,
@@ -171,11 +186,11 @@ export function countSubtasks(run: Pick<LoopRun, "graph">): RunStateArtifact["co
   return counts;
 }
 
-function subtaskToTaskTreeNode(subtask: Subtask): TaskTreeNode {
+function subtaskToTaskTreeNode(subtask: Subtask, plannerTask?: Record<string, unknown>): TaskTreeNode {
   return {
     id: subtask.id,
-    title: subtask.title,
-    description: subtask.description,
+    title: nonEmptyString(plannerTask?.title) ?? subtask.title,
+    description: nonEmptyString(plannerTask?.description) ?? subtask.description,
     dependsOn: [...subtask.dependsOn],
     status: subtask.status,
     assignedRole: subtask.assignedRole,
@@ -211,4 +226,47 @@ function summarizeText(value: string | undefined): string | undefined {
 
   const normalized = value.replace(/\s+/g, " ").trim();
   return normalized.length > 500 ? `${normalized.slice(0, 497)}...` : normalized;
+}
+
+function latestPlannerRootContract(run: LoopRun): Record<string, unknown> | undefined {
+  for (const event of [...run.events].reverse()) {
+    if (event.kind !== "planned" || !isRecord(event.data?.rootContract)) {
+      continue;
+    }
+
+    return event.data.rootContract;
+  }
+
+  return undefined;
+}
+
+function latestPlannerTaskTreeTasks(run: LoopRun): Record<string, unknown>[] {
+  for (const event of [...run.events].reverse()) {
+    if (event.kind !== "planned" || !isRecord(event.data?.taskTree)) {
+      continue;
+    }
+
+    const tasks = event.data.taskTree.tasks;
+    return Array.isArray(tasks) ? tasks.filter(isRecord) : [];
+  }
+
+  return [];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((candidate): candidate is string => typeof candidate === "string" && candidate.trim().length > 0).map((item) => item.trim())
+    : [];
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values.filter((value) => value.trim().length > 0))];
 }
