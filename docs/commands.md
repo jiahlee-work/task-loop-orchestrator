@@ -48,15 +48,16 @@ tlo init --json
 
 JSON: supported with `--json`.
 
-Behavior: writes local bootstrap files only. It creates `orchestrator.config.json` when missing and ensures `.gitignore` contains `.orchestrator/`. Existing config is skipped unless `--force` is provided, so rerunning `init` is safe.
+Behavior: writes local bootstrap files only. It creates `orchestrator.config.json` when missing and ensures `.gitignore` contains `.orchestrator/`. Existing config is skipped unless `--force` is provided, so rerunning `init` is safe. The CLI resolves the target repository with `git rev-parse --show-toplevel`; if the current directory is not inside a Git repository, `init` uses the current directory and prints a warning because Codex execution needs Git worktree support.
 
-### `setup jira|gemini|openai [options]`
+### `setup [jira|gemini|openai] [options]`
 
 Purpose: Save local provider credentials for the current project.
 
 Example:
 
 ```bash
+tlo setup
 tlo setup jira
 tlo setup jira --url https://company.atlassian.net --username me@company.com --api-token "$JIRA_API_TOKEN"
 tlo setup gemini
@@ -67,7 +68,7 @@ tlo setup openai --api-key "$OPENAI_API_KEY" --model gpt-5.1
 
 JSON: not supported.
 
-Behavior: writes provider env files such as `.orchestrator/jira.env`, `.orchestrator/gemini.env`, and `.orchestrator/openai.env` with file mode `0600`, so only the local file owner can read or update them. The files are under `.orchestrator/`, which `init` adds to `.gitignore`. Gemini setup expects a Gemini API key from [Google AI Studio API Keys](https://aistudio.google.com/app/apikey). OpenAI setup expects an OpenAI API key from [OpenAI API keys](https://platform.openai.com/api-keys). By default the command verifies that the configured MCP server exposes the Jira issue read tool, that the Gemini planner model responds, or that the OpenAI reviewer model responds; use `--skip-check` to save credentials without a live verification call.
+Behavior: without a provider argument, `setup` runs the Jira, Gemini, and OpenAI setup prompts in order. With a provider argument, it updates only that provider. It writes provider env files such as `.orchestrator/jira.env`, `.orchestrator/gemini.env`, and `.orchestrator/openai.env` with file mode `0600`, so only the local file owner can read or update them. The files are under `.orchestrator/`, which `init` adds to `.gitignore`. Gemini setup expects a Gemini API key from [Google AI Studio API Keys](https://aistudio.google.com/app/apikey). OpenAI setup expects an OpenAI API key from [OpenAI API keys](https://platform.openai.com/api-keys). By default the command verifies that the configured MCP server exposes the Jira issue read tool, that the Gemini planner model responds, or that the OpenAI reviewer model responds; use `--skip-check` to save credentials without a live verification call.
 
 ### `doctor [jira|gemini|openai] [--github none|gh-cli] [--json]`
 

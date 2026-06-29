@@ -49,6 +49,7 @@ async function main() {
       assertIncludes(help.stdout, "task-loop-orchestrator setup jira", "help output should include setup jira usage");
       assertIncludes(help.stdout, "task-loop-orchestrator setup gemini", "help output should include setup gemini usage");
       assertIncludes(help.stdout, "task-loop-orchestrator doctor", "help output should include doctor usage");
+      assertIncludes(help.stdout, "tlo setup", "help output should include tlo setup wizard alias usage");
       assertIncludes(help.stdout, "tlo setup jira", "help output should include tlo setup alias usage");
       assertIncludes(help.stdout, "task-loop-orchestrator execution-audit", "help output should include execution-audit usage");
       assertIncludes(help.stdout, "task-loop-orchestrator write-readiness", "help output should include write-readiness usage");

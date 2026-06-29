@@ -53,7 +53,7 @@ import { setupOpenAI, type OpenAISetupReport } from "./openai-setup.js";
 import { RootOrchestrator, createTaskSpec } from "./orchestrator.js";
 import { checkPermission } from "./permission.js";
 import { createPullRequestPlan } from "./pr-plan.js";
-import { resolveTargetRoot } from "./project-root.js";
+import { resolveTargetProject, resolveTargetRoot } from "./project-root.js";
 import {
   createGitToolProviders,
   createTaskSpecFromJiraIssue,
@@ -169,6 +169,7 @@ function printUsage(): void {
   task-loop-orchestrator --help
   task-loop-orchestrator --version
   task-loop-orchestrator init [--force] [--json]
+  task-loop-orchestrator setup [--skip-check]
   task-loop-orchestrator setup jira [--url url] [--username email] [--api-token token|--personal-token token] [--skip-check]
   task-loop-orchestrator setup gemini [--api-key key] [--model model] [--skip-check]
   task-loop-orchestrator setup openai [--api-key key] [--model model] [--skip-check]
@@ -187,6 +188,7 @@ function printUsage(): void {
   task-loop-orchestrator checks [ref] [--json]
 
 Short alias:
+  tlo setup
   tlo setup jira
   tlo setup gemini
   tlo setup openai
@@ -444,8 +446,8 @@ function printDoctorReport(report: DoctorReport): void {
 }
 
 async function initCommand(args: ParsedArgs): Promise<void> {
-  const rootDir = await resolveTargetRoot();
-  const report = await initProject(rootDir, {
+  const target = await resolveTargetProject();
+  const report = await initProject(target.rootDir, {
     force: args.flags.force === true
   });
 
@@ -454,15 +456,37 @@ async function initCommand(args: ParsedArgs): Promise<void> {
     return;
   }
 
-  console.log("Initialized task-loop-orchestrator project files.");
-  console.log(`Config: ${report.files.config.status} ${report.files.config.path}`);
+  console.log("Success: init");
+  console.log("");
+  console.log("Result:");
+  console.log(`- Target repo: ${report.rootDir}`);
+  console.log(`- Git repository: ${target.isGitRepository ? "yes" : "no"}`);
+  console.log(`- Config: ${report.files.config.status} ${report.files.config.path}`);
   if (report.files.config.reason) {
     console.log(`- ${report.files.config.reason}`);
   }
-  console.log(`Gitignore: ${report.files.gitignore.status} ${report.files.gitignore.path}`);
+  console.log(`- Gitignore: ${report.files.gitignore.status} ${report.files.gitignore.path}`);
   if (report.files.gitignore.reason) {
     console.log(`- ${report.files.gitignore.reason}`);
   }
+
+  if (!target.isGitRepository) {
+    console.log("");
+    console.log("Warning:");
+    console.log("- Current directory is not inside a Git repository. Codex execution requires a Git repository because it creates a Git worktree.");
+  }
+
+  console.log("");
+  console.log("Next:");
+  if (!target.isGitRepository) {
+    console.log("- Move into the Git repository you want tlo to work on, or initialize this directory with git init.");
+  }
+  console.log("- Set up all providers:");
+  console.log("  tlo setup");
+  console.log("- Or set up one provider:");
+  console.log("  tlo setup jira");
+  console.log("  tlo setup gemini");
+  console.log("  tlo setup openai");
 }
 
 async function jiraCommand(args: ParsedArgs): Promise<void> {
@@ -477,6 +501,12 @@ async function jiraCommand(args: ParsedArgs): Promise<void> {
 
 async function setupCommand(args: ParsedArgs): Promise<void> {
   const target = args.positional[0];
+  if (!target) {
+    const report = await setupAllCommand(args);
+    printSetupAllReport(report);
+    return;
+  }
+
   if (target === "jira") {
     const report = await jiraSetupCommand(args);
     printJiraSetupReport(report);
@@ -496,6 +526,60 @@ async function setupCommand(args: ParsedArgs): Promise<void> {
   }
 
   throw new Error("setup requires a target: jira, gemini, or openai.");
+}
+
+interface SetupAllReport {
+  rootDir: string;
+  status: "ready" | "needs_attention";
+  jira: JiraSetupReport;
+  gemini: GeminiSetupReport;
+  openai: OpenAISetupReport;
+}
+
+async function setupAllCommand(args: ParsedArgs): Promise<SetupAllReport> {
+  const rootDir = await resolveTargetRoot();
+  console.log(`Target repo: ${rootDir}`);
+  console.log("");
+  console.log("Step 1/3: Jira");
+  const jira = await jiraSetupCommand(args);
+  console.log("");
+  console.log("Step 2/3: Gemini");
+  const gemini = await geminiSetupCommand(args);
+  console.log("");
+  console.log("Step 3/3: OpenAI");
+  const openai = await openAISetupCommand(args);
+  const status = jira.status === "ready" && gemini.status === "ready" && openai.status === "ready" ? "ready" : "needs_attention";
+
+  return {
+    rootDir,
+    status,
+    jira,
+    gemini,
+    openai
+  };
+}
+
+function printSetupAllReport(report: SetupAllReport): void {
+  console.log("");
+  console.log(`${report.status === "ready" ? "Success" : "Warning"}: setup`);
+  console.log("");
+  console.log("Result:");
+  console.log(`- Target repo: ${report.rootDir}`);
+  console.log(`- Jira: ${report.jira.status} (${report.jira.envFile})`);
+  console.log(`- Gemini: ${report.gemini.status} (${report.gemini.envFile})`);
+  console.log(`- OpenAI: ${report.openai.status} (${report.openai.envFile})`);
+  console.log("");
+  console.log("Next:");
+  if (report.status === "ready") {
+    console.log("- Start a run from a Jira issue:");
+    console.log("  tlo run ISSUE-KEY");
+    return;
+  }
+
+  console.log("- Check provider setup:");
+  console.log("  tlo doctor jira");
+  console.log("  tlo doctor gemini");
+  console.log("  tlo doctor openai");
 }
 
 async function jiraSetupCommand(args: ParsedArgs): Promise<JiraSetupReport> {
@@ -866,6 +950,10 @@ function preflightRunDependencies(
           command: "https://aistudio.google.com/app/apikey"
         },
         {
+          description: "Set up all required providers for this project:",
+          command: "tlo setup"
+        },
+        {
           description: "Save Gemini API credentials for this project:",
           command: "tlo setup gemini"
         },
@@ -906,6 +994,10 @@ function preflightRunDependencies(
         {
           description: "Create or view an OpenAI API key:",
           command: "https://platform.openai.com/api-keys"
+        },
+        {
+          description: "Set up all required providers for this project:",
+          command: "tlo setup"
         },
         {
           description: "Save OpenAI API credentials for this project:",

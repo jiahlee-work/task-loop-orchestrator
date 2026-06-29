@@ -30,6 +30,7 @@ describe("quickstart documentation", () => {
     expectContainsAll(quickstart, [
       "tlo init",
       "tlo doctor",
+      "tlo setup",
       "tlo setup jira",
       "tlo setup gemini",
       "tlo doctor jira",
@@ -621,6 +622,7 @@ describe("documentation role boundaries", () => {
       "node dist/cli.js --version",
       "tlo doctor",
       "tlo init",
+      "tlo setup",
       "tlo setup jira",
       "tlo setup gemini",
       "tlo doctor jira",
@@ -818,6 +820,7 @@ describe("command reference documentation", () => {
       "--help",
       "--version",
       "init [--force] [--json]",
+      "setup [--skip-check]",
       "setup jira [--url url] [--username email] [--api-token token|--personal-token token] [--skip-check]",
       "setup gemini [--api-key key] [--model model] [--skip-check]",
       "setup openai [--api-key key] [--model model] [--skip-check]",

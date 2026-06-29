@@ -8,7 +8,7 @@
 
 - Node.js 24 이상
 - Corepack으로 활성화한 pnpm 11.x 또는 호환되는 pnpm 설치
-- 대상 프로젝트가 Git 저장소이면 `doctor`와 `checks` 결과가 더 유용합니다.
+- 작업시킬 대상 프로젝트는 Git 저장소여야 합니다. `tlo init`은 Git 저장소가 아닌 폴더에서도 현재 디렉터리에 초기화할 수 있지만, Codex 실행은 Git worktree를 만들기 때문에 Git 저장소 밖에서는 실패할 수 있습니다.
 
 ## CLI 저장소 준비
 
@@ -41,10 +41,11 @@ tlo doctor
 
 ```bash
 tlo init
+tlo setup
 tlo run OUC-10
 ```
 
-`tlo run`은 실행 전에 필요한 provider 설정을 확인합니다. Gemini, Jira, OpenAI 설정이 빠져 있으면 run 파일을 만들지 않고 실패 이유와 다음 명령을 보여 줍니다. 예를 들어 `tlo setup gemini`, `tlo setup openai`, `tlo setup jira`, `tlo doctor jira`처럼 필요한 명령을 `Next`에 표시합니다. 설정이 끝난 프로젝트에서는 `tlo run OUC-10`만 바로 실행하면 됩니다.
+`tlo setup`은 Jira, Gemini, OpenAI 설정을 순서대로 진행합니다. 특정 provider만 다시 설정할 때는 `tlo setup jira`, `tlo setup gemini`, `tlo setup openai`를 사용할 수 있습니다. `tlo run`은 실행 전에 필요한 provider 설정을 확인하고, 빠진 설정이 있으면 run 파일을 만들지 않고 실패 이유와 다음 명령을 보여 줍니다. 설정이 끝난 프로젝트에서는 `tlo run OUC-10`만 바로 실행하면 됩니다.
 
 ## Gemini API key 준비
 
