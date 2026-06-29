@@ -49,7 +49,7 @@ tlo run OUC-10
 
 `tlo run`은 필요한 provider 설정을 먼저 확인합니다. Gemini와 OpenAI 설정이 빠져 있으면 run을 저장하지 않고 실패 이유와 다음에 실행할 명령을 안내합니다. Jira는 이슈 키로 실행할 때만 필요하며, 직접 설명으로 실행할 때는 건너뛸 수 있습니다.
 
-처음에는 `tlo setup`으로 필요한 provider를 순서대로 설정하는 흐름을 추천합니다. `tlo setup`은 먼저 Jira 이슈 키 실행을 쓸지 묻고, 이슈 키 실행을 쓰지 않을 때는 Jira를 건너뜁니다. 특정 provider만 다시 설정할 때는 `tlo setup jira`, `tlo setup gemini`, `tlo setup openai`를 사용할 수 있습니다. 연결을 따로 확인하고 싶을 때는 `tlo doctor jira`, `tlo doctor gemini`, `tlo doctor openai`를 실행합니다. 설정이 끝난 프로젝트에서는 `tlo run OUC-10` 또는 `tlo run "직접 작업 설명"`으로 실행합니다.
+처음에는 `tlo setup`으로 필요한 provider를 순서대로 설정하는 흐름을 추천합니다. `tlo setup`은 Jira, Gemini, Codex CLI, OpenAI 순서로 진행하고, 이슈 키 실행을 쓰지 않을 때는 Jira를 건너뜁니다. 특정 provider만 다시 설정할 때는 `tlo setup jira`, `tlo setup gemini`, `tlo setup openai`를 사용할 수 있습니다. 연결을 따로 확인하고 싶을 때는 `tlo doctor jira`, `tlo doctor gemini`, `tlo doctor openai`를 실행합니다. 설정이 끝난 프로젝트에서는 `tlo run OUC-10` 또는 `tlo run "직접 작업 설명"`으로 실행합니다.
 
 Codex CLI는 `tlo setup`에서 API key를 묻지 않습니다. `tlo doctor codex`가 로컬 `codex` 명령과 로그인 상태를 확인하고, 문제가 있으면 `codex login`을 안내합니다.
 
