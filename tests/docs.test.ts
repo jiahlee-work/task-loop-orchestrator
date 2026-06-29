@@ -860,7 +860,7 @@ describe("command reference documentation", () => {
       "--help",
       "--version",
       "init [--force] [--json]",
-      "setup [--skip-check]",
+      "setup [--skip-check] [--skip-jira]",
       "setup jira [--url url] [--username email] [--api-token token|--personal-token token] [--skip-check]",
       "setup gemini [--api-key key] [--model model] [--skip-check]",
       "setup openai [--api-key key] [--model model] [--skip-check]",

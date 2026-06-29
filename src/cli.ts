@@ -165,7 +165,7 @@ function printUsage(): void {
   task-loop-orchestrator --help
   task-loop-orchestrator --version
   task-loop-orchestrator init [--force] [--json]
-  task-loop-orchestrator setup [--skip-check]
+  task-loop-orchestrator setup [--skip-check] [--skip-jira]
   task-loop-orchestrator setup jira [--url url] [--username email] [--api-token token|--personal-token token] [--skip-check]
   task-loop-orchestrator setup gemini [--api-key key] [--model model] [--skip-check]
   task-loop-orchestrator setup openai [--api-key key] [--model model] [--skip-check]
@@ -535,10 +535,23 @@ interface SetupAllReport {
   rootDir: string;
   status: "ready" | "needs_attention";
   codex: DoctorCheck[];
-  jira: JiraSetupReport;
+  jira: SetupAllJiraReport;
   gemini: GeminiSetupReport;
   openai: OpenAISetupReport;
 }
+
+type SetupAllJiraReport =
+  | JiraSetupReport
+  | {
+      status: "skipped";
+      envFile: string;
+      authMode: "not-configured" | "unchanged";
+      mcpCheck: {
+        status: "skipped";
+        summary: string;
+      };
+      nextCommand: string;
+    };
 
 async function setupAllCommand(args: ParsedArgs): Promise<SetupAllReport> {
   const rootDir = await resolveTargetRoot();
@@ -546,11 +559,12 @@ async function setupAllCommand(args: ParsedArgs): Promise<SetupAllReport> {
   console.log(`Target repo: ${rootDir}`);
   console.log("");
   console.log("Step 1/4: Codex CLI");
+  console.log("- Checking local Codex CLI command and login...");
   const codex = await checkCodex(rootDir, runProviderCommand, config.codex);
   printInlineCodexSetupStatus(codex);
   console.log("");
-  console.log("Step 2/4: Jira");
-  const jira = await jiraSetupCommand(args);
+  console.log("Step 2/4: Jira (optional)");
+  const jira = await setupJiraFromSetupAll(args, rootDir);
   console.log("");
   console.log("Step 3/4: Gemini");
   const gemini = await geminiSetupCommand(args);
@@ -558,7 +572,10 @@ async function setupAllCommand(args: ParsedArgs): Promise<SetupAllReport> {
   console.log("Step 4/4: OpenAI");
   const openai = await openAISetupCommand(args);
   const status =
-    codex.every((check) => check.status === "pass") && jira.status === "ready" && gemini.status === "ready" && openai.status === "ready"
+    codex.every((check) => check.status === "pass") &&
+    (jira.status === "ready" || jira.status === "skipped") &&
+    gemini.status === "ready" &&
+    openai.status === "ready"
       ? "ready"
       : "needs_attention";
 
@@ -579,22 +596,80 @@ function printSetupAllReport(report: SetupAllReport): void {
   console.log("Result:");
   console.log(`- Target repo: ${report.rootDir}`);
   console.log(`- Codex CLI: ${report.codex.every((check) => check.status === "pass") ? "ready" : "needs_attention"}`);
-  console.log(`- Jira: ${report.jira.status} (${report.jira.envFile})`);
+  console.log(`- Jira: ${formatSetupAllJiraSummary(report.jira)}`);
   console.log(`- Gemini: ${report.gemini.status} (${report.gemini.envFile})`);
   console.log(`- OpenAI: ${report.openai.status} (${report.openai.envFile})`);
   console.log("");
   console.log("Next:");
   if (report.status === "ready") {
-    console.log("- Start a run from a Jira issue:");
+    if (report.jira.status === "skipped") {
+      console.log("- Start a run from direct text:");
+      console.log('  tlo run "task instruction"');
+      console.log("- Add Jira issue runs later:");
+      console.log("  tlo setup jira");
+      return;
+    }
+
+    console.log("- Start a run from a Jira issue or direct text:");
     console.log("  tlo run ISSUE-KEY");
+    console.log('  tlo run "task instruction"');
     return;
   }
 
   console.log("- Check provider setup:");
   console.log("  tlo doctor codex");
-  console.log("  tlo doctor jira");
+  if (report.jira.status !== "skipped") {
+    console.log("  tlo doctor jira");
+  }
   console.log("  tlo doctor gemini");
   console.log("  tlo doctor openai");
+  if (report.jira.status === "skipped") {
+    console.log("- Add Jira issue runs later:");
+    console.log("  tlo setup jira");
+  }
+}
+
+async function setupJiraFromSetupAll(args: ParsedArgs, rootDir: string): Promise<SetupAllJiraReport> {
+  const existingEnv = await readJiraEnvFile(rootDir);
+  const hasExistingCredentials = Boolean(
+    existingEnv.JIRA_URL && (existingEnv.JIRA_PERSONAL_TOKEN || (existingEnv.JIRA_USERNAME && existingEnv.JIRA_API_TOKEN))
+  );
+
+  console.log("- Jira is only needed when you start runs from issue keys such as OUC-10.");
+  console.log("- You can skip it and still run direct tasks with tlo run \"task instruction\".");
+  if (hasExistingCredentials) {
+    console.log("- Existing Jira credentials were found. Skip this step to keep them unchanged.");
+  }
+
+  const shouldSkip = args.flags["skip-jira"] === true || !(await promptYesNo("Set up Jira issue reading now?", false));
+  if (shouldSkip) {
+    const summary = hasExistingCredentials
+      ? "Jira setup skipped. Existing Jira credentials were left unchanged."
+      : "Jira setup skipped. Direct task runs do not need Jira credentials.";
+    console.log(`- ${summary}`);
+    return {
+      status: "skipped",
+      envFile: hasExistingCredentials ? ".orchestrator/jira.env" : "not configured",
+      authMode: hasExistingCredentials ? "unchanged" : "not-configured",
+      mcpCheck: {
+        status: "skipped",
+        summary
+      },
+      nextCommand: "tlo setup jira"
+    };
+  }
+
+  return jiraSetupCommand(args);
+}
+
+function formatSetupAllJiraSummary(report: SetupAllJiraReport): string {
+  if (report.status === "skipped") {
+    return report.authMode === "unchanged"
+      ? "skipped (existing credentials unchanged)"
+      : "skipped (direct tasks only)";
+  }
+
+  return `${report.status} (${report.envFile})`;
 }
 
 function printInlineCodexSetupStatus(checks: DoctorCheck[]): void {
@@ -616,6 +691,10 @@ async function jiraSetupCommand(args: ParsedArgs): Promise<JiraSetupReport> {
   const personalToken = stringFlag(args.flags, "personal-token");
 
   if (personalToken) {
+    console.log("- Saving Jira MCP credentials...");
+    if (args.flags["skip-check"] !== true) {
+      console.log("- Checking Jira MCP server and issue read tool...");
+    }
     return setupJiraMcp({
       rootDir,
       url,
@@ -629,6 +708,11 @@ async function jiraSetupCommand(args: ParsedArgs): Promise<JiraSetupReport> {
     stringFlag(args.flags, "api-token") ??
     (await promptSecret("Jira API token", existingEnv.JIRA_API_TOKEN ? "leave blank to keep existing" : undefined)) ??
     existingEnv.JIRA_API_TOKEN;
+
+  console.log("- Saving Jira MCP credentials...");
+  if (args.flags["skip-check"] !== true) {
+    console.log("- Checking Jira MCP server and issue read tool...");
+  }
 
   return setupJiraMcp({
     rootDir,
@@ -662,6 +746,11 @@ async function geminiSetupCommand(args: ParsedArgs): Promise<GeminiSetupReport> 
   const model = stringFlag(args.flags, "model") ?? existingEnv.GEMINI_MODEL;
   const endpoint = stringFlag(args.flags, "endpoint") ?? existingEnv.GEMINI_ENDPOINT;
 
+  console.log("- Saving Gemini planner credentials...");
+  if (args.flags["skip-check"] !== true) {
+    console.log("- Checking Gemini planner model...");
+  }
+
   return setupGemini({
     rootDir,
     apiKey,
@@ -693,6 +782,11 @@ async function openAISetupCommand(args: ParsedArgs): Promise<OpenAISetupReport> 
     existingEnv.OPENAI_API_KEY;
   const model = stringFlag(args.flags, "model") ?? existingEnv.OPENAI_MODEL;
   const endpoint = stringFlag(args.flags, "endpoint") ?? existingEnv.OPENAI_ENDPOINT;
+
+  console.log("- Saving OpenAI reviewer credentials...");
+  if (args.flags["skip-check"] !== true) {
+    console.log("- Checking OpenAI reviewer model...");
+  }
 
   return setupOpenAI({
     rootDir,
