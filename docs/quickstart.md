@@ -73,7 +73,7 @@ tlo setup openai
 
 ## plan 승인과 Codex 실행
 
-`tlo run`은 Gemini plan을 보여준 뒤 `Proceed with Codex execution? [y/N]`를 묻습니다. `n`을 입력하면 수정할 내용을 직접 적을 수 있고, 그 내용을 반영해 plan을 다시 만듭니다. `y`를 입력하면 Codex CLI가 대상 레포의 `.orchestrator/dev-workspaces/<runId>/<subtaskId>/` Git worktree에서 실행되고, OpenAI Reviewer가 결과를 검토합니다.
+`tlo run`은 Gemini가 만든 root contract와 task tree를 보여준 뒤 `Approve this plan and start execution? [y/N]`를 묻습니다. `n`을 입력하면 수정 요청을 직접 적을 수 있고, 그 내용을 반영해 plan을 다시 만듭니다. 빈 값을 입력하면 실행하지 않고 멈춥니다. `y`를 입력하면 Codex CLI가 대상 레포의 `.orchestrator/dev-workspaces/<runId>/<subtaskId>/` Git worktree에서 실행되고, OpenAI Reviewer가 결과를 검토합니다.
 
 Jira 이슈에 설명을 덧붙이거나, Jira 없이 직접 작업 설명만 넘길 수도 있습니다.
 

@@ -76,7 +76,7 @@ OpenAI key는 대상 프로젝트의 `.orchestrator/openai.env`에 저장되며,
 
 ## 실행 승인
 
-`tlo run`은 Gemini가 만든 plan을 먼저 보여준 뒤 `Proceed with Codex execution? [y/N]`로 실행 승인을 받습니다. `n`을 입력하면 어떤 점을 수정할지 터미널에 적을 수 있고, 그 내용을 반영해 plan을 다시 만듭니다. `y`를 입력하면 Codex CLI가 대상 레포의 `.orchestrator/dev-workspaces/` 아래에 만든 run별 Git worktree에서 실행됩니다.
+`tlo run`은 Gemini가 만든 root contract와 task tree를 먼저 보여준 뒤 `Approve this plan and start execution? [y/N]`로 실행 승인을 받습니다. `n`을 입력하면 수정 요청을 터미널에 적을 수 있고, 그 내용을 반영해 plan을 다시 만듭니다. 빈 값을 입력하면 실행하지 않고 멈춥니다. `y`를 입력하면 Codex CLI가 대상 레포의 `.orchestrator/dev-workspaces/` 아래에 만든 run별 Git worktree에서 실행됩니다.
 
 Jira 이슈에 설명을 덧붙이거나, Jira 없이 직접 작업 설명만 넘길 수도 있습니다.
 

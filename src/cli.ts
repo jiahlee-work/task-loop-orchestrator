@@ -50,6 +50,7 @@ import { createId, nowIso } from "./ids.js";
 import { loadOpenAIConfigWithLocalEnv, readOpenAIEnvFile } from "./openai-env.js";
 import { OpenAIReviewer } from "./openai-reviewer.js";
 import { setupOpenAI, type OpenAISetupReport } from "./openai-setup.js";
+import { formatPlanPreview } from "./plan-preview.js";
 import { RootOrchestrator, createTaskSpec } from "./orchestrator.js";
 import { checkPermission } from "./permission.js";
 import { createPullRequestPlan } from "./pr-plan.js";
@@ -865,13 +866,13 @@ async function runInteractiveWithPlanApproval(
   await store.save(run);
 
   while (true) {
-    printPlanPreview(run);
-    const approved = await promptYesNo("Proceed with Codex execution?", false);
+    console.log(formatPlanPreview(run));
+    const approved = await promptYesNo("Approve this plan and start execution?", false);
     if (approved) {
       break;
     }
 
-    const revision = await promptValue("What should change in the plan? Leave blank to stop");
+    const revision = await promptValue("Revision request (leave blank to stop)");
     if (!revision.trim()) {
       const blocked = appendStatusEvent(
         {
@@ -912,7 +913,7 @@ async function runInteractiveWithPlanApproval(
         role: "root"
       }
     );
-    console.log("Revising plan with Gemini...");
+    console.log(`Revising plan with ${options.plannerMode}${options.plannerMode === "gemini" ? ` (${options.plannerModel})` : ""}...`);
     run = await orchestrator.plan(run);
     await store.save(run);
   }
@@ -945,21 +946,6 @@ async function runInteractiveWithPlanApproval(
   }
 
   return run;
-}
-
-function printPlanPreview(run: LoopRun): void {
-  console.log("");
-  console.log("Plan:");
-  if (run.graph.subtasks.length === 0) {
-    console.log("- No subtasks were proposed.");
-  }
-  run.graph.subtasks.forEach((subtask, index) => {
-    console.log(`${index + 1}. ${subtask.title}`);
-    if (subtask.description) {
-      console.log(`   ${subtask.description}`);
-    }
-  });
-  console.log("");
 }
 
 async function preflightRunDependencies(
