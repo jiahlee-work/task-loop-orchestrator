@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .orchestrator/
+playground/
 coverage/
 *.log
 .env
