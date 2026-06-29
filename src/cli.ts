@@ -53,6 +53,7 @@ import { setupOpenAI, type OpenAISetupReport } from "./openai-setup.js";
 import { RootOrchestrator, createTaskSpec } from "./orchestrator.js";
 import { checkPermission } from "./permission.js";
 import { createPullRequestPlan } from "./pr-plan.js";
+import { resolveTargetRoot } from "./project-root.js";
 import {
   createGitToolProviders,
   createTaskSpecFromJiraIssue,
@@ -374,21 +375,22 @@ function printPlainWriteRunnerError(
 }
 
 async function doctorCommand(args: ParsedArgs): Promise<void> {
+  const rootDir = await resolveTargetRoot();
   const githubMode = stringFlag(args.flags, "github") ? githubFlag(stringFlag(args.flags, "github")) : "none";
   const jiraEnabled = args.flags.jira === true || args.positional.includes("jira");
   const geminiEnabled = args.flags.gemini === true || args.positional.includes("gemini");
   const openAIEnabled = args.flags.openai === true || args.positional.includes("openai");
   const config =
     jiraEnabled || geminiEnabled || openAIEnabled
-      ? await loadOrchestratorConfig(process.cwd())
+      ? await loadOrchestratorConfig(rootDir)
           .then(async (loadedConfig) => ({
-            jira: await loadJiraConfigWithLocalEnv(process.cwd(), loadedConfig.jira),
-            gemini: await loadGeminiConfigWithLocalEnv(process.cwd(), loadedConfig.gemini),
-            openai: await loadOpenAIConfigWithLocalEnv(process.cwd(), loadedConfig.openai)
+            jira: await loadJiraConfigWithLocalEnv(rootDir, loadedConfig.jira),
+            gemini: await loadGeminiConfigWithLocalEnv(rootDir, loadedConfig.gemini),
+            openai: await loadOpenAIConfigWithLocalEnv(rootDir, loadedConfig.openai)
           }))
           .catch(() => undefined)
       : undefined;
-  const report = await runDoctor(process.cwd(), {
+  const report = await runDoctor(rootDir, {
     githubMode,
     jira: jiraEnabled,
     jiraConfig: config?.jira,
@@ -442,7 +444,8 @@ function printDoctorReport(report: DoctorReport): void {
 }
 
 async function initCommand(args: ParsedArgs): Promise<void> {
-  const report = await initProject(process.cwd(), {
+  const rootDir = await resolveTargetRoot();
+  const report = await initProject(rootDir, {
     force: args.flags.force === true
   });
 
@@ -496,13 +499,14 @@ async function setupCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function jiraSetupCommand(args: ParsedArgs): Promise<JiraSetupReport> {
-  const existingEnv = await readJiraEnvFile(process.cwd());
+  const rootDir = await resolveTargetRoot();
+  const existingEnv = await readJiraEnvFile(rootDir);
   const url = stringFlag(args.flags, "url") ?? (await promptValue("Jira site URL", existingEnv.JIRA_URL));
   const personalToken = stringFlag(args.flags, "personal-token");
 
   if (personalToken) {
     return setupJiraMcp({
-      rootDir: process.cwd(),
+      rootDir,
       url,
       personalToken,
       skipCheck: args.flags["skip-check"] === true
@@ -516,7 +520,7 @@ async function jiraSetupCommand(args: ParsedArgs): Promise<JiraSetupReport> {
     existingEnv.JIRA_API_TOKEN;
 
   return setupJiraMcp({
-    rootDir: process.cwd(),
+    rootDir,
     url,
     username,
     apiToken,
@@ -538,7 +542,8 @@ function printJiraSetupReport(report: JiraSetupReport): void {
 }
 
 async function geminiSetupCommand(args: ParsedArgs): Promise<GeminiSetupReport> {
-  const existingEnv = await readGeminiEnvFile(process.cwd());
+  const rootDir = await resolveTargetRoot();
+  const existingEnv = await readGeminiEnvFile(rootDir);
   const apiKey =
     stringFlag(args.flags, "api-key") ??
     (await promptSecret("Gemini API key", existingEnv.GEMINI_API_KEY ? "leave blank to keep existing" : undefined)) ??
@@ -547,7 +552,7 @@ async function geminiSetupCommand(args: ParsedArgs): Promise<GeminiSetupReport> 
   const endpoint = stringFlag(args.flags, "endpoint") ?? existingEnv.GEMINI_ENDPOINT;
 
   return setupGemini({
-    rootDir: process.cwd(),
+    rootDir,
     apiKey,
     model,
     endpoint,
@@ -569,7 +574,8 @@ function printGeminiSetupReport(report: GeminiSetupReport): void {
 }
 
 async function openAISetupCommand(args: ParsedArgs): Promise<OpenAISetupReport> {
-  const existingEnv = await readOpenAIEnvFile(process.cwd());
+  const rootDir = await resolveTargetRoot();
+  const existingEnv = await readOpenAIEnvFile(rootDir);
   const apiKey =
     stringFlag(args.flags, "api-key") ??
     (await promptSecret("OpenAI API key", existingEnv.OPENAI_API_KEY ? "leave blank to keep existing" : undefined)) ??
@@ -578,7 +584,7 @@ async function openAISetupCommand(args: ParsedArgs): Promise<OpenAISetupReport> 
   const endpoint = stringFlag(args.flags, "endpoint") ?? existingEnv.OPENAI_ENDPOINT;
 
   return setupOpenAI({
-    rootDir: process.cwd(),
+    rootDir,
     apiKey,
     model,
     endpoint,
@@ -660,16 +666,17 @@ class HiddenPromptOutput extends Writable {
 }
 
 async function runCommand(args: ParsedArgs): Promise<void> {
+  const rootDir = await resolveTargetRoot();
   const input = parseRunInput(args);
   if (input.kind === "direct" && !input.title) {
     throw new Error('run requires a Jira issue key or direct task instruction. Examples: tlo run OUC-10, tlo run "직접 작업 설명".');
   }
 
-  const store = new FileRunStore(process.cwd());
-  const config = await loadOrchestratorConfig(process.cwd());
-  const jiraConfig = await loadJiraConfigWithLocalEnv(process.cwd(), config.jira);
-  const geminiConfig = await loadGeminiConfigWithLocalEnv(process.cwd(), config.gemini);
-  const openAIConfig = await loadOpenAIConfigWithLocalEnv(process.cwd(), config.openai);
+  const store = new FileRunStore(rootDir);
+  const config = await loadOrchestratorConfig(rootDir);
+  const jiraConfig = await loadJiraConfigWithLocalEnv(rootDir, config.jira);
+  const geminiConfig = await loadGeminiConfigWithLocalEnv(rootDir, config.gemini);
+  const openAIConfig = await loadOpenAIConfigWithLocalEnv(rootDir, config.openai);
   const plannerMode = stringFlag(args.flags, "planner") ? plannerFlag(stringFlag(args.flags, "planner")) : config.planner;
   const executorMode = stringFlag(args.flags, "executor") ? executorFlag(stringFlag(args.flags, "executor")) : config.executor;
   const reviewerMode = stringFlag(args.flags, "reviewer") ? reviewerFlag(stringFlag(args.flags, "reviewer")) : config.reviewer;
@@ -682,7 +689,7 @@ async function runCommand(args: ParsedArgs): Promise<void> {
   }
 
   const taskSpec = input.kind === "jira" && input.jiraKey
-    ? await createTaskSpecFromJiraKey(input.jiraKey, permissionMode, jiraConfig, input.note)
+    ? await createTaskSpecFromJiraKey(input.jiraKey, permissionMode, jiraConfig, rootDir, input.note)
     : createTaskSpec({
         title: input.title ?? "",
         description: stringFlag(args.flags, "description") ?? input.note,
@@ -690,8 +697,8 @@ async function runCommand(args: ParsedArgs): Promise<void> {
       });
   const orchestrator = new RootOrchestrator({
     store,
-    roles: createRoleProviders(plannerMode, geminiConfig, executorMode, config.codex, reviewerMode, openAIConfig),
-    tools: createGitToolProviders(process.cwd()),
+    roles: createRoleProviders(rootDir, plannerMode, geminiConfig, executorMode, config.codex, reviewerMode, openAIConfig),
+    tools: createGitToolProviders(rootDir),
     maxIterations: numberFlag(args.flags, "max-iterations") ?? config.maxIterations,
     worktreeEnabled: config.worktree.enabled
   });
@@ -1010,19 +1017,20 @@ async function createTaskSpecFromJiraKey(
   jiraKey: string,
   permissionMode: PermissionMode,
   jiraConfig: JiraConfig,
+  rootDir: string,
   note?: string
 ) {
   const primaryProvider =
     jiraConfig.provider === "mcp-atlassian"
-      ? new JiraMcpProvider(jiraConfig.mcp, process.cwd())
-      : new JiraCliProvider(process.cwd());
+      ? new JiraMcpProvider(jiraConfig.mcp, rootDir)
+      : new JiraCliProvider(rootDir);
   const issue = await primaryProvider.getIssue(jiraKey);
   if (issue) {
     return createTaskSpecFromJiraIssue(issue, permissionMode, note);
   }
 
   if (jiraConfig.provider === "mcp-atlassian" && jiraConfig.fallback === "cli") {
-    const fallbackIssue = await new JiraCliProvider(process.cwd()).getIssue(jiraKey);
+    const fallbackIssue = await new JiraCliProvider(rootDir).getIssue(jiraKey);
     if (fallbackIssue) {
       return createTaskSpecFromJiraIssue(fallbackIssue, permissionMode, note);
     }
@@ -1111,7 +1119,8 @@ function printRunReport(
 }
 
 async function statusCommand(args: ParsedArgs): Promise<void> {
-  const store = new FileRunStore(process.cwd());
+  const rootDir = await resolveTargetRoot();
+  const store = new FileRunStore(rootDir);
   const runId = args.positional[0];
   const run = runId ? await store.load(runId) : await store.latest();
 
@@ -1152,19 +1161,20 @@ async function statusCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function resumeCommand(args: ParsedArgs): Promise<void> {
+  const rootDir = await resolveTargetRoot();
   const runId = args.positional[0];
   if (!runId) {
     throw new Error("resume requires a runId.");
   }
 
-  const store = new FileRunStore(process.cwd());
-  const config = await loadOrchestratorConfig(process.cwd());
-  const geminiConfig = await loadGeminiConfigWithLocalEnv(process.cwd(), config.gemini);
-  const openAIConfig = await loadOpenAIConfigWithLocalEnv(process.cwd(), config.openai);
+  const store = new FileRunStore(rootDir);
+  const config = await loadOrchestratorConfig(rootDir);
+  const geminiConfig = await loadGeminiConfigWithLocalEnv(rootDir, config.gemini);
+  const openAIConfig = await loadOpenAIConfigWithLocalEnv(rootDir, config.openai);
   const orchestrator = new RootOrchestrator({
     store,
-    roles: createRoleProviders(config.planner, geminiConfig, config.executor, config.codex, config.reviewer, openAIConfig),
-    tools: createGitToolProviders(process.cwd()),
+    roles: createRoleProviders(rootDir, config.planner, geminiConfig, config.executor, config.codex, config.reviewer, openAIConfig),
+    tools: createGitToolProviders(rootDir),
     maxIterations: numberFlag(args.flags, "max-iterations") ?? config.maxIterations,
     worktreeEnabled: config.worktree.enabled
   });
@@ -1202,8 +1212,9 @@ async function resumeCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function checkpointCommand(args: ParsedArgs): Promise<void> {
-  const store = new FileRunStore(process.cwd());
-  const config = await loadOrchestratorConfig(process.cwd());
+  const rootDir = await resolveTargetRoot();
+  const store = new FileRunStore(rootDir);
+  const config = await loadOrchestratorConfig(rootDir);
   const runId = args.positional[0];
   let run = runId ? await store.load(runId) : await store.latest();
 
@@ -1227,8 +1238,8 @@ async function checkpointCommand(args: ParsedArgs): Promise<void> {
 
   const githubMode = stringFlag(args.flags, "github") ? githubFlag(stringFlag(args.flags, "github")) : config.github;
   const tools = createGitToolProviders(
-    process.cwd(),
-    githubMode === "gh-cli" ? new GitHubCliProvider(process.cwd()) : undefined
+    rootDir,
+    githubMode === "gh-cli" ? new GitHubCliProvider(rootDir) : undefined
   );
   const report = await createIntegrationCheckpoint({
     run,
@@ -1264,8 +1275,9 @@ async function checkpointCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function checksCommand(args: ParsedArgs): Promise<void> {
+  const rootDir = await resolveTargetRoot();
   const ref = args.positional[0] ?? "HEAD";
-  const provider = new GitHubCliProvider(process.cwd());
+  const provider = new GitHubCliProvider(rootDir);
   const summary = await provider.getCheckStatus(ref);
 
   if (args.flags.json === true) {
@@ -1284,7 +1296,8 @@ async function checksCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function prPlanCommand(args: ParsedArgs): Promise<void> {
-  const store = new FileRunStore(process.cwd());
+  const rootDir = await resolveTargetRoot();
+  const store = new FileRunStore(rootDir);
   const runId = args.positional[0];
   const run = runId ? await store.load(runId) : await store.latest();
 
@@ -1302,7 +1315,7 @@ async function prPlanCommand(args: ParsedArgs): Promise<void> {
   }
 
   const checkpoint = await store.latestCheckpoint(run.id);
-  const tools = createGitToolProviders(process.cwd());
+  const tools = createGitToolProviders(rootDir);
   const plan = await createPullRequestPlan({
     run,
     repo: tools.repo,
@@ -1334,7 +1347,8 @@ async function prPlanCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function prExecCommand(args: ParsedArgs): Promise<void> {
-  const store = new FileRunStore(process.cwd());
+  const rootDir = await resolveTargetRoot();
+  const store = new FileRunStore(rootDir);
   const runId = args.positional[0];
   const run = runId ? await store.load(runId) : await store.latest();
 
@@ -1352,7 +1366,7 @@ async function prExecCommand(args: ParsedArgs): Promise<void> {
   }
 
   const checkpoint = await store.latestCheckpoint(run.id);
-  const tools = createGitToolProviders(process.cwd());
+  const tools = createGitToolProviders(rootDir);
   const plan = await createPullRequestPlan({
     run,
     repo: tools.repo,
@@ -1386,7 +1400,8 @@ async function prExecCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function approvePrCommand(args: ParsedArgs): Promise<void> {
-  const store = new FileRunStore(process.cwd());
+  const rootDir = await resolveTargetRoot();
+  const store = new FileRunStore(rootDir);
   const runId = args.positional[0];
   const run = runId ? await store.load(runId) : await store.latest();
 
@@ -1409,7 +1424,7 @@ async function approvePrCommand(args: ParsedArgs): Promise<void> {
   }
 
   const checkpoint = await store.latestCheckpoint(run.id);
-  const tools = createGitToolProviders(process.cwd());
+  const tools = createGitToolProviders(rootDir);
   const plan = await createPullRequestPlan({
     run,
     repo: tools.repo,
@@ -1434,10 +1449,11 @@ async function approvePrCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function executionAuditCommand(args: ParsedArgs): Promise<void> {
+  const rootDir = await resolveTargetRoot();
   const jsonOutput = args.flags.json === true;
 
   if (args.flags.all === true) {
-    const store = new FileRunStore(process.cwd());
+    const store = new FileRunStore(rootDir);
     let intents: Awaited<ReturnType<FileRunStore["listExecutionIntents"]>>;
     try {
       intents = await store.listExecutionIntents();
@@ -1483,7 +1499,7 @@ async function executionAuditCommand(args: ParsedArgs): Promise<void> {
     return;
   }
 
-  const store = new FileRunStore(process.cwd());
+  const store = new FileRunStore(rootDir);
   let intent: Awaited<ReturnType<FileRunStore["loadExecutionIntent"]>>;
   try {
     intent = await store.loadExecutionIntent(intentId);
@@ -1527,6 +1543,7 @@ async function executionAuditCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function writeReadinessCommand(args: ParsedArgs): Promise<void> {
+  const rootDir = await resolveTargetRoot();
   const jsonOutput = args.flags.json === true;
   const preflightFlagPresent = Object.hasOwn(args.flags, "preflight");
   const preflightPath = stringFlag(args.flags, "preflight");
@@ -1554,7 +1571,7 @@ async function writeReadinessCommand(args: ParsedArgs): Promise<void> {
     return;
   }
 
-  const store = new FileRunStore(process.cwd());
+  const store = new FileRunStore(rootDir);
   let intent: Awaited<ReturnType<FileRunStore["loadExecutionIntent"]>>;
   try {
     intent = await store.loadExecutionIntent(intentId);
@@ -1618,6 +1635,7 @@ async function writeReadinessCommand(args: ParsedArgs): Promise<void> {
 }
 
 async function writeRunnerCommand(args: ParsedArgs): Promise<void> {
+  const rootDir = await resolveTargetRoot();
   const jsonOutput = args.flags.json === true;
   const preflightFlagPresent = Object.hasOwn(args.flags, "preflight");
   const preflightPath = stringFlag(args.flags, "preflight");
@@ -1644,7 +1662,7 @@ async function writeRunnerCommand(args: ParsedArgs): Promise<void> {
     return;
   }
 
-  const store = new FileRunStore(process.cwd());
+  const store = new FileRunStore(rootDir);
   let intent: Awaited<ReturnType<FileRunStore["loadExecutionIntent"]>>;
   try {
     intent = await store.loadExecutionIntent(intentId);
@@ -1932,6 +1950,7 @@ main().catch((error: unknown) => {
 });
 
 function createRoleProviders(
+  rootDir: string,
   plannerMode: PlannerMode,
   geminiConfig: Awaited<ReturnType<typeof loadGeminiConfigWithLocalEnv>>,
   executorMode: ExecutorMode,
@@ -1948,7 +1967,7 @@ function createRoleProviders(
           mode: executorMode,
           codexBinary: codexConfig.binary,
           allowExecution: executorMode === "codex-cli",
-          rootDir: process.cwd(),
+          rootDir,
           workspaceRoot: codexConfig.workspaceRoot,
           sandbox: codexConfig.sandbox,
           model: codexConfig.model

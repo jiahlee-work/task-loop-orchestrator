@@ -2,7 +2,7 @@
 
 AI 작업을 역할별로 나누고, 계획부터 검증까지의 진행 상태를 로컬 파일에 남기는 CLI 오케스트레이터입니다.
 
-현재 MVP는 Jira 이슈를 읽고 Gemini Planner로 작업을 나눈 뒤, 사용자가 계획을 승인하면 Codex CLI Executor가 dev workspace에서 작업하고 OpenAI Reviewer가 결과를 검토하는 단계입니다. 커밋, 푸시, PR 생성은 아직 하지 않습니다.
+현재 MVP는 대상 레포에서 Jira 이슈를 읽고 Gemini Planner로 작업을 나눈 뒤, 사용자가 계획을 승인하면 Codex CLI Executor가 대상 레포의 dev worktree에서 작업하고 OpenAI Reviewer가 결과를 검토하는 단계입니다. 커밋, 푸시, PR 생성은 아직 하지 않습니다.
 
 ## 요구 사항
 
@@ -71,7 +71,7 @@ OpenAI key는 대상 프로젝트의 `.orchestrator/openai.env`에 저장되며,
 
 ## 실행 승인
 
-`tlo run`은 Gemini가 만든 plan을 먼저 보여준 뒤 `Proceed with Codex execution? [y/N]`로 실행 승인을 받습니다. `n`을 입력하면 어떤 점을 수정할지 터미널에 적을 수 있고, 그 내용을 반영해 plan을 다시 만듭니다. `y`를 입력하면 Codex CLI가 `.orchestrator/dev-workspaces/` 아래의 run별 workspace에서 실행됩니다.
+`tlo run`은 Gemini가 만든 plan을 먼저 보여준 뒤 `Proceed with Codex execution? [y/N]`로 실행 승인을 받습니다. `n`을 입력하면 어떤 점을 수정할지 터미널에 적을 수 있고, 그 내용을 반영해 plan을 다시 만듭니다. `y`를 입력하면 Codex CLI가 대상 레포의 `.orchestrator/dev-workspaces/` 아래에 만든 run별 Git worktree에서 실행됩니다.
 
 Jira 이슈에 설명을 덧붙이거나, Jira 없이 직접 작업 설명만 넘길 수도 있습니다.
 
@@ -116,7 +116,7 @@ MVP에서 확인하는 것은 다음 흐름입니다.
 - 로컬 설정 진단: `doctor`
 - Jira MCP 기반 이슈 읽기
 - Gemini Planner 기반 subtask 생성
-- 승인 후 Codex CLI Executor 실행
+- 승인 후 대상 레포의 Git worktree에서 Codex CLI Executor 실행
 - OpenAI Reviewer 기반 결과 검토
 - 저장된 run 조회와 이어 실행: `status`, `resume`
 
@@ -145,4 +145,4 @@ MVP에서 확인하는 것은 다음 흐름입니다.
 
 Root Orchestrator가 context와 graph를 관리합니다. Planner, Executor, Reviewer는 각자의 보고서와 context delta만 반환하고, context와 graph를 직접 수정하지 않습니다.
 
-기본 Planner는 Gemini를 사용합니다. Executor는 로컬 로그인된 Codex CLI를 사용하되 `.orchestrator/dev-workspaces/` 아래에서 실행하고, Reviewer는 OpenAI API를 사용합니다. 외부 GitHub/Jira 쓰기는 안전 경계 밖에 둡니다.
+기본 Planner는 Gemini를 사용합니다. Executor는 로컬 로그인된 Codex CLI를 사용하되 대상 레포의 `.orchestrator/dev-workspaces/` 아래에 만든 Git worktree에서 실행하고, Reviewer는 OpenAI API를 사용합니다. 외부 GitHub/Jira 쓰기는 안전 경계 밖에 둡니다.

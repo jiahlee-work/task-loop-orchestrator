@@ -1,5 +1,5 @@
 import { mkdir } from "node:fs/promises";
-import { isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { Context, ExecutorMode, ExecutorTaskSpec, RoleReport, Subtask, TaskSpec } from "./domain.js";
 import { createContextDeltaItem } from "./context.js";
 import { runCommand, type CommandRunner } from "./providers.js";
@@ -78,6 +78,7 @@ export function buildCodexCliCommand(
     `Permission mode: ${task.permissionMode}`,
     `Worktree enabled: ${task.worktree.enabled}`,
     `Branch hint: ${task.worktree.branchHint}`,
+    "Execution workspace: a Git worktree copy of the target repository.",
     "",
     "Task spec:",
     task.taskSpecSummary,
@@ -160,7 +161,28 @@ export class CodexCliExecutor implements ExecutorProvider {
     }
 
     if (this.mode === "codex-cli") {
-      await mkdir(workspace, { recursive: true });
+      const worktreeCommand = ["worktree", "add", "--detach", workspace, "HEAD"];
+      await mkdir(dirname(workspace), { recursive: true });
+      const worktreeResult = await this.runner("git", worktreeCommand, this.rootDir);
+      if (worktreeResult.exitCode !== 0) {
+        return {
+          role: "executor",
+          status: "failed",
+          subtaskId: input.subtask.id,
+          summary: `Failed to prepare Codex worktree for ${input.subtask.title}.`,
+          contextDelta: createContextDeltaItem("blocked", `Git worktree setup failed for ${workspace}.`, "executor"),
+          data: {
+            executorMode: this.mode,
+            workspace,
+            dryRun: false,
+            prepareCommand: ["git", ...worktreeCommand],
+            exitCode: worktreeResult.exitCode,
+            stderr: truncate(worktreeResult.stderr.trim(), 1000),
+            stdout: truncate(worktreeResult.stdout.trim(), 1000)
+          }
+        };
+      }
+
       const [binary, ...args] = command;
       const result = await this.runner(binary ?? this.codexBinary, args, workspace);
       if (result.exitCode !== 0) {

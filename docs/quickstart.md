@@ -2,7 +2,7 @@
 
 아직 npm에 배포하지 않았습니다. 지금은 GitHub 저장소를 clone한 뒤 pnpm으로 빌드해서 사용합니다. 명령별 자세한 옵션은 [commands.md](commands.md)를 보세요.
 
-현재 MVP는 로컬 프로젝트에 `.orchestrator/` 상태를 만들고, Jira 이슈를 읽어 Gemini Planner로 작업을 나눈 뒤 사용자가 plan을 승인하면 Codex CLI Executor와 OpenAI Reviewer를 실행하는 흐름을 확인하는 단계입니다. 브랜치 생성, 커밋, 푸시, PR 생성, 릴리스, npm publish는 하지 않습니다.
+현재 MVP는 대상 레포에 `.orchestrator/` 상태를 만들고, Jira 이슈를 읽어 Gemini Planner로 작업을 나눈 뒤 사용자가 plan을 승인하면 대상 레포의 dev worktree에서 Codex CLI Executor와 OpenAI Reviewer를 실행하는 흐름을 확인하는 단계입니다. 브랜치 생성, 커밋, 푸시, PR 생성, 릴리스, npm publish는 하지 않습니다.
 
 ## 요구 사항
 
@@ -70,7 +70,7 @@ tlo setup openai
 
 ## plan 승인과 Codex 실행
 
-`tlo run`은 Gemini plan을 보여준 뒤 `Proceed with Codex execution? [y/N]`를 묻습니다. `n`을 입력하면 수정할 내용을 직접 적을 수 있고, 그 내용을 반영해 plan을 다시 만듭니다. `y`를 입력하면 Codex CLI가 `.orchestrator/dev-workspaces/<runId>/<subtaskId>/` 아래에서 실행되고, OpenAI Reviewer가 결과를 검토합니다.
+`tlo run`은 Gemini plan을 보여준 뒤 `Proceed with Codex execution? [y/N]`를 묻습니다. `n`을 입력하면 수정할 내용을 직접 적을 수 있고, 그 내용을 반영해 plan을 다시 만듭니다. `y`를 입력하면 Codex CLI가 대상 레포의 `.orchestrator/dev-workspaces/<runId>/<subtaskId>/` Git worktree에서 실행되고, OpenAI Reviewer가 결과를 검토합니다.
 
 Jira 이슈에 설명을 덧붙이거나, Jira 없이 직접 작업 설명만 넘길 수도 있습니다.
 

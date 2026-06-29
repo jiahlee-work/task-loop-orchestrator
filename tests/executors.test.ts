@@ -147,9 +147,55 @@ describe("CodexCliExecutor", () => {
     expect(report.status).toBe("ok");
     expect(report.data?.dryRun).toBe(false);
     expect(report.data?.workspace).toContain(".orchestrator/dev-workspaces/run-1/subtask-1");
-    expect(calls[0]?.command).toBe("codex");
-    expect(calls[0]?.args).toEqual(expect.arrayContaining(["exec", "--sandbox", "workspace-write", "--cd"]));
-    expect(calls[0]?.cwd).toContain(".orchestrator/dev-workspaces/run-1/subtask-1");
+    expect(calls[0]).toEqual({
+      command: "git",
+      args: ["worktree", "add", "--detach", join(root, ".orchestrator/dev-workspaces/run-1/subtask-1"), "HEAD"],
+      cwd: root
+    });
+    expect(calls[1]?.command).toBe("codex");
+    expect(calls[1]?.args).toEqual(expect.arrayContaining(["exec", "--sandbox", "workspace-write", "--cd"]));
+    expect(calls[1]?.cwd).toContain(".orchestrator/dev-workspaces/run-1/subtask-1");
+  });
+
+  it("fails before running codex when the target repo worktree cannot be prepared", async () => {
+    const root = await tempRoot();
+    const task = createExecutorTaskSpec({
+      runId: "run-1",
+      spec,
+      context,
+      subtask,
+      worktreeEnabled: false
+    });
+    const calls: Array<{ command: string; args: string[]; cwd: string }> = [];
+    const executor = new CodexCliExecutor({
+      mode: "codex-cli",
+      allowExecution: true,
+      rootDir: root,
+      workspaceRoot: ".orchestrator/dev-workspaces",
+      runner: async (command, args = [], cwd = root) => {
+        calls.push({ command, args, cwd });
+        return {
+          exitCode: 128,
+          stdout: "",
+          stderr: "not a git repository"
+        };
+      }
+    });
+
+    const report = await executor.execute({
+      runId: "run-1",
+      spec,
+      context,
+      graph,
+      subtask,
+      task
+    });
+
+    expect(report.status).toBe("failed");
+    expect(report.summary).toContain("worktree");
+    expect(report.data?.prepareCommand).toEqual(["git", "worktree", "add", "--detach", report.data?.workspace, "HEAD"]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.command).toBe("git");
   });
 });
 
