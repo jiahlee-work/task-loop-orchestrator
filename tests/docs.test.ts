@@ -187,6 +187,7 @@ describe("release readiness documentation", () => {
     expectContainsAll(readme, [
       "[docs/quickstart.md](docs/quickstart.md)",
       "[docs/commands.md](docs/commands.md)",
+      "[docs/design/root-planning-tree.md](docs/design/root-planning-tree.md)",
       "[docs/release-checklist.md](docs/release-checklist.md)",
       "[docs/release-readiness.md](docs/release-readiness.md)",
       "[docs/roadmap.md](docs/roadmap.md)",
@@ -273,6 +274,8 @@ describe("release readiness documentation", () => {
       "Approval-Gated Write Execution Model",
       "[`design/write-execution-model.md`](design/write-execution-model.md)",
       "Codex CLI Executor Hardening",
+      "Root Planning Tree Model",
+      "[`design/root-planning-tree.md`](design/root-planning-tree.md)",
       "Reviewer And Evidence Expansion",
       "Multi-Run Context And Graph UX",
       "Persistent Audit And Report Export",
@@ -281,6 +284,36 @@ describe("release readiness documentation", () => {
       "Packaging And Publish Workflow",
       "Safety boundary",
       "no `npm publish`, git tag, or GitHub release without explicit human approval"
+    ]);
+  });
+
+  it("keeps the root planning tree design visible and scoped as a draft", async () => {
+    const readme = await readFile(join(root, "README.md"), "utf8");
+    const roadmap = await readRoadmap();
+    const design = await readRootPlanningTreeDesign();
+
+    expect(readme).toContain("[docs/design/root-planning-tree.md](docs/design/root-planning-tree.md)");
+    expect(roadmap).toContain("[`design/root-planning-tree.md`](design/root-planning-tree.md)");
+    expectContainsAll(design, [
+      "# Root Planning Tree Model",
+      "Status: design draft",
+      "does not mean the full tree executor is already implemented",
+      "LLM의 대화 기억에 의존하지 않는다",
+      "root가 만든 계약 문서를 파일로 고정한다",
+      "tlo run OUC-10",
+      "tlo run OUC-10 --note",
+      "tlo run \"채팅 Sidebar 구조를 리팩터링해줘\"",
+      ".orchestrator/runs/run_xxx/",
+      "root-contract.json",
+      "task-tree.json",
+      "state.json",
+      "summary.md",
+      "flowchart TD",
+      "Root Planner",
+      "Reviewer checks result and context guard",
+      "Matches root contract?",
+      "Context Guard",
+      "Reviewer가 pass를 반환해도 root 계약을 위반하면 해당 branch는 완료로 처리하지 않는다"
     ]);
   });
 
@@ -1092,6 +1125,10 @@ async function readRoadmap() {
 
 async function readWriteExecutionModel() {
   return readFile(join(root, "docs", "design", "write-execution-model.md"), "utf8");
+}
+
+async function readRootPlanningTreeDesign() {
+  return readFile(join(root, "docs", "design", "root-planning-tree.md"), "utf8");
 }
 
 async function readExecutionAuditCliDesign() {

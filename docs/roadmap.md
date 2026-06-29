@@ -25,6 +25,13 @@ This is a candidate backlog for work after the `0.1.0 - Unreleased` candidate. I
 - Safety boundary: keep real Codex CLI execution opt-in and disabled by default; no long-running execution in smoke tests.
 - First useful slice: add structured report parsing fixtures for dry-run command output before enabling any real invocation path.
 
+### P0: Root Planning Tree Model
+
+- Why: long LLM runs can lose the original task context after conversation compaction. The orchestrator needs a persisted root contract, a task tree, and context-guard checks so each executor branch works from the same approved plan.
+- Safety boundary: the tree model is a planning and state-management boundary; it must not unlock branch creation, commit, push, PR creation, Jira transitions, release, or publish actions.
+- Design draft: [`design/root-planning-tree.md`](design/root-planning-tree.md).
+- First useful slice: split Gemini planning output into a persisted root contract and task tree, then show the plan for user approval before any Codex execution.
+
 ### P1: Reviewer And Evidence Expansion
 
 - Why: `local-evidence` is conservative and useful, but richer verification should reason about test results, diffs, acceptance criteria, and owner-decision items more explicitly.

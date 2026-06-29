@@ -139,6 +139,7 @@ MVP에서 확인하는 것은 다음 흐름입니다.
 
 - 빠른 시작: [docs/quickstart.md](docs/quickstart.md)
 - 명령어 전체 목록: [docs/commands.md](docs/commands.md)
+- Root 계획 트리 모델: [docs/design/root-planning-tree.md](docs/design/root-planning-tree.md)
 - JSON 출력 계약: [docs/json-output.md](docs/json-output.md)
 - JSON schema: [schemas/cli-json.schema.json](schemas/cli-json.schema.json)
 - 릴리스 점검표: [docs/release-checklist.md](docs/release-checklist.md)
@@ -150,4 +151,4 @@ MVP에서 확인하는 것은 다음 흐름입니다.
 
 Root Orchestrator가 context와 graph를 관리합니다. Planner, Executor, Reviewer는 각자의 보고서와 context delta만 반환하고, context와 graph를 직접 수정하지 않습니다.
 
-기본 Planner는 Gemini를 사용합니다. Executor는 로컬 로그인된 Codex CLI를 사용하되 대상 레포의 `.orchestrator/dev-workspaces/` 아래에 만든 Git worktree에서 실행하고, Reviewer는 OpenAI API를 사용합니다. 외부 GitHub/Jira 쓰기는 안전 경계 밖에 둡니다.
+기본 Planner는 Gemini를 사용합니다. 장기 실행에서 맥락을 잃지 않도록 root가 전체 목표, 지침, 완료 기준을 계약 문서로 고정하고, 세부 작업은 그 계약을 주입받아 별도 실행 단위로 처리하는 구조를 지향합니다. Executor는 로컬 로그인된 Codex CLI를 사용하되 대상 레포의 `.orchestrator/dev-workspaces/` 아래에 만든 Git worktree에서 실행하고, Reviewer는 OpenAI API를 사용합니다. 외부 GitHub/Jira 쓰기는 안전 경계 밖에 둡니다.
