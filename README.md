@@ -124,7 +124,7 @@ pnpm playground:tlo -- setup
 pnpm playground:tlo -- run "직접 작업 설명"
 ```
 
-`pnpm playground:reset`은 `playground/target-repo` 폴더 자체는 유지하고 내부 내용만 지운 뒤, 최소 Git 레포로 다시 만듭니다. `pnpm playground:tlo -- ...`는 현재 루트에서 실행해도 `playground/target-repo`를 작업 디렉터리로 삼아 로컬 `dist/cli.js`를 실행합니다.
+`pnpm playground:reset`은 `playground/target-repo` 폴더 자체는 유지하고 내부 내용만 지운 뒤, 최소 Git 레포로 다시 만듭니다. `pnpm playground:tlo -- ...`는 현재 루트에서 실행해도 `playground/target-repo`를 작업 디렉터리로 삼아 로컬 `dist/cli.js`를 실행합니다. reset 이후에는 `playground/target-repo` 안에서도 같은 `pnpm playground:reset`, `pnpm playground:tlo -- ...` 명령을 사용할 수 있습니다.
 
 ## MVP 범위
 

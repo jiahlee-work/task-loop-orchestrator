@@ -47,6 +47,8 @@ Use it to try \`tlo init\`, \`tlo setup\`, and \`tlo run\` without leaving local
         private: true,
         type: "module",
         scripts: {
+          "playground:reset": "pnpm --dir ../.. playground:reset",
+          "playground:tlo": "pnpm --dir ../.. playground:tlo --",
           test: "node -e \"console.log('playground target test passed')\""
         }
       },
@@ -75,10 +77,11 @@ Use it to try \`tlo init\`, \`tlo setup\`, and \`tlo run\` without leaving local
   console.log("  pnpm playground:tlo -- init");
   console.log("- Try the full setup flow:");
   console.log("  pnpm playground:tlo -- setup");
+  console.log("- These commands also work from inside playground/target-repo.");
 }
 
 function runTlo(args) {
-  const tloArgs = args[0] === "--" ? args.slice(1) : args;
+  const tloArgs = stripLeadingSeparators(args);
   if (!existsSync(targetRepo)) {
     console.error("Failed: playground target is missing");
     console.error("");
@@ -93,6 +96,14 @@ function runTlo(args) {
     stdio: "inherit"
   });
   process.exit(result.status ?? 1);
+}
+
+function stripLeadingSeparators(args) {
+  let index = 0;
+  while (args[index] === "--") {
+    index += 1;
+  }
+  return args.slice(index);
 }
 
 async function assertInsidePlaygroundTarget(path) {
