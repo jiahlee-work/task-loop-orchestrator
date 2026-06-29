@@ -47,7 +47,7 @@ tlo setup
 tlo run OUC-10
 ```
 
-`tlo setup`은 Jira, Gemini, Codex CLI, OpenAI 순서로 준비 상태를 확인합니다. Jira는 이슈 키로 실행할 때만 필요하므로 직접 작업 설명만 쓸 때는 건너뛸 수 있습니다. Codex CLI는 API key를 입력받지 않고 로컬 `codex login` 상태를 재사용합니다. 특정 provider만 다시 설정할 때는 `tlo setup jira`, `tlo setup gemini`, `tlo setup openai`를 사용할 수 있습니다. `tlo run`은 실행 전에 필요한 provider 설정을 확인하고, 빠진 설정이 있으면 run 파일을 만들지 않고 실패 이유와 다음 명령을 보여 줍니다. 설정이 끝난 프로젝트에서는 `tlo run OUC-10` 또는 `tlo run "직접 작업 설명"`으로 실행합니다.
+`tlo setup`은 Jira, Gemini, Codex CLI, OpenAI 순서로 준비 상태를 확인합니다. 필수 단계가 준비되지 않았으면 이후 provider를 묻지 않고 멈춘 뒤, 해당 단계를 마무리하고 이어서 실행할 명령을 보여 줍니다. Jira는 이슈 키로 실행할 때만 필요하므로 직접 작업 설명만 쓸 때는 건너뛸 수 있습니다. Codex CLI는 API key를 입력받지 않고 로컬 `codex login` 상태를 재사용합니다. 특정 provider만 다시 설정할 때는 `tlo setup jira`, `tlo setup gemini`, `tlo setup openai`를 사용할 수 있습니다. `tlo run`은 실행 전에 필요한 provider 설정을 확인하고, 빠진 설정이 있으면 run 파일을 만들지 않고 실패 이유와 다음 명령을 보여 줍니다. 설정이 끝난 프로젝트에서는 `tlo run OUC-10` 또는 `tlo run "직접 작업 설명"`으로 실행합니다.
 
 ## Gemini API key 준비
 

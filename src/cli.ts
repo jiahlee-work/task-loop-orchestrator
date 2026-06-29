@@ -534,10 +534,15 @@ async function setupCommand(args: ParsedArgs): Promise<void> {
 interface SetupAllReport {
   rootDir: string;
   status: "ready" | "needs_attention";
-  codex: DoctorCheck[];
+  codex?: DoctorCheck[];
   jira: SetupAllJiraReport;
-  gemini: GeminiSetupReport;
-  openai: OpenAISetupReport;
+  gemini?: GeminiSetupReport;
+  openai?: OpenAISetupReport;
+  stoppedAt?: {
+    provider: "jira" | "gemini" | "codex" | "openai";
+    reason: string;
+    commands: string[];
+  };
 }
 
 type SetupAllJiraReport =
@@ -566,17 +571,49 @@ async function setupAllCommand(args: ParsedArgs): Promise<SetupAllReport> {
   console.log("Step 1/4: Jira (optional)");
   const jiraChoice = await promptSetupAllJiraChoice(args, rootDir);
   const jira = await setupJiraFromSetupAll(args, jiraChoice);
+  if (jira.status === "needs_attention") {
+    return stopSetupAll(rootDir, jira, undefined, undefined, undefined, {
+      provider: "jira",
+      reason: jira.mcpCheck.summary,
+      commands: ["tlo doctor jira", "tlo setup jira", "tlo setup"]
+    });
+  }
+
   console.log("");
   console.log("Step 2/4: Gemini");
   const gemini = await geminiSetupCommand(args);
+  if (gemini.status === "needs_attention") {
+    return stopSetupAll(rootDir, jira, gemini, undefined, undefined, {
+      provider: "gemini",
+      reason: gemini.check.summary,
+      commands: ["tlo doctor gemini", "tlo setup gemini", "tlo setup"]
+    });
+  }
+
   console.log("");
   console.log("Step 3/4: Codex CLI");
   console.log("- Checking local Codex CLI command and login...");
   const codex = await checkCodex(rootDir, runProviderCommand, config.codex);
   printInlineCodexSetupStatus(codex);
+  if (!codex.every((check) => check.status === "pass")) {
+    return stopSetupAll(rootDir, jira, gemini, codex, undefined, {
+      provider: "codex",
+      reason: firstBlockingCheckSummary(codex),
+      commands: codexSetupNextLines(codex)
+    });
+  }
+
   console.log("");
   console.log("Step 4/4: OpenAI");
   const openai = await openAISetupCommand(args);
+  if (openai.status === "needs_attention") {
+    return stopSetupAll(rootDir, jira, gemini, codex, openai, {
+      provider: "openai",
+      reason: openai.check.summary,
+      commands: ["tlo doctor openai", "tlo setup openai", "tlo setup"]
+    });
+  }
+
   const status =
     codex.every((check) => check.status === "pass") &&
     (jira.status === "ready" || jira.status === "skipped") &&
@@ -601,12 +638,22 @@ function printSetupAllReport(report: SetupAllReport): void {
   console.log("");
   console.log("Result:");
   console.log(`- Target repo: ${report.rootDir}`);
-  console.log(`- Codex CLI: ${report.codex.every((check) => check.status === "pass") ? "ready" : "needs_attention"}`);
   console.log(`- Jira: ${formatSetupAllJiraSummary(report.jira)}`);
-  console.log(`- Gemini: ${report.gemini.status} (${report.gemini.envFile})`);
-  console.log(`- OpenAI: ${report.openai.status} (${report.openai.envFile})`);
+  console.log(`- Gemini: ${report.gemini ? `${report.gemini.status} (${report.gemini.envFile})` : "not checked"}`);
+  console.log(`- Codex CLI: ${report.codex ? (report.codex.every((check) => check.status === "pass") ? "ready" : "needs_attention") : "not checked"}`);
+  console.log(`- OpenAI: ${report.openai ? `${report.openai.status} (${report.openai.envFile})` : "not checked"}`);
   console.log("");
   console.log("Next:");
+  if (report.stoppedAt) {
+    process.exitCode = 1;
+    console.log(`- Complete ${formatProviderName(report.stoppedAt.provider)} before continuing setup.`);
+    console.log(`- Reason: ${report.stoppedAt.reason}`);
+    for (const command of report.stoppedAt.commands) {
+      console.log(`  ${command}`);
+    }
+    return;
+  }
+
   if (report.status === "ready") {
     if (report.jira.status === "skipped") {
       console.log("- Start a run from direct text:");
@@ -633,6 +680,45 @@ function printSetupAllReport(report: SetupAllReport): void {
     console.log("- Add Jira issue runs later:");
     console.log("  tlo setup jira");
   }
+}
+
+function stopSetupAll(
+  rootDir: string,
+  jira: SetupAllJiraReport,
+  gemini: GeminiSetupReport | undefined,
+  codex: DoctorCheck[] | undefined,
+  openai: OpenAISetupReport | undefined,
+  stoppedAt: NonNullable<SetupAllReport["stoppedAt"]>
+): SetupAllReport {
+  return {
+    rootDir,
+    status: "needs_attention",
+    jira,
+    gemini,
+    codex,
+    openai,
+    stoppedAt
+  };
+}
+
+function firstBlockingCheckSummary(checks: DoctorCheck[]): string {
+  return checks.find((check) => check.status !== "pass")?.summary ?? "Codex CLI is not ready.";
+}
+
+function codexSetupNextLines(checks: DoctorCheck[]): string[] {
+  if (checks.some((check) => check.id === "codex_cli_command" && check.status !== "pass")) {
+    return ["Install Codex CLI or make sure codex is available on PATH.", "codex login", "tlo doctor codex", "tlo setup"];
+  }
+
+  return ["codex login", "tlo doctor codex", "tlo setup"];
+}
+
+function formatProviderName(provider: NonNullable<SetupAllReport["stoppedAt"]>["provider"]): string {
+  if (provider === "codex") {
+    return "Codex CLI";
+  }
+
+  return provider[0].toUpperCase() + provider.slice(1);
 }
 
 async function promptSetupAllJiraChoice(args: ParsedArgs, rootDir: string): Promise<SetupAllJiraChoice> {
@@ -701,7 +787,8 @@ function printInlineCodexSetupStatus(checks: DoctorCheck[]): void {
     return;
   }
 
-  console.log("- Next: run codex login, then tlo doctor codex.");
+  const action = checks.find((check) => check.status !== "pass")?.recommendedAction ?? "Run tlo doctor codex to check Codex CLI readiness.";
+  console.log(`- Next: ${action}`);
 }
 
 async function jiraSetupCommand(args: ParsedArgs): Promise<JiraSetupReport> {
