@@ -553,10 +553,17 @@ type SetupAllJiraReport =
       nextCommand: string;
     };
 
+interface SetupAllJiraChoice {
+  shouldSetup: boolean;
+  hasExistingCredentials: boolean;
+}
+
 async function setupAllCommand(args: ParsedArgs): Promise<SetupAllReport> {
   const rootDir = await resolveTargetRoot();
   const config = await loadOrchestratorConfig(rootDir);
   console.log(`Target repo: ${rootDir}`);
+  console.log("");
+  const jiraChoice = await promptSetupAllJiraChoice(args, rootDir);
   console.log("");
   console.log("Step 1/4: Codex CLI");
   console.log("- Checking local Codex CLI command and login...");
@@ -564,7 +571,7 @@ async function setupAllCommand(args: ParsedArgs): Promise<SetupAllReport> {
   printInlineCodexSetupStatus(codex);
   console.log("");
   console.log("Step 2/4: Jira (optional)");
-  const jira = await setupJiraFromSetupAll(args, rootDir);
+  const jira = await setupJiraFromSetupAll(args, jiraChoice);
   console.log("");
   console.log("Step 3/4: Gemini");
   const gemini = await geminiSetupCommand(args);
@@ -629,28 +636,42 @@ function printSetupAllReport(report: SetupAllReport): void {
   }
 }
 
-async function setupJiraFromSetupAll(args: ParsedArgs, rootDir: string): Promise<SetupAllJiraReport> {
+async function promptSetupAllJiraChoice(args: ParsedArgs, rootDir: string): Promise<SetupAllJiraChoice> {
   const existingEnv = await readJiraEnvFile(rootDir);
   const hasExistingCredentials = Boolean(
     existingEnv.JIRA_URL && (existingEnv.JIRA_PERSONAL_TOKEN || (existingEnv.JIRA_USERNAME && existingEnv.JIRA_API_TOKEN))
   );
 
+  console.log("Jira issue runs are optional.");
   console.log("- Jira is only needed when you start runs from issue keys such as OUC-10.");
   console.log("- You can skip it and still run direct tasks with tlo run \"task instruction\".");
   if (hasExistingCredentials) {
     console.log("- Existing Jira credentials were found. Skip this step to keep them unchanged.");
   }
 
-  const shouldSkip = args.flags["skip-jira"] === true || !(await promptYesNo("Set up Jira issue reading now?", false));
-  if (shouldSkip) {
-    const summary = hasExistingCredentials
+  const hasJiraSetupFlags = Boolean(
+    stringFlag(args.flags, "url") ||
+      stringFlag(args.flags, "username") ||
+      stringFlag(args.flags, "api-token") ||
+      stringFlag(args.flags, "personal-token")
+  );
+
+  return {
+    shouldSetup: args.flags["skip-jira"] !== true && (hasJiraSetupFlags || (await promptYesNo("Use Jira issue reading in this project?", false))),
+    hasExistingCredentials
+  };
+}
+
+async function setupJiraFromSetupAll(args: ParsedArgs, choice: SetupAllJiraChoice): Promise<SetupAllJiraReport> {
+  if (!choice.shouldSetup) {
+    const summary = choice.hasExistingCredentials
       ? "Jira setup skipped. Existing Jira credentials were left unchanged."
       : "Jira setup skipped. Direct task runs do not need Jira credentials.";
     console.log(`- ${summary}`);
     return {
       status: "skipped",
-      envFile: hasExistingCredentials ? ".orchestrator/jira.env" : "not configured",
-      authMode: hasExistingCredentials ? "unchanged" : "not-configured",
+      envFile: choice.hasExistingCredentials ? ".orchestrator/jira.env" : "not configured",
+      authMode: choice.hasExistingCredentials ? "unchanged" : "not-configured",
       mcpCheck: {
         status: "skipped",
         summary
