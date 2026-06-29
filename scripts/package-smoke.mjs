@@ -191,6 +191,15 @@ async function main() {
 
       const rawStatusJson = await run(bin, ["status", loopReport.runId, "--json", "--raw"], { cwd: projectDir });
       assertRawStatusReport(parseJson(rawStatusJson), loopReport.runId);
+
+      const historyJson = await run(bin, ["history", "--json"], { cwd: projectDir });
+      assertHistoryReport(parseJson(historyJson), {
+        runId: loopReport.runId,
+        runCountAtLeast: 1
+      });
+
+      const reportJson = await run(bin, ["report", loopReport.runId, "--json"], { cwd: projectDir });
+      assertReportExport(parseJson(reportJson), loopReport.runId);
     });
 
     await runStep("jira issue run json", async () => {
@@ -565,6 +574,7 @@ async function main() {
     );
     console.log("- Jira issue read provider feeds issue data into the installed tlo run flow");
     console.log("- status no-run and resume missing-run JSON guidance work through the installed binary");
+    console.log("- history and local report export work through the installed binary");
     console.log("- checkpoint/pr-plan/pr-exec/approve-pr JSON fields work through the installed binary");
     console.log(
       "- execution-audit JSON and plain output read fixtures, list bundles, and return safe errors through the installed binary"
@@ -972,6 +982,31 @@ function assertRunReport(report, command, expected) {
   assertObject(report.task, `${command} JSON should include task summary`);
   assertObject(report.run, `${command} JSON should include raw run`);
   assertIncludes(report.savedPath, report.runId, `${command} JSON should include saved path`);
+}
+
+function assertHistoryReport(report, expected) {
+  assertEnvelope(report, "history");
+  assertEqual(report.status, "ok", "history JSON should be ok");
+  assertNumber(report.runCount, "history JSON should include runCount");
+  if (report.runCount < expected.runCountAtLeast) {
+    throw new Error(`history JSON should include at least ${expected.runCountAtLeast} run(s)`);
+  }
+  assertArray(report.runs, "history JSON should include runs");
+  const run = report.runs.find((item) => item.runId === expected.runId);
+  if (!run) {
+    throw new Error(`history JSON should include run ${expected.runId}`);
+  }
+  assertObject(run.counts, "history run item should include counts");
+  assertIncludes(run.savedPath, expected.runId, "history run item should include saved path");
+}
+
+function assertReportExport(report, runId) {
+  assertEnvelope(report, "report");
+  assertEqual(report.status, "written", "report JSON should confirm local report export");
+  assertEqual(report.runId, runId, "report JSON should include the exported run id");
+  assertIncludes(report.path, `${runId}/report.md`, "report JSON should include report.md path");
+  assertNumber(report.bytes, "report JSON should include byte size");
+  assertString(report.message, "report JSON should include message");
 }
 
 async function assertRunDirectoryArtifacts(report, expectedTaskTitle) {

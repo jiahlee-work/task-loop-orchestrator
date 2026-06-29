@@ -18,6 +18,8 @@
         "run",
         "resume",
         "status",
+        "history",
+        "report",
         "checkpoint",
         "checks",
         "pr-plan",
@@ -1621,11 +1623,174 @@
         "counts": {
           "$ref": "#/$defs/subtaskCounts"
         },
+        "latestDecision": {
+          "$ref": "#/$defs/rootDecisionSummary"
+        },
+        "ownerDecisionItems": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ownerDecisionSummary"
+          }
+        },
+        "blockedSubtasks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/blockedSubtaskSummary"
+          }
+        },
         "savedPath": {
           "type": "string"
         },
         "run": {
           "type": "object"
+        }
+      },
+      "additionalProperties": true
+    },
+    "rootDecisionSummary": {
+      "type": "object",
+      "required": ["action", "reason", "eventId", "createdAt"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["complete", "reschedule", "block", "fail"]
+        },
+        "verdict": {
+          "type": "string",
+          "enum": ["accept", "request_changes", "reschedule", "owner_decision"]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "subtaskId": {
+          "type": "string"
+        },
+        "eventId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": true
+    },
+    "ownerDecisionSummary": {
+      "type": "object",
+      "required": ["reason", "createdAt"],
+      "properties": {
+        "subtaskId": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": true
+    },
+    "blockedSubtaskSummary": {
+      "type": "object",
+      "required": ["id", "title", "status"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["blocked", "failed"]
+        },
+        "result": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "historyRunItem": {
+      "type": "object",
+      "required": ["runId", "status", "taskTitle", "counts", "savedPath", "createdAt", "updatedAt"],
+      "properties": {
+        "runId": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/runStatus"
+        },
+        "taskTitle": {
+          "type": "string"
+        },
+        "counts": {
+          "$ref": "#/$defs/subtaskCounts"
+        },
+        "latestDecision": {
+          "$ref": "#/$defs/rootDecisionSummary"
+        },
+        "ownerDecisionItems": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ownerDecisionSummary"
+          }
+        },
+        "savedPath": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": true
+    },
+    "historyPayload": {
+      "type": "object",
+      "required": ["status", "runCount", "runs"],
+      "properties": {
+        "status": {
+          "const": "ok"
+        },
+        "runCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "runs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/historyRunItem"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "reportPayload": {
+      "type": "object",
+      "required": ["status", "runId", "path", "message"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["written", "not_found"]
+        },
+        "runId": {
+          "type": ["string", "null"]
+        },
+        "path": {
+          "type": ["string", "null"]
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "message": {
+          "type": "string"
         }
       },
       "additionalProperties": true
@@ -1709,6 +1874,32 @@
       },
       "then": {
         "$ref": "#/$defs/runReportPayload"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "history"
+          }
+        },
+        "required": ["command"]
+      },
+      "then": {
+        "$ref": "#/$defs/historyPayload"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "command": {
+            "const": "report"
+          }
+        },
+        "required": ["command"]
+      },
+      "then": {
+        "$ref": "#/$defs/reportPayload"
       }
     },
     {

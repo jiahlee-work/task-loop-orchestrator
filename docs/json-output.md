@@ -38,6 +38,8 @@ The envelope applies to every current JSON-capable command:
 - `resume <runId> --json`
 - `status [runId] --json`
 - `status [runId] --json --raw`
+- `history --json`
+- `report [runId] --json`
 - `checkpoint [runId] --json`
 - `checks [ref] --json`
 - `pr-plan [runId] --json`
@@ -68,6 +70,18 @@ The first command-specific schema extension covers the stable run report payload
 Successful run responses use the stable `runReportPayload`, which fixes the summary fields automation commonly reads: `runId`, `status`, `iterations`, `permissionMode`, `task`, `counts`, `savedPath`, and `run`. `savedPath` points to the local `.orchestrator/runs/<runId>/` run directory. `resume <runId> --json` can also return `runLookupErrorPayload` with `status: "not_found"`, `runId`, `run: null`, and `message` when the requested run does not exist; the `resume` command branch is represented by `runResponsePayload`. Additional fields remain allowed for forward-compatible payload expansion.
 
 `status --json --raw` is intentionally excluded from the stricter run report payload branch because it returns the stored raw `LoopRun` object rather than the stable summary report.
+
+## History Schema
+
+`history --json` has a command-specific `historyPayload` schema branch for read-only run listing. Consumers can rely on `status`, `runCount`, and `runs`.
+
+Each `runs[]` item fixes `runId`, `status`, `taskTitle`, `counts`, `savedPath`, `createdAt`, and `updatedAt`, with optional `latestDecision` and `ownerDecisionItems`.
+
+## Report Schema
+
+`report [runId] --json` has a command-specific `reportPayload` schema branch for local report export. Consumers can rely on `status`, `runId`, `path`, and `message`, with optional `bytes` when a report was written.
+
+The command writes only a local markdown file under `.orchestrator/runs/<runId>/report.md`; it does not perform external write-side actions.
 
 ## Checks Schema
 

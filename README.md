@@ -93,7 +93,7 @@ run_id="$(printf '%s' "$run_json" | node -e 'let input=""; process.stdin.on("dat
 tlo status "$run_id" --json
 ```
 
-`run --json`이 반환한 `runId`를 `status <runId>`와 `resume <runId>`에 넘기는 것이 기본 패턴입니다. 실행 기록은 대상 프로젝트의 `.orchestrator/runs/<runId>/` 디렉터리에 저장됩니다.
+`run --json`이 반환한 `runId`를 `status <runId>`와 `resume <runId>`에 넘기는 것이 기본 패턴입니다. 실행 기록은 대상 프로젝트의 `.orchestrator/runs/<runId>/` 디렉터리에 저장됩니다. 여러 실행을 한 번에 보려면 `tlo history`, 공유용 로컬 요약을 만들려면 `tlo report <runId>`를 사용합니다.
 
 `init`은 다시 실행해도 기존 `orchestrator.config.json`을 덮어쓰지 않습니다. `.orchestrator/`가 `.gitignore`에 빠져 있으면 추가하고, 이미 있으면 그대로 둡니다. 설정이 이상해 보일 때는 `tlo doctor` 또는 `tlo doctor jira`를 먼저 실행해 다음 조치 안내를 확인하세요.
 

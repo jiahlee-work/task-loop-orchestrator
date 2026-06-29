@@ -736,6 +736,8 @@ describe("CLI JSON schema artifact", () => {
       run: "#/$defs/runReportPayload",
       resume: "#/$defs/runResponsePayload",
       status: "#/$defs/runReportPayload",
+      history: "#/$defs/historyPayload",
+      report: "#/$defs/reportPayload",
       checkpoint: "#/$defs/checkpointPayload",
       checks: "#/$defs/checksPayload",
       "pr-plan": "#/$defs/prPlanPayload",

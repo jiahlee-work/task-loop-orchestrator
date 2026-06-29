@@ -8,7 +8,7 @@ import { initProject } from "../../src/init.js";
 import { createIntegrationCheckpoint } from "../../src/integration.js";
 import { createPullRequestPlan } from "../../src/pr-plan.js";
 import { MockRepoProvider, type CommandRunner } from "../../src/providers.js";
-import { createRunCliReport } from "../../src/run-report.js";
+import { createRunCliReport, createRunHistoryReport } from "../../src/run-report.js";
 import { summarizeWriteExecutionReadiness } from "../../src/write-readiness.js";
 import { summarizeWriteRunnerDryRun } from "../../src/write-runner.js";
 
@@ -51,6 +51,28 @@ export async function buildCliJsonSamples(input: BuildCliJsonSamplesInput): Prom
     toJsonObject(createCliJsonReport("run", runReport, createdAt)),
     toJsonObject(createCliJsonReport("resume", runReport, createdAt)),
     toJsonObject(createCliJsonReport("status", runReport, createdAt)),
+    toJsonObject(
+      createCliJsonReport(
+        "history",
+        createRunHistoryReport([run], {
+          pathForRun: (runId) => join(run.context.runId, ".orchestrator", "runs", runId)
+        }),
+        createdAt
+      )
+    ),
+    toJsonObject(
+      createCliJsonReport(
+        "report",
+        {
+          status: "written",
+          runId: run.id,
+          path: join(run.context.runId, ".orchestrator", "runs", run.id, "report.md"),
+          bytes: 128,
+          message: "Run report written."
+        },
+        createdAt
+      )
+    ),
     toJsonObject(createCliJsonReport("checks", checksSummary(), createdAt)),
     toJsonObject(createCliJsonReport("checkpoint", checkpoint, createdAt)),
     toJsonObject(createCliJsonReport("pr-plan", prPlan, createdAt)),

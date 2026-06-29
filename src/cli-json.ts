@@ -8,6 +8,8 @@ export const cliJsonCommands = [
   "run",
   "resume",
   "status",
+  "history",
+  "report",
   "checkpoint",
   "checks",
   "pr-plan",

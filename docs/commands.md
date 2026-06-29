@@ -147,6 +147,36 @@ JSON: supported with `--json`. Use `--json --raw` to print the stored raw `LoopR
 
 Behavior: read-only. It does not modify local state or external systems. Without `runId`, it reports the latest run; with `runId`, it reports that specific run. In an empty project, `status --json` returns `status: "not_found"` and `run: null` with a message that points back to `tlo run "task instruction" --json`.
 
+### `history [--json]`
+
+Purpose: List local runs with compact progress and root-decision summaries.
+
+Example:
+
+```bash
+tlo history
+tlo history --json
+```
+
+JSON: supported with `--json`.
+
+Behavior: read-only. It lists runs from `.orchestrator/runs/` in newest-first order and includes each run's status, subtask counts, latest root decision, and owner-decision count. It does not modify local state or external systems.
+
+### `report [runId] [--json]`
+
+Purpose: Write a local markdown summary for a run.
+
+Example:
+
+```bash
+tlo report
+tlo report <runId> --json
+```
+
+JSON: supported with `--json`.
+
+Behavior: writes only `.orchestrator/runs/<runId>/report.md` in the local project. Without `runId`, it uses the latest run. The report summarizes counts, latest root decision, owner-decision items, blocked or failed subtasks, and recent events. It does not create branches, commits, pushes, PRs, Jira transitions, releases, or external writes.
+
 ## Integration Status
 
 ### `checkpoint [runId] [--github none|gh-cli] [--json]`

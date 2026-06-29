@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import { appendEvent, appendStatusEvent } from "./audit.js";
@@ -67,7 +69,7 @@ import {
 import { LocalEvidenceReviewer } from "./reviewers.js";
 import { createMockRoleProviders, type RoleProviders } from "./roles.js";
 import { parseRunInput, type RunInput } from "./run-input.js";
-import { createRunCliReport } from "./run-report.js";
+import { createRunCliReport, createRunHistoryReport, createRunMarkdownReport } from "./run-report.js";
 import { FileRunStore } from "./store.js";
 import {
   formatWriteExecutionReadiness,
@@ -171,6 +173,8 @@ function printUsage(): void {
   task-loop-orchestrator run ISSUE-KEY [--note text] [--planner mock|gemini] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence|openai] [--max-iterations n] [--json]
   task-loop-orchestrator run <instruction> [--description text] [--planner mock|gemini] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence|openai] [--max-iterations n] [--json]
   task-loop-orchestrator status [runId] [--json] [--raw]
+  task-loop-orchestrator history [--json]
+  task-loop-orchestrator report [runId] [--json]
   task-loop-orchestrator resume <runId> [--max-iterations n] [--json]
   task-loop-orchestrator checkpoint [runId] [--github none|gh-cli] [--json]
   task-loop-orchestrator pr-plan [runId] [--json]
@@ -1229,7 +1233,15 @@ async function statusCommand(args: ParsedArgs): Promise<void> {
   const rootDir = await resolveTargetRoot();
   const store = new FileRunStore(rootDir);
   const runId = args.positional[0];
-  const run = runId ? await store.load(runId) : await store.latest();
+  let run: LoopRun | undefined;
+  try {
+    run = runId ? await store.load(runId) : await store.latest();
+  } catch (error) {
+    if (!isMissingFileError(error)) {
+      throw error;
+    }
+    run = undefined;
+  }
 
   if (!run) {
     if (args.flags.json === true) {
@@ -1251,10 +1263,29 @@ async function statusCommand(args: ParsedArgs): Promise<void> {
   }
 
   const completed = run.graph.subtasks.filter((subtask) => subtask.status === "completed").length;
+  const report = createRunCliReport(run, store);
   console.log(`Run ${run.id}: ${run.status}`);
   console.log(`Task: ${run.spec.title}`);
   console.log(`Iterations: ${run.iterations}`);
   console.log(`Subtasks: ${completed}/${run.graph.subtasks.length} completed`);
+  if (report.latestDecision) {
+    console.log("Latest root decision:");
+    console.log(`- Action: ${report.latestDecision.action}`);
+    console.log(`- Verdict: ${report.latestDecision.verdict ?? "unknown"}`);
+    console.log(`- Reason: ${report.latestDecision.reason}`);
+  }
+  if (report.ownerDecisionItems.length > 0) {
+    console.log("Owner decisions:");
+    for (const item of report.ownerDecisionItems) {
+      console.log(`- ${item.subtaskId ?? "run"}: ${item.reason}`);
+    }
+  }
+  if (report.blockedSubtasks.length > 0) {
+    console.log("Blocked or failed subtasks:");
+    for (const item of report.blockedSubtasks) {
+      console.log(`- [${item.status}] ${item.title}: ${item.result ?? "no reason"}`);
+    }
+  }
   if (run.graph.nextCandidateId) {
     console.log(`Next: ${run.graph.nextCandidateId}`);
   }
@@ -1265,6 +1296,88 @@ async function statusCommand(args: ParsedArgs): Promise<void> {
       console.log(`- ${event.kind}: ${event.message}`);
     }
   }
+}
+
+async function historyCommand(args: ParsedArgs): Promise<void> {
+  const rootDir = await resolveTargetRoot();
+  const store = new FileRunStore(rootDir);
+  const runs = await store.list();
+  const report = createRunHistoryReport(runs, store);
+
+  if (args.flags.json === true) {
+    printJson("history", report);
+    return;
+  }
+
+  if (runs.length === 0) {
+    console.log("No runs found.");
+    return;
+  }
+
+  console.log(`Runs: ${report.runCount}`);
+  for (const item of report.runs) {
+    const decision = item.latestDecision ? `, latest: ${item.latestDecision.action}` : "";
+    const ownerDecisionCount = item.ownerDecisionItems.length > 0 ? `, owner decisions: ${item.ownerDecisionItems.length}` : "";
+    console.log(
+      `- ${item.runId}: ${item.status}, ${item.counts.completed}/${item.counts.total} completed${decision}${ownerDecisionCount}`
+    );
+    console.log(`  ${item.taskTitle}`);
+  }
+}
+
+async function reportCommand(args: ParsedArgs): Promise<void> {
+  const rootDir = await resolveTargetRoot();
+  const store = new FileRunStore(rootDir);
+  const runId = args.positional[0];
+  let run: LoopRun | undefined;
+  try {
+    run = runId ? await store.load(runId) : await store.latest();
+  } catch (error) {
+    if (!isMissingFileError(error)) {
+      throw error;
+    }
+    run = undefined;
+  }
+
+  if (!run) {
+    const message = 'No runs found. Start one with tlo run "task instruction".';
+    if (args.flags.json === true) {
+      printJson("report", {
+        status: "not_found",
+        runId: runId ?? null,
+        path: null,
+        message
+      });
+      return;
+    }
+
+    console.log(message);
+    process.exitCode = 1;
+    return;
+  }
+
+  const content = createRunMarkdownReport(run, store);
+  const path = join(store.pathForRun(run.id), "report.md");
+  await writeFile(path, content, "utf8");
+  const payload = {
+    status: "written" as const,
+    runId: run.id,
+    path,
+    bytes: Buffer.byteLength(content, "utf8"),
+    message: "Run report written."
+  };
+
+  if (args.flags.json === true) {
+    printJson("report", payload);
+    return;
+  }
+
+  console.log("Success: report written");
+  console.log("");
+  console.log("Result:");
+  console.log(`- Run ID: ${payload.runId}`);
+  console.log(`- Path: ${payload.path}`);
+  console.log(`- Bytes: ${payload.bytes}`);
 }
 
 async function resumeCommand(args: ParsedArgs): Promise<void> {
@@ -1982,6 +2095,16 @@ async function main(): Promise<void> {
 
   if (args.command === "status") {
     await statusCommand(args);
+    return;
+  }
+
+  if (args.command === "history") {
+    await historyCommand(args);
+    return;
+  }
+
+  if (args.command === "report") {
+    await reportCommand(args);
     return;
   }
 
