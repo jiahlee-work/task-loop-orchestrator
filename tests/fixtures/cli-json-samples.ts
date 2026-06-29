@@ -7,7 +7,7 @@ import { createExecutionDryRunTraces, createExecutionIntent, summarizeExecutionA
 import { initProject } from "../../src/init.js";
 import { createIntegrationCheckpoint } from "../../src/integration.js";
 import { createPullRequestPlan } from "../../src/pr-plan.js";
-import { MockRepoProvider } from "../../src/providers.js";
+import { MockRepoProvider, type CommandRunner } from "../../src/providers.js";
 import { createRunCliReport } from "../../src/run-report.js";
 import { summarizeWriteExecutionReadiness } from "../../src/write-readiness.js";
 import { summarizeWriteRunnerDryRun } from "../../src/write-runner.js";
@@ -46,7 +46,7 @@ export async function buildCliJsonSamples(input: BuildCliJsonSamplesInput): Prom
   });
 
   return [
-    toJsonObject(createCliJsonReport("doctor", await runDoctor(input.doctorRoot), createdAt)),
+    toJsonObject(createCliJsonReport("doctor", await runDoctor(input.doctorRoot, { commandRunner: codexReadyCommandRunner }), createdAt)),
     toJsonObject(createCliJsonReport("init", await initProject(input.initRoot), createdAt)),
     toJsonObject(createCliJsonReport("run", runReport, createdAt)),
     toJsonObject(createCliJsonReport("resume", runReport, createdAt)),
@@ -148,3 +148,31 @@ function toJsonObject(value: object): JsonObject {
 }
 
 export type JsonObject = Record<string, unknown>;
+
+const codexReadyCommandRunner: CommandRunner = async (command, args = []) => {
+  if (command === "git") {
+    return { exitCode: 128, stdout: "", stderr: "not a git repository" };
+  }
+  if (command === "codex" && args[0] === "--version") {
+    return { exitCode: 0, stdout: "codex 0.142.3\n", stderr: "" };
+  }
+  if (command === "codex" && args[0] === "doctor") {
+    return {
+      exitCode: 0,
+      stdout: JSON.stringify({
+        checks: {
+          "auth.credentials": {
+            status: "ok",
+            summary: "auth is configured",
+            details: {
+              "stored auth mode": "chatgpt"
+            }
+          }
+        }
+      }),
+      stderr: ""
+    };
+  }
+
+  return { exitCode: 0, stdout: "", stderr: "" };
+};

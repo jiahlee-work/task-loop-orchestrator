@@ -68,9 +68,9 @@ tlo setup openai --api-key "$OPENAI_API_KEY" --model gpt-5.1
 
 JSON: not supported.
 
-Behavior: without a provider argument, `setup` runs the Jira, Gemini, and OpenAI setup prompts in order. With a provider argument, it updates only that provider. It writes provider env files such as `.orchestrator/jira.env`, `.orchestrator/gemini.env`, and `.orchestrator/openai.env` with file mode `0600`, so only the local file owner can read or update them. The files are under `.orchestrator/`, which `init` adds to `.gitignore`. Gemini setup expects a Gemini API key from [Google AI Studio API Keys](https://aistudio.google.com/app/apikey). OpenAI setup expects an OpenAI API key from [OpenAI API keys](https://platform.openai.com/api-keys). By default the command verifies that the configured MCP server exposes the Jira issue read tool, that the Gemini planner model responds, or that the OpenAI reviewer model responds; use `--skip-check` to save credentials without a live verification call.
+Behavior: without a provider argument, `setup` checks Codex CLI readiness first, then runs the Jira, Gemini, and OpenAI setup prompts in order. Codex CLI does not require a token in `tlo`; the CLI reuses the user's local `codex login` state. With a provider argument, `setup` updates only that provider. It writes provider env files such as `.orchestrator/jira.env`, `.orchestrator/gemini.env`, and `.orchestrator/openai.env` with file mode `0600`, so only the local file owner can read or update them. The files are under `.orchestrator/`, which `init` adds to `.gitignore`. Gemini setup expects a Gemini API key from [Google AI Studio API Keys](https://aistudio.google.com/app/apikey). OpenAI setup expects an OpenAI API key from [OpenAI API keys](https://platform.openai.com/api-keys). By default the command verifies that the configured MCP server exposes the Jira issue read tool, that the Gemini planner model responds, or that the OpenAI reviewer model responds; use `--skip-check` to save credentials without a live verification call.
 
-### `doctor [jira|gemini|openai] [--github none|gh-cli] [--json]`
+### `doctor [codex|jira|gemini|openai] [--github none|gh-cli] [--json]`
 
 Purpose: Diagnose whether the current project is ready to use the orchestrator.
 
@@ -78,6 +78,7 @@ Example:
 
 ```bash
 tlo doctor --github gh-cli --json
+tlo doctor codex
 tlo doctor jira
 tlo doctor gemini
 tlo doctor openai
@@ -85,7 +86,7 @@ tlo doctor openai
 
 JSON: supported with `--json`.
 
-Behavior: read-only. It checks Node.js, Git repository presence, config loading, `.gitignore`, store path access, optional read-only GitHub CLI diagnostics, optional Jira MCP availability, optional Gemini planner availability, and optional OpenAI reviewer availability instead of writing repository state. Jira MCP diagnostics distinguish missing `.orchestrator/jira.env` credentials, missing `uvx`, MCP server startup/query failures, and a missing `jira_get_issue` tool. Gemini diagnostics distinguish missing `.orchestrator/gemini.env` credentials from model/API verification failures. OpenAI diagnostics distinguish missing `.orchestrator/openai.env` credentials from model/API verification failures. When MCP is unavailable and CLI fallback is enabled, it also reports local Jira CLI availability. Warnings and failures include a short recommended action and safe command suggestions where available.
+Behavior: read-only. It checks Node.js, Git repository presence, config loading, `.gitignore`, store path access, Codex CLI command/auth readiness, optional read-only GitHub CLI diagnostics, optional Jira MCP availability, optional Gemini planner availability, and optional OpenAI reviewer availability instead of writing repository state. Codex diagnostics verify the local `codex` command and local login state; `tlo` does not ask for a Codex API key and reuses `codex login`. Jira MCP diagnostics distinguish missing `.orchestrator/jira.env` credentials, missing `uvx`, MCP server startup/query failures, and a missing `jira_get_issue` tool. Gemini diagnostics distinguish missing `.orchestrator/gemini.env` credentials from model/API verification failures. OpenAI diagnostics distinguish missing `.orchestrator/openai.env` credentials from model/API verification failures. When MCP is unavailable and CLI fallback is enabled, it also reports local Jira CLI availability. Warnings and failures include a short recommended action and safe command suggestions where available.
 
 ## Run Loop
 

@@ -18,7 +18,7 @@ describe("doctor", () => {
   it("warns when the current directory is not a git repository and config is missing", async () => {
     const root = await tempRoot();
 
-    const report = await runDoctor(root);
+    const report = await runDoctor(root, { commandRunner: codexReadyCommandRunner({ gitInside: false }) });
 
     expect(report.status).toBe("warn");
     expect(check(report.checks, "git_repository")).toMatchObject({
@@ -80,12 +80,14 @@ describe("doctor", () => {
     await execFileAsync("git", ["init"], { cwd: root });
     await initProject(root);
 
-    const report = await runDoctor(root);
+    const report = await runDoctor(root, { commandRunner: codexReadyCommandRunner({ gitInside: true }) });
 
     expect(check(report.checks, "git_repository").status).toBe("pass");
     expect(check(report.checks, "config").status).toBe("pass");
     expect(check(report.checks, "gitignore").status).toBe("pass");
     expect(check(report.checks, "store_path").status).toBe("pass");
+    expect(check(report.checks, "codex_cli_command").status).toBe("pass");
+    expect(check(report.checks, "codex_cli_auth").status).toBe("pass");
     expect(check(report.checks, "git_repository").suggestions).toBeUndefined();
     expect(check(report.checks, "config").suggestions).toBeUndefined();
     expect(check(report.checks, "gitignore").suggestions).toBeUndefined();
@@ -117,7 +119,7 @@ describe("doctor", () => {
       }
     });
 
-    const report = await runDoctor(root, { githubMode: "gh-cli", githubProvider });
+    const report = await runDoctor(root, { githubMode: "gh-cli", githubProvider, commandRunner: codexReadyCommandRunner({ gitInside: true }) });
 
     expect(check(report.checks, "github_repository")).toMatchObject({ status: "pass" });
     expect(check(report.checks, "github_checks")).toMatchObject({ status: "pass" });
@@ -135,7 +137,7 @@ describe("doctor", () => {
       }
     });
 
-    const report = await runDoctor(root, { githubMode: "gh-cli", githubProvider });
+    const report = await runDoctor(root, { githubMode: "gh-cli", githubProvider, commandRunner: codexReadyCommandRunner({ gitInside: true }) });
 
     expect(report.status).toBe("warn");
     expect(check(report.checks, "github_repository")).toMatchObject({ status: "warn" });
@@ -217,13 +219,57 @@ describe("doctor", () => {
     expect(calls.some((call) => call.command === "uvx")).toBe(false);
   });
 
+  it("reports Codex CLI command and local auth readiness by default", async () => {
+    const root = await tempRoot();
+
+    const report = await runDoctor(root, { commandRunner: codexReadyCommandRunner({ gitInside: true }) });
+
+    expect(check(report.checks, "codex_cli_command")).toMatchObject({
+      status: "pass",
+      summary: "Codex CLI command is available: codex."
+    });
+    expect(check(report.checks, "codex_cli_auth")).toMatchObject({
+      status: "pass",
+      summary: "Codex CLI auth is configured; tlo will reuse the local Codex login."
+    });
+  });
+
+  it("warns when Codex CLI is not available", async () => {
+    const root = await tempRoot();
+
+    const report = await runDoctor(root, {
+      commandRunner: async (command, args = []) => {
+        if (command === "git") {
+          return { exitCode: 0, stdout: "true\n", stderr: "" };
+        }
+        if (command === "codex" && args[0] === "--version") {
+          return { exitCode: 127, stdout: "", stderr: "codex: command not found" };
+        }
+        return { exitCode: 0, stdout: "", stderr: "" };
+      }
+    });
+
+    expect(check(report.checks, "codex_cli_command")).toMatchObject({
+      status: "warn",
+      recommendedAction: "Install Codex CLI or make sure the codex command is available on PATH.",
+      suggestions: expect.arrayContaining([
+        {
+          label: "Log in to Codex CLI",
+          command: ["codex", "login"],
+          reason: "Authenticate the local Codex CLI account.",
+          destructive: false
+        }
+      ])
+    });
+  });
+
   it("reports missing Gemini planner credentials only when Gemini diagnostics are enabled", async () => {
     const root = await tempRoot();
 
-    const defaultReport = await runDoctor(root);
+    const defaultReport = await runDoctor(root, { commandRunner: codexReadyCommandRunner({ gitInside: true }) });
     expect(defaultReport.checks.some((item) => item.id.startsWith("gemini_"))).toBe(false);
 
-    const geminiReport = await runDoctor(root, { gemini: true });
+    const geminiReport = await runDoctor(root, { commandRunner: codexReadyCommandRunner({ gitInside: true }), gemini: true });
 
     expect(geminiReport.status).toBe("warn");
     expect(check(geminiReport.checks, "gemini_credentials")).toMatchObject({
@@ -360,7 +406,7 @@ describe("doctor", () => {
   it("shows doctor in CLI usage", async () => {
     const cliSource = await readFile(join(process.cwd(), "src", "cli.ts"), "utf8");
 
-    expect(cliSource).toContain("task-loop-orchestrator doctor [jira|gemini|openai] [--github none|gh-cli] [--json]");
+    expect(cliSource).toContain("task-loop-orchestrator doctor [codex|jira|gemini|openai] [--github none|gh-cli] [--json]");
   });
 });
 
@@ -411,5 +457,40 @@ function jiraMcpConfig() {
         JIRA_API_TOKEN: "token"
       }
     }
+  };
+}
+
+function codexReadyCommandRunner(options: { gitInside: boolean }): CommandRunner {
+  return async (command, args = []) => {
+    if (command === "git") {
+      return options.gitInside
+        ? { exitCode: 0, stdout: "true\n", stderr: "" }
+        : { exitCode: 128, stdout: "", stderr: "not a git repository" };
+    }
+    if (command === "codex" && args[0] === "--version") {
+      return { exitCode: 0, stdout: "codex 0.142.3\n", stderr: "" };
+    }
+    if (command === "codex" && args[0] === "doctor") {
+      return {
+        exitCode: 0,
+        stdout: JSON.stringify({
+          codexVersion: "0.142.3",
+          checks: {
+            "auth.credentials": {
+              status: "ok",
+              summary: "auth is configured",
+              details: {
+                "stored auth mode": "chatgpt",
+                "stored API key": "false",
+                "stored ChatGPT tokens": "true"
+              }
+            }
+          }
+        }),
+        stderr: ""
+      };
+    }
+
+    return { exitCode: 0, stdout: "", stderr: "" };
   };
 }

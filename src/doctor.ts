@@ -1,7 +1,14 @@
 import { access, readFile, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join } from "node:path";
-import { defaultOrchestratorConfig, loadOrchestratorConfig, type GeminiConfig, type JiraConfig, type OpenAIConfig } from "./config.js";
+import {
+  defaultOrchestratorConfig,
+  loadOrchestratorConfig,
+  type CodexConfig,
+  type GeminiConfig,
+  type JiraConfig,
+  type OpenAIConfig
+} from "./config.js";
 import { GeminiPlanner } from "./gemini-planner.js";
 import { OpenAIReviewer } from "./openai-reviewer.js";
 import type { GitHubProviderMode } from "./domain.js";
@@ -44,6 +51,8 @@ export interface DoctorOptions {
   githubMode?: GitHubProviderMode;
   jira?: boolean;
   jiraConfig?: JiraConfig;
+  codex?: boolean;
+  codexConfig?: CodexConfig;
   gemini?: boolean;
   geminiConfig?: GeminiConfig;
   openai?: boolean;
@@ -83,6 +92,10 @@ export async function runDoctor(rootDir: string = process.cwd(), options: Doctor
         )
       ]
     });
+  }
+
+  if (options.codex ?? true) {
+    checks.push(...(await checkCodex(rootDir, commandRunner, options.codexConfig ?? defaultOrchestratorConfig.codex)));
   }
 
   if (options.jira === true) {
@@ -476,6 +489,78 @@ async function checkOpenAI(openAIConfig: OpenAIConfig): Promise<DoctorCheck> {
   };
 }
 
+export async function checkCodex(rootDir: string, commandRunner: CommandRunner, codexConfig: CodexConfig): Promise<DoctorCheck[]> {
+  const command = codexConfig.binary || "codex";
+  const versionResult = await commandRunner(command, ["--version"], rootDir);
+  if (versionResult.exitCode !== 0) {
+    return [
+      {
+        id: "codex_cli_command",
+        status: "warn",
+        summary: `Codex CLI command is not available: ${command}.`,
+        details: {
+          command,
+          stderr: versionResult.stderr.trim() || undefined
+        },
+        recommendedAction: "Install Codex CLI or make sure the codex command is available on PATH.",
+        suggestions: [
+          commandSuggestion("Check Codex CLI", [command, "--version"], "Verify that the Codex CLI command is available."),
+          commandSuggestion("Log in to Codex CLI", [command, "login"], "Authenticate the local Codex CLI account.")
+        ]
+      }
+    ];
+  }
+
+  const checks: DoctorCheck[] = [
+    {
+      id: "codex_cli_command",
+      status: "pass",
+      summary: `Codex CLI command is available: ${command}.`,
+      details: {
+        command,
+        version: versionResult.stdout.trim() || undefined
+      }
+    }
+  ];
+
+  const doctorResult = await commandRunner(command, ["doctor", "--json", "--no-color", "--ascii"], rootDir);
+  const report = parseCodexDoctorReport(doctorResult.stdout);
+  const authCheck = report?.checks?.["auth.credentials"];
+  if (authCheck?.status === "ok") {
+    checks.push({
+      id: "codex_cli_auth",
+      status: "pass",
+      summary: "Codex CLI auth is configured; tlo will reuse the local Codex login.",
+      details: {
+        codexVersion: report?.codexVersion,
+        auth: authCheck.summary,
+        authMode: authCheck.details?.["stored auth mode"],
+        storedApiKey: authCheck.details?.["stored API key"],
+        storedChatGPTTokens: authCheck.details?.["stored ChatGPT tokens"]
+      }
+    });
+    return checks;
+  }
+
+  checks.push({
+    id: "codex_cli_auth",
+    status: "warn",
+    summary: authCheck ? `Codex CLI auth is not ready: ${authCheck.summary}` : "Codex CLI auth could not be verified.",
+    details: {
+      exitCode: doctorResult.exitCode,
+      stderr: doctorResult.stderr.trim() || undefined,
+      authStatus: authCheck?.status,
+      authSummary: authCheck?.summary
+    },
+    recommendedAction: "Run codex login, then tlo doctor codex.",
+    suggestions: [
+      commandSuggestion("Log in to Codex CLI", [command, "login"], "Authenticate the local Codex CLI account."),
+      commandSuggestion("Re-run Codex doctor", ["tlo", "doctor", "codex"], "Re-check Codex CLI readiness after login.")
+    ]
+  });
+  return checks;
+}
+
 async function checkJira(
   rootDir: string,
   commandRunner: CommandRunner,
@@ -693,6 +778,62 @@ function isMissingFileError(error: unknown): boolean {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+interface CodexDoctorCheck {
+  status?: string;
+  summary?: string;
+  details?: Record<string, string>;
+}
+
+interface CodexDoctorReport {
+  codexVersion?: string;
+  checks?: Record<string, CodexDoctorCheck>;
+}
+
+function parseCodexDoctorReport(stdout: string): CodexDoctorReport | undefined {
+  try {
+    const parsed = JSON.parse(stdout) as unknown;
+    if (!isRecord(parsed)) {
+      return undefined;
+    }
+
+    const checks = isRecord(parsed.checks)
+      ? Object.fromEntries(
+          Object.entries(parsed.checks).flatMap(([key, value]) => {
+            if (!isRecord(value)) {
+              return [];
+            }
+
+            return [
+              [
+                key,
+                {
+                  status: typeof value.status === "string" ? value.status : undefined,
+                  summary: typeof value.summary === "string" ? value.summary : undefined,
+                  details: isRecord(value.details) ? stringifyRecord(value.details) : undefined
+                }
+              ]
+            ];
+          })
+        )
+      : undefined;
+
+    return {
+      codexVersion: typeof parsed.codexVersion === "string" ? parsed.codexVersion : undefined,
+      checks
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function stringifyRecord(value: Record<string, unknown>): Record<string, string> {
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, String(item)]));
 }
 
 function initSuggestion(reason: string): DoctorCommandSuggestion {

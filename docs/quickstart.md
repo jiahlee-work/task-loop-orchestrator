@@ -9,6 +9,8 @@
 - Node.js 24 이상
 - Corepack으로 활성화한 pnpm 11.x 또는 호환되는 pnpm 설치
 - 작업시킬 대상 프로젝트는 Git 저장소여야 합니다. `tlo init`은 Git 저장소가 아닌 폴더에서도 현재 디렉터리에 초기화할 수 있지만, Codex 실행은 Git worktree를 만들기 때문에 Git 저장소 밖에서는 실패할 수 있습니다.
+- Codex CLI가 로컬에 설치되어 있고 로그인되어 있어야 합니다. `tlo`는 별도 Codex token을 받지 않고 로컬 `codex login` 상태를 재사용합니다.
+- OpenAI Reviewer를 쓰려면 OpenAI API key가 필요합니다. 이 key는 `tlo setup` 또는 `tlo setup openai`에서 저장합니다.
 
 ## CLI 저장소 준비
 
@@ -45,7 +47,7 @@ tlo setup
 tlo run OUC-10
 ```
 
-`tlo setup`은 Jira, Gemini, OpenAI 설정을 순서대로 진행합니다. 특정 provider만 다시 설정할 때는 `tlo setup jira`, `tlo setup gemini`, `tlo setup openai`를 사용할 수 있습니다. `tlo run`은 실행 전에 필요한 provider 설정을 확인하고, 빠진 설정이 있으면 run 파일을 만들지 않고 실패 이유와 다음 명령을 보여 줍니다. 설정이 끝난 프로젝트에서는 `tlo run OUC-10`만 바로 실행하면 됩니다.
+`tlo setup`은 Codex CLI readiness를 먼저 확인한 뒤 Jira, Gemini, OpenAI 설정을 순서대로 진행합니다. Codex CLI는 API key를 입력받지 않고 로컬 `codex login` 상태를 재사용합니다. 특정 provider만 다시 설정할 때는 `tlo setup jira`, `tlo setup gemini`, `tlo setup openai`를 사용할 수 있습니다. `tlo run`은 실행 전에 필요한 provider 설정을 확인하고, 빠진 설정이 있으면 run 파일을 만들지 않고 실패 이유와 다음 명령을 보여 줍니다. 설정이 끝난 프로젝트에서는 `tlo run OUC-10`만 바로 실행하면 됩니다.
 
 ## Gemini API key 준비
 
@@ -92,7 +94,7 @@ tlo status "$run_id" --json
 
 `init`은 다시 실행해도 기존 `orchestrator.config.json`을 덮어쓰지 않습니다. `.orchestrator/`가 `.gitignore`에 빠져 있으면 추가하고, 이미 있으면 그대로 둡니다.
 
-`tlo doctor`는 설정, `.gitignore`, Git 상태 같은 준비 상태를 `pass`, `warn`, `fail`로 알려 줍니다. `init` 전에는 설정과 gitignore 관련 warning이 나올 수 있고, 이때는 `tlo init`을 먼저 실행하면 됩니다. Jira, Gemini, OpenAI 연결을 따로 점검하고 싶을 때만 `tlo doctor jira`, `tlo doctor gemini`, `tlo doctor openai`를 실행하세요.
+`tlo doctor`는 설정, `.gitignore`, Git 상태, Codex CLI readiness 같은 준비 상태를 `pass`, `warn`, `fail`로 알려 줍니다. `init` 전에는 설정과 gitignore 관련 warning이 나올 수 있고, 이때는 `tlo init`을 먼저 실행하면 됩니다. Codex, Jira, Gemini, OpenAI 연결을 따로 점검하고 싶을 때만 `tlo doctor codex`, `tlo doctor jira`, `tlo doctor gemini`, `tlo doctor openai`를 실행하세요.
 
 GitHub remote와 읽을 수 있는 check-run이 있는 프로젝트에서는 CI 상태도 읽기 전용으로 확인할 수 있습니다.
 

@@ -26,7 +26,7 @@ import type {
   WriteReadinessErrorReport,
   WriteRunnerErrorReport
 } from "./domain.js";
-import { runDoctor, type DoctorReport } from "./doctor.js";
+import { checkCodex, runDoctor, type DoctorCheck, type DoctorReport } from "./doctor.js";
 import { CodexCliExecutor } from "./executors.js";
 import {
   formatExecutionAuditBundle,
@@ -60,7 +60,8 @@ import {
   GitHubCliProvider,
   hasJiraMcpEnvironment,
   JiraCliProvider,
-  JiraMcpProvider
+  JiraMcpProvider,
+  runCommand as runProviderCommand
 } from "./providers.js";
 import { LocalEvidenceReviewer } from "./reviewers.js";
 import { createMockRoleProviders, type RoleProviders } from "./roles.js";
@@ -173,7 +174,7 @@ function printUsage(): void {
   task-loop-orchestrator setup jira [--url url] [--username email] [--api-token token|--personal-token token] [--skip-check]
   task-loop-orchestrator setup gemini [--api-key key] [--model model] [--skip-check]
   task-loop-orchestrator setup openai [--api-key key] [--model model] [--skip-check]
-  task-loop-orchestrator doctor [jira|gemini|openai] [--github none|gh-cli] [--json]
+  task-loop-orchestrator doctor [codex|jira|gemini|openai] [--github none|gh-cli] [--json]
   task-loop-orchestrator run ISSUE-KEY [--note text] [--planner mock|gemini] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence|openai] [--max-iterations n] [--json]
   task-loop-orchestrator run <instruction> [--description text] [--planner mock|gemini] [--permission read|write|maintainer] [--executor mock|codex-cli-dry-run|codex-cli] [--reviewer mock|local-evidence|openai] [--max-iterations n] [--json]
   task-loop-orchestrator status [runId] [--json] [--raw]
@@ -192,6 +193,7 @@ Short alias:
   tlo setup jira
   tlo setup gemini
   tlo setup openai
+  tlo doctor codex
   tlo doctor jira
   tlo doctor gemini
   tlo doctor openai
@@ -379,13 +381,15 @@ function printPlainWriteRunnerError(
 async function doctorCommand(args: ParsedArgs): Promise<void> {
   const rootDir = await resolveTargetRoot();
   const githubMode = stringFlag(args.flags, "github") ? githubFlag(stringFlag(args.flags, "github")) : "none";
+  const codexEnabled = args.flags.codex === true || args.positional.includes("codex");
   const jiraEnabled = args.flags.jira === true || args.positional.includes("jira");
   const geminiEnabled = args.flags.gemini === true || args.positional.includes("gemini");
   const openAIEnabled = args.flags.openai === true || args.positional.includes("openai");
   const config =
-    jiraEnabled || geminiEnabled || openAIEnabled
+    codexEnabled || jiraEnabled || geminiEnabled || openAIEnabled
       ? await loadOrchestratorConfig(rootDir)
           .then(async (loadedConfig) => ({
+            codex: loadedConfig.codex,
             jira: await loadJiraConfigWithLocalEnv(rootDir, loadedConfig.jira),
             gemini: await loadGeminiConfigWithLocalEnv(rootDir, loadedConfig.gemini),
             openai: await loadOpenAIConfigWithLocalEnv(rootDir, loadedConfig.openai)
@@ -394,6 +398,8 @@ async function doctorCommand(args: ParsedArgs): Promise<void> {
       : undefined;
   const report = await runDoctor(rootDir, {
     githubMode,
+    codex: true,
+    codexConfig: config?.codex,
     jira: jiraEnabled,
     jiraConfig: config?.jira,
     gemini: geminiEnabled,
@@ -531,6 +537,7 @@ async function setupCommand(args: ParsedArgs): Promise<void> {
 interface SetupAllReport {
   rootDir: string;
   status: "ready" | "needs_attention";
+  codex: DoctorCheck[];
   jira: JiraSetupReport;
   gemini: GeminiSetupReport;
   openai: OpenAISetupReport;
@@ -538,21 +545,30 @@ interface SetupAllReport {
 
 async function setupAllCommand(args: ParsedArgs): Promise<SetupAllReport> {
   const rootDir = await resolveTargetRoot();
+  const config = await loadOrchestratorConfig(rootDir);
   console.log(`Target repo: ${rootDir}`);
   console.log("");
-  console.log("Step 1/3: Jira");
+  console.log("Step 1/4: Codex CLI");
+  const codex = await checkCodex(rootDir, runProviderCommand, config.codex);
+  printInlineCodexSetupStatus(codex);
+  console.log("");
+  console.log("Step 2/4: Jira");
   const jira = await jiraSetupCommand(args);
   console.log("");
-  console.log("Step 2/3: Gemini");
+  console.log("Step 3/4: Gemini");
   const gemini = await geminiSetupCommand(args);
   console.log("");
-  console.log("Step 3/3: OpenAI");
+  console.log("Step 4/4: OpenAI");
   const openai = await openAISetupCommand(args);
-  const status = jira.status === "ready" && gemini.status === "ready" && openai.status === "ready" ? "ready" : "needs_attention";
+  const status =
+    codex.every((check) => check.status === "pass") && jira.status === "ready" && gemini.status === "ready" && openai.status === "ready"
+      ? "ready"
+      : "needs_attention";
 
   return {
     rootDir,
     status,
+    codex,
     jira,
     gemini,
     openai
@@ -565,6 +581,7 @@ function printSetupAllReport(report: SetupAllReport): void {
   console.log("");
   console.log("Result:");
   console.log(`- Target repo: ${report.rootDir}`);
+  console.log(`- Codex CLI: ${report.codex.every((check) => check.status === "pass") ? "ready" : "needs_attention"}`);
   console.log(`- Jira: ${report.jira.status} (${report.jira.envFile})`);
   console.log(`- Gemini: ${report.gemini.status} (${report.gemini.envFile})`);
   console.log(`- OpenAI: ${report.openai.status} (${report.openai.envFile})`);
@@ -577,9 +594,22 @@ function printSetupAllReport(report: SetupAllReport): void {
   }
 
   console.log("- Check provider setup:");
+  console.log("  tlo doctor codex");
   console.log("  tlo doctor jira");
   console.log("  tlo doctor gemini");
   console.log("  tlo doctor openai");
+}
+
+function printInlineCodexSetupStatus(checks: DoctorCheck[]): void {
+  for (const check of checks) {
+    console.log(`- [${check.status}] ${check.id}: ${check.summary}`);
+  }
+  if (checks.every((check) => check.status === "pass")) {
+    console.log("- No Codex token is needed. tlo reuses your local Codex login.");
+    return;
+  }
+
+  console.log("- Next: run codex login, then tlo doctor codex.");
 }
 
 async function jiraSetupCommand(args: ParsedArgs): Promise<JiraSetupReport> {
@@ -765,7 +795,17 @@ async function runCommand(args: ParsedArgs): Promise<void> {
   const executorMode = stringFlag(args.flags, "executor") ? executorFlag(stringFlag(args.flags, "executor")) : config.executor;
   const reviewerMode = stringFlag(args.flags, "reviewer") ? reviewerFlag(stringFlag(args.flags, "reviewer")) : config.reviewer;
   const permissionMode = stringFlag(args.flags, "permission") ? permissionFlag(stringFlag(args.flags, "permission")) : config.permissionMode;
-  const preflightFailure = preflightRunDependencies(input, plannerMode, geminiConfig, jiraConfig, executorMode, config.codex, reviewerMode, openAIConfig);
+  const preflightFailure = await preflightRunDependencies(
+    rootDir,
+    input,
+    plannerMode,
+    geminiConfig,
+    jiraConfig,
+    executorMode,
+    config.codex,
+    reviewerMode,
+    openAIConfig
+  );
   if (preflightFailure) {
     printRunPreflightFailure(preflightFailure, args.flags.json === true);
     process.exitCode = 1;
@@ -930,7 +970,8 @@ function printPlanPreview(run: LoopRun): void {
   console.log("");
 }
 
-function preflightRunDependencies(
+async function preflightRunDependencies(
+  rootDir: string,
   input: RunInput,
   plannerMode: PlannerMode,
   geminiConfig: Awaited<ReturnType<typeof loadGeminiConfigWithLocalEnv>>,
@@ -939,7 +980,7 @@ function preflightRunDependencies(
   codexConfig: CodexConfig,
   reviewerMode: ReviewerMode,
   openAIConfig: OpenAIConfig
-): RunPreflightFailure | undefined {
+): Promise<RunPreflightFailure | undefined> {
   if (plannerMode === "gemini" && !geminiConfig.apiKey?.trim()) {
     return {
       title: "Run",
@@ -984,6 +1025,35 @@ function preflightRunDependencies(
         provider: "codex"
       }
     };
+  }
+
+  if (executorMode === "codex-cli") {
+    const codexChecks = await checkCodex(rootDir, runProviderCommand, codexConfig);
+    const failingCheck = codexChecks.find((check) => check.status !== "pass");
+    if (failingCheck) {
+      return {
+        title: "Run",
+        reasons: [`Codex CLI Executor is selected, but Codex CLI is not ready: ${failingCheck.summary}`],
+        next: [
+          {
+            description: "Check Codex CLI readiness:",
+            command: "tlo doctor codex"
+          },
+          {
+            description: "Log in to Codex CLI if needed:",
+            command: `${codexConfig.binary || "codex"} login`
+          },
+          {
+            description: "Then run the task again:",
+            command: input.kind === "jira" && input.jiraKey ? `tlo run ${input.jiraKey}` : 'tlo run "task instruction"'
+          }
+        ],
+        json: {
+          errorCode: "codex_setup_required",
+          provider: "codex"
+        }
+      };
+    }
   }
 
   if (reviewerMode === "openai" && !openAIConfig.apiKey?.trim()) {

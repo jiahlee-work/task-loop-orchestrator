@@ -110,7 +110,7 @@ async function main() {
 
     await runStep("post-init doctor", async () => {
       const postInitDoctor = await run(bin, ["doctor", "--json"], { cwd: projectDir });
-      assertDoctorReport(parseJson(postInitDoctor), "pass", "doctor after init should pass", {
+      assertDoctorReport(parseJson(postInitDoctor), ["pass", "warn"], "doctor after init should pass or warn only on optional provider readiness", {
         checks: {
           git_repository: "pass",
           config: "pass",
@@ -888,7 +888,13 @@ function truncate(value, maxLength = 2000) {
 
 function assertDoctorReport(report, expectedStatus, message, expected = {}) {
   assertEnvelope(report, "doctor");
-  assertEqual(report.status, expectedStatus, message);
+  if (Array.isArray(expectedStatus)) {
+    if (!expectedStatus.includes(report.status)) {
+      throw new Error(`${message}: expected one of ${expectedStatus.join(", ")}, got ${report.status}`);
+    }
+  } else {
+    assertEqual(report.status, expectedStatus, message);
+  }
   assertArray(report.checks, "doctor JSON should include checks");
 
   for (const [id, status] of Object.entries(expected.checks ?? {})) {
