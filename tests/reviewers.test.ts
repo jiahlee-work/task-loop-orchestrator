@@ -144,7 +144,7 @@ describe("review evidence and LocalEvidenceReviewer", () => {
     expect(run.events.some((event) => event.kind === "verification_evidence_collected")).toBe(true);
   });
 
-  it("blocks the run with request_changes when executor fails under structured review", async () => {
+  it("fails the run when executor fails under structured review", async () => {
     const root = await tempRoot();
     const store = new FileRunStore(root);
     const roles: RoleProviders = {
@@ -167,8 +167,8 @@ describe("review evidence and LocalEvidenceReviewer", () => {
     const reviewEvent = run.events.find((event) => event.kind === "review_completed");
     const report = reviewEvent?.data?.report as { verdict?: string; evidence?: unknown[] } | undefined;
 
-    expect(run.status).toBe("blocked");
-    expect(run.graph.subtasks[0]?.status).toBe("blocked");
+    expect(run.status).toBe("failed");
+    expect(run.graph.subtasks[0]?.status).toBe("failed");
     expect(report?.verdict).toBe("request_changes");
     expect(report?.evidence?.length).toBeGreaterThan(0);
   });

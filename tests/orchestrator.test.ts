@@ -216,6 +216,149 @@ describe("RootOrchestrator", () => {
     expect(executorAssignedTitle).toBe("Implement only assigned contract task");
   });
 
+  it("reschedules a subtask when reviewer returns a reschedule verdict", async () => {
+    const root = await tempRoot();
+    const store = new FileRunStore(root);
+    let reviewCount = 0;
+    let executionCount = 0;
+    const roles: RoleProviders = {
+      planner: new MockPlanner(),
+      executor: {
+        async execute(input): Promise<RoleReport> {
+          executionCount += 1;
+          return {
+            role: "executor",
+            status: "ok",
+            subtaskId: input.subtask.id,
+            summary: `Execution attempt ${executionCount}.`
+          };
+        }
+      },
+      reviewer: {
+        async review(input): Promise<RoleReport> {
+          reviewCount += 1;
+          if (reviewCount === 1) {
+            return {
+              role: "reviewer",
+              status: "blocked",
+              subtaskId: input.subtask.id,
+              summary: "Retry with preserved root context.",
+              data: {
+                verdict: "reschedule",
+                evidence: [],
+                readOnly: true
+              }
+            };
+          }
+
+          return {
+            role: "reviewer",
+            status: "ok",
+            subtaskId: input.subtask.id,
+            summary: "Accepted retry.",
+            data: {
+              verdict: "accept",
+              evidence: [],
+              readOnly: true
+            }
+          };
+        }
+      }
+    };
+    const orchestrator = new RootOrchestrator({ store, roles });
+
+    const run = await orchestrator.runTask(createTaskSpec({ title: "Retry reviewer decision" }), { maxIterations: 2 });
+
+    expect(run.status).toBe("completed");
+    expect(executionCount).toBe(2);
+    expect(run.graph.subtasks[0]?.status).toBe("completed");
+    expect(
+      run.events.some(
+        (event) =>
+          event.kind === "graph_updated" &&
+          event.message.includes("Rescheduled") &&
+          (event.data?.rootDecision as { action?: string } | undefined)?.action === "reschedule"
+      )
+    ).toBe(true);
+  });
+
+  it("blocks for owner decisions instead of marking the task complete", async () => {
+    const root = await tempRoot();
+    const store = new FileRunStore(root);
+    const roles: RoleProviders = {
+      planner: new MockPlanner(),
+      executor: new MockExecutor(),
+      reviewer: {
+        async review(input): Promise<RoleReport> {
+          return {
+            role: "reviewer",
+            status: "blocked",
+            subtaskId: input.subtask.id,
+            summary: "Need owner to choose the UI boundary.",
+            data: {
+              verdict: "owner_decision",
+              evidence: [],
+              readOnly: true
+            }
+          };
+        }
+      }
+    };
+    const orchestrator = new RootOrchestrator({ store, roles });
+
+    const run = await orchestrator.runTask(createTaskSpec({ title: "Owner decision path" }));
+
+    expect(run.status).toBe("blocked");
+    expect(run.graph.subtasks[0]).toMatchObject({
+      status: "blocked",
+      result: "Owner decision required: Need owner to choose the UI boundary."
+    });
+    expect(run.events.at(-1)?.kind).toBe("run_blocked");
+  });
+
+  it("fails the run when executor or reviewer reports a failed role result", async () => {
+    const root = await tempRoot();
+    const store = new FileRunStore(root);
+    const roles: RoleProviders = {
+      planner: new MockPlanner(),
+      executor: {
+        async execute(input): Promise<RoleReport> {
+          return {
+            role: "executor",
+            status: "failed",
+            subtaskId: input.subtask.id,
+            summary: "Executor crashed before producing a reviewable result."
+          };
+        }
+      },
+      reviewer: {
+        async review(input): Promise<RoleReport> {
+          return {
+            role: "reviewer",
+            status: "blocked",
+            subtaskId: input.subtask.id,
+            summary: "Executor failure is not reviewable.",
+            data: {
+              verdict: "request_changes",
+              evidence: [],
+              readOnly: true
+            }
+          };
+        }
+      }
+    };
+    const orchestrator = new RootOrchestrator({ store, roles });
+
+    const run = await orchestrator.runTask(createTaskSpec({ title: "Failed execution path" }));
+
+    expect(run.status).toBe("failed");
+    expect(run.graph.subtasks[0]).toMatchObject({
+      status: "failed",
+      result: "Executor crashed before producing a reviewable result."
+    });
+    expect(run.events.at(-1)?.kind).toBe("run_failed");
+  });
+
   it("treats resume maxIterations as additional iterations", async () => {
     const root = await tempRoot();
     const store = new FileRunStore(root);

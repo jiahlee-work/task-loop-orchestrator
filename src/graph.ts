@@ -148,6 +148,65 @@ export function blockSubtask(graph: Graph, subtaskId: string, reason: string): G
   };
 }
 
+export function failSubtask(graph: Graph, subtaskId: string, reason: string): Graph {
+  const now = nowIso();
+  let found = false;
+  const subtasks = graph.subtasks.map((subtask) => {
+    if (subtask.id !== subtaskId) {
+      return subtask;
+    }
+
+    found = true;
+    return {
+      ...subtask,
+      status: "failed" as const,
+      result: reason,
+      updatedAt: now
+    };
+  });
+
+  if (!found) {
+    throw new Error(`Subtask ${subtaskId} was not found.`);
+  }
+
+  return {
+    ...graph,
+    subtasks,
+    activeWorker: graph.activeWorker?.subtaskId === subtaskId ? undefined : graph.activeWorker,
+    nextCandidateId: undefined
+  };
+}
+
+export function rescheduleSubtask(graph: Graph, subtaskId: string, reason: string): Graph {
+  const now = nowIso();
+  let found = false;
+  const subtasks = graph.subtasks.map((subtask) => {
+    if (subtask.id !== subtaskId) {
+      return subtask;
+    }
+
+    found = true;
+    return {
+      ...subtask,
+      status: "pending" as const,
+      result: reason,
+      verification: undefined,
+      updatedAt: now
+    };
+  });
+
+  if (!found) {
+    throw new Error(`Subtask ${subtaskId} was not found.`);
+  }
+
+  return {
+    ...graph,
+    subtasks,
+    activeWorker: graph.activeWorker?.subtaskId === subtaskId ? undefined : graph.activeWorker,
+    nextCandidateId: subtaskId
+  };
+}
+
 export function isGraphComplete(graph: Graph): boolean {
   return graph.subtasks.length > 0 && graph.subtasks.every((subtask) => subtask.status === "completed");
 }

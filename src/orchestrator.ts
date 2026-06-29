@@ -1,15 +1,17 @@
 import { appendEvent, appendStatusEvent } from "./audit.js";
 import { appendContextDelta, createContext } from "./context.js";
-import type { ContextItem, LoopRun, RoleReport, Subtask, TaskSpec } from "./domain.js";
+import type { ContextItem, LoopRun, ReviewVerdict, RoleReport, Subtask, TaskSpec } from "./domain.js";
 import { createExecutorTaskSpec } from "./executors.js";
 import {
   addSubtasks,
   blockSubtask,
   completeSubtask,
   createEmptyGraph,
+  failSubtask,
   hasBlockedWork,
   isGraphComplete,
   markSubtaskActive,
+  rescheduleSubtask,
   selectNextSubtask
 } from "./graph.js";
 import { createId, nowIso } from "./ids.js";
@@ -280,7 +282,9 @@ export class RootOrchestrator {
       }
     });
 
-    if (executorReport.status === "ok" && reviewerReport.status === "ok") {
+    const rootDecision = decideRootReviewOutcome(executorReport, reviewerReport);
+
+    if (rootDecision.action === "complete") {
       nextRun = appendEvent(
         {
           ...nextRun,
@@ -291,7 +295,45 @@ export class RootOrchestrator {
           kind: "graph_updated",
           message: `Marked ${subtaskId} completed.`,
           role: "root",
-          subtaskId
+          subtaskId,
+          data: {
+            rootDecision
+          }
+        }
+      );
+    } else if (rootDecision.action === "reschedule") {
+      nextRun = appendEvent(
+        {
+          ...nextRun,
+          graph: rescheduleSubtask(nextRun.graph, subtaskId, rootDecision.reason),
+          updatedAt: nowIso()
+        },
+        {
+          kind: "graph_updated",
+          message: `Rescheduled ${subtaskId}.`,
+          role: "root",
+          subtaskId,
+          data: {
+            rootDecision
+          }
+        }
+      );
+    } else if (rootDecision.action === "fail") {
+      nextRun = appendEvent(
+        {
+          ...nextRun,
+          status: "failed",
+          graph: failSubtask(nextRun.graph, subtaskId, rootDecision.reason),
+          updatedAt: nowIso()
+        },
+        {
+          kind: "graph_updated",
+          message: `Failed ${subtaskId}.`,
+          role: "root",
+          subtaskId,
+          data: {
+            rootDecision
+          }
         }
       );
     } else {
@@ -299,14 +341,17 @@ export class RootOrchestrator {
         {
           ...nextRun,
           status: "blocked",
-          graph: blockSubtask(nextRun.graph, subtaskId, reviewerReport.summary),
+          graph: blockSubtask(nextRun.graph, subtaskId, rootDecision.reason),
           updatedAt: nowIso()
         },
         {
           kind: "graph_updated",
           message: `Blocked ${subtaskId}.`,
           role: "root",
-          subtaskId
+          subtaskId,
+          data: {
+            rootDecision
+          }
         }
       );
     }
@@ -463,4 +508,62 @@ export function createTaskSpec(input: {
     acceptanceCriteria: input.acceptanceCriteria ?? ["Mock closed-loop run completes at least one bounded subtask."],
     permissionMode: input.permissionMode ?? "write"
   };
+}
+
+type RootReviewAction = "complete" | "reschedule" | "block" | "fail";
+
+interface RootReviewDecision {
+  action: RootReviewAction;
+  verdict?: ReviewVerdict;
+  reason: string;
+}
+
+function decideRootReviewOutcome(executorReport: RoleReport, reviewerReport: RoleReport): RootReviewDecision {
+  if (executorReport.status === "failed" || reviewerReport.status === "failed") {
+    return {
+      action: "fail",
+      verdict: readReviewVerdict(reviewerReport),
+      reason: reviewerReport.status === "failed" ? reviewerReport.summary : executorReport.summary
+    };
+  }
+
+  const verdict = readReviewVerdict(reviewerReport);
+  if (executorReport.status === "ok" && reviewerReport.status === "ok" && (verdict === "accept" || !verdict)) {
+    return {
+      action: "complete",
+      verdict: verdict ?? "accept",
+      reason: reviewerReport.summary
+    };
+  }
+
+  if (verdict === "reschedule") {
+    return {
+      action: "reschedule",
+      verdict,
+      reason: reviewerReport.summary
+    };
+  }
+
+  if (verdict === "owner_decision") {
+    return {
+      action: "block",
+      verdict,
+      reason: `Owner decision required: ${reviewerReport.summary}`
+    };
+  }
+
+  return {
+    action: "block",
+    verdict: verdict ?? "request_changes",
+    reason: reviewerReport.summary
+  };
+}
+
+function readReviewVerdict(report: RoleReport): ReviewVerdict | undefined {
+  const verdict = report.data?.verdict;
+  return isReviewVerdict(verdict) ? verdict : undefined;
+}
+
+function isReviewVerdict(value: unknown): value is ReviewVerdict {
+  return value === "accept" || value === "request_changes" || value === "reschedule" || value === "owner_decision";
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Graph, Subtask } from "../src/domain.js";
-import { completeSubtask, markSubtaskActive, selectNextSubtask } from "../src/graph.js";
+import { completeSubtask, failSubtask, markSubtaskActive, rescheduleSubtask, selectNextSubtask } from "../src/graph.js";
 
 function subtask(id: string, dependsOn: string[] = []): Subtask {
   return {
@@ -46,5 +46,30 @@ describe("graph state transitions", () => {
     };
 
     expect(() => completeSubtask(graph, "a", "done")).toThrow("Cannot complete subtask a from pending.");
+  });
+
+  it("can reschedule or fail an active subtask from root review decisions", () => {
+    const graph: Graph = {
+      subtasks: [subtask("a")],
+      conflicts: []
+    };
+    const active = markSubtaskActive(graph, "a", "executor");
+
+    const rescheduled = rescheduleSubtask(active, "a", "Reviewer requested another attempt.");
+    expect(rescheduled.subtasks[0]).toMatchObject({
+      id: "a",
+      status: "pending",
+      result: "Reviewer requested another attempt."
+    });
+    expect(rescheduled.activeWorker).toBeUndefined();
+    expect(rescheduled.nextCandidateId).toBe("a");
+
+    const failed = failSubtask(active, "a", "Executor failed irrecoverably.");
+    expect(failed.subtasks[0]).toMatchObject({
+      id: "a",
+      status: "failed",
+      result: "Executor failed irrecoverably."
+    });
+    expect(failed.activeWorker).toBeUndefined();
   });
 });
