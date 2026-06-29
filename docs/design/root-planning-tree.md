@@ -1,6 +1,6 @@
 # Root Planning Tree Model
 
-Status: design draft. This document defines the intended planning model for the real Gemini Planner, Codex Executor, and OpenAI Reviewer loop. It does not mean the full tree executor is already implemented.
+Status: design draft with the initial run directory artifact storage implemented. This document defines the intended planning model for the real Gemini Planner, Codex Executor, and OpenAI Reviewer loop. The current storage layer writes `root-contract.json`, `task-tree.json`, `state.json`, and `summary.md`; it does not mean Gemini already produces the final root contract or that the full tree executor is implemented.
 
 ## 왜 필요한가
 
@@ -138,4 +138,3 @@ Root는 각 하위 작업이 단순히 완료됐는지만 보지 않는다. 다�
 5. Codex Executor에는 항상 root contract와 해당 task만 전달한다.
 6. OpenAI Reviewer가 diff, test evidence, acceptance criteria, context guard를 함께 검토하게 한다.
 7. Root가 Reviewer 결과를 받아 branch 완료, 재실행, 실패, 사용자 확인 필요 상태를 결정한다.
-

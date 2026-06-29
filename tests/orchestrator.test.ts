@@ -52,10 +52,37 @@ describe("RootOrchestrator", () => {
       ])
     );
 
-    const persisted = JSON.parse(await readFile(store.pathForRun(run.id), "utf8"));
+    const persisted = JSON.parse(await readFile(store.pathForRunSnapshot(run.id), "utf8"));
+    const rootContract = JSON.parse(await readFile(store.pathForRootContract(run.id), "utf8"));
+    const taskTree = JSON.parse(await readFile(store.pathForTaskTree(run.id), "utf8"));
+    const state = JSON.parse(await readFile(store.pathForRunState(run.id), "utf8"));
+    const summary = await readFile(store.pathForRunSummary(run.id), "utf8");
+
     expect(persisted.id).toBe(run.id);
     expect(persisted.status).toBe("completed");
     expect(persisted.events.length).toBeGreaterThan(0);
+    expect(rootContract).toMatchObject({
+      schemaVersion: 1,
+      runId: run.id,
+      goal: "Create MVP scaffold",
+      acceptanceCriteria: ["Mock closed-loop run completes at least one bounded subtask."]
+    });
+    expect(taskTree).toMatchObject({
+      schemaVersion: 1,
+      runId: run.id,
+      tasks: [{ status: "completed" }]
+    });
+    expect(state).toMatchObject({
+      schemaVersion: 1,
+      runId: run.id,
+      status: "completed",
+      counts: {
+        completed: 1,
+        total: 1
+      }
+    });
+    expect(summary).toContain(`# Run ${run.id}`);
+    expect(summary).toContain("Task: Create MVP scaffold");
   });
 
   it("blocks read-mode runs when execution would require write permission", async () => {
@@ -181,7 +208,7 @@ describe("RootOrchestrator", () => {
     const runId = "legacy-run";
     await mkdir(join(root, ".orchestrator", "runs"), { recursive: true });
     await writeFile(
-      store.pathForRun(runId),
+      join(root, ".orchestrator", "runs", `${runId}.json`),
       JSON.stringify({
         id: runId,
         spec: createTaskSpec({ id: "legacy-task", title: "Legacy" }),
@@ -206,5 +233,25 @@ describe("RootOrchestrator", () => {
     const loaded = await store.load(runId);
 
     expect(loaded.events).toEqual([]);
+  });
+
+  it("deduplicates legacy run files when a run directory exists for the same id", async () => {
+    const root = await tempRoot();
+    const store = new FileRunStore(root);
+    const orchestrator = new RootOrchestrator({ store });
+    const run = await orchestrator.runTask(createTaskSpec({ title: "Deduplicate run state" }));
+
+    await writeFile(
+      join(root, ".orchestrator", "runs", `${run.id}.json`),
+      JSON.stringify({
+        ...run,
+        updatedAt: "2026-06-22T00:00:00.000Z"
+      }),
+      "utf8"
+    );
+
+    const runs = await store.list();
+
+    expect(runs.filter((candidate) => candidate.id === run.id)).toHaveLength(1);
   });
 });

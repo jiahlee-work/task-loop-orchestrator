@@ -42,7 +42,7 @@ export async function buildCliJsonSamples(input: BuildCliJsonSamplesInput): Prom
   const executionAuditBundle = summarizeExecutionAuditBundle(executionIntent, executionTraces);
   const writeReadiness = summarizeWriteExecutionReadiness(executionAuditBundle, passingPreflight());
   const runReport = createRunCliReport(run, {
-    pathForRun: (runId) => join(run.context.runId, ".orchestrator", "runs", `${runId}.json`)
+    pathForRun: (runId) => join(run.context.runId, ".orchestrator", "runs", runId)
   });
 
   return [

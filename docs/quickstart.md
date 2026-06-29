@@ -90,7 +90,7 @@ run_id="$(printf '%s' "$run_json" | node -e 'let input=""; process.stdin.on("dat
 tlo status "$run_id" --json
 ```
 
-`run --json`이 반환한 `runId`를 `status <runId>`와 `resume <runId>`에 넘기는 것이 기본 패턴입니다. 실행 기록은 대상 프로젝트의 `.orchestrator/runs/<runId>.json`에 저장됩니다.
+`run --json`이 반환한 `runId`를 `status <runId>`와 `resume <runId>`에 넘기는 것이 기본 패턴입니다. 실행 기록은 대상 프로젝트의 `.orchestrator/runs/<runId>/` 디렉터리에 저장됩니다. 이 디렉터리에는 root 계약, 작업 트리, 현재 상태, 사람이 읽는 요약이 나뉘어 저장됩니다.
 
 `init`은 다시 실행해도 기존 `orchestrator.config.json`을 덮어쓰지 않습니다. `.orchestrator/`가 `.gitignore`에 빠져 있으면 추가하고, 이미 있으면 그대로 둡니다.
 

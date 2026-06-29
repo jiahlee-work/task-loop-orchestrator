@@ -65,7 +65,7 @@ The first command-specific schema extension covers the stable run report payload
 - `resume <runId> --json`
 - `status [runId] --json`
 
-Successful run responses use the stable `runReportPayload`, which fixes the summary fields automation commonly reads: `runId`, `status`, `iterations`, `permissionMode`, `task`, `counts`, `savedPath`, and `run`. `resume <runId> --json` can also return `runLookupErrorPayload` with `status: "not_found"`, `runId`, `run: null`, and `message` when the requested run file does not exist; the `resume` command branch is represented by `runResponsePayload`. Additional fields remain allowed for forward-compatible payload expansion.
+Successful run responses use the stable `runReportPayload`, which fixes the summary fields automation commonly reads: `runId`, `status`, `iterations`, `permissionMode`, `task`, `counts`, `savedPath`, and `run`. `savedPath` points to the local `.orchestrator/runs/<runId>/` run directory. `resume <runId> --json` can also return `runLookupErrorPayload` with `status: "not_found"`, `runId`, `run: null`, and `message` when the requested run does not exist; the `resume` command branch is represented by `runResponsePayload`. Additional fields remain allowed for forward-compatible payload expansion.
 
 `status --json --raw` is intentionally excluded from the stricter run report payload branch because it returns the stored raw `LoopRun` object rather than the stable summary report.
 

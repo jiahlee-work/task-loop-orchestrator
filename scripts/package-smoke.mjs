@@ -151,6 +151,7 @@ async function main() {
         runIdIncludes: "run_",
         taskTitle: "Smoke task"
       });
+      await assertRunDirectoryArtifacts(loopReport, "Smoke task");
 
       const statusJson = await run(bin, ["status", "--json"], { cwd: projectDir });
       const latestStatusReport = parseJson(statusJson);
@@ -222,6 +223,7 @@ async function main() {
         runIdIncludes: "run_",
         taskTitle: "ABC-123: Package smoke Jira task"
       });
+      await assertRunDirectoryArtifacts(jiraRunReport, "ABC-123: Package smoke Jira task");
       assertIncludes(
         jiraRunReport.run.spec.description,
         "Jira: https://jira.example.com/browse/ABC-123",
@@ -970,6 +972,28 @@ function assertRunReport(report, command, expected) {
   assertObject(report.task, `${command} JSON should include task summary`);
   assertObject(report.run, `${command} JSON should include raw run`);
   assertIncludes(report.savedPath, report.runId, `${command} JSON should include saved path`);
+}
+
+async function assertRunDirectoryArtifacts(report, expectedTaskTitle) {
+  const entries = await readdir(report.savedPath);
+  for (const expectedEntry of ["root-contract.json", "task-tree.json", "state.json", "summary.md", "loop-run.json"]) {
+    if (!entries.includes(expectedEntry)) {
+      throw new Error(`run directory should include ${expectedEntry}`);
+    }
+  }
+
+  const rootContract = parseJson({ stdout: await readFile(join(report.savedPath, "root-contract.json"), "utf8") });
+  const taskTree = parseJson({ stdout: await readFile(join(report.savedPath, "task-tree.json"), "utf8") });
+  const state = parseJson({ stdout: await readFile(join(report.savedPath, "state.json"), "utf8") });
+  const summary = await readFile(join(report.savedPath, "summary.md"), "utf8");
+
+  assertEqual(rootContract.runId, report.runId, "root contract should belong to the run");
+  assertEqual(rootContract.goal, expectedTaskTitle, "root contract should keep the task goal");
+  assertEqual(taskTree.runId, report.runId, "task tree should belong to the run");
+  assertArray(taskTree.tasks, "task tree should include tasks");
+  assertEqual(state.runId, report.runId, "state should belong to the run");
+  assertEqual(state.status, report.status, "state should match run status");
+  assertIncludes(summary, expectedTaskTitle, "summary should include the task title");
 }
 
 function assertRunPreflightFailureReport(report, expected) {

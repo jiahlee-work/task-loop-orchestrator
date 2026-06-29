@@ -297,7 +297,8 @@ describe("release readiness documentation", () => {
     expectContainsAll(design, [
       "# Root Planning Tree Model",
       "Status: design draft",
-      "does not mean the full tree executor is already implemented",
+      "initial run directory artifact storage implemented",
+      "it does not mean Gemini already produces the final root contract or that the full tree executor is implemented",
       "LLM의 대화 기억에 의존하지 않는다",
       "root가 만든 계약 문서를 파일로 고정한다",
       "tlo run OUC-10",
@@ -910,7 +911,7 @@ describe("command reference documentation", () => {
       "JSON: not supported",
       "read-only",
       "writes local bootstrap files only",
-      "writes run state under `.orchestrator/runs/`",
+      "writes run state under `.orchestrator/runs/<runId>/`",
       "saves checkpoint JSON under `.orchestrator/checkpoints/`",
       "writes an approval record under `.orchestrator/approvals/`",
       "reads `.orchestrator/execution-intents/` and `.orchestrator/execution-traces/`",
@@ -999,7 +1000,15 @@ describe("command reference documentation", () => {
     ]);
 
     expectSectionContains(sections, "init", ["writes local bootstrap files only", "orchestrator.config.json", ".gitignore"]);
-    expectSectionContains(sections, "run", ["writes run state", ".orchestrator/runs/", "do not call external write-side systems"]);
+    expectSectionContains(sections, "run", [
+      "writes run state",
+      ".orchestrator/runs/<runId>/",
+      "root-contract.json",
+      "task-tree.json",
+      "state.json",
+      "summary.md",
+      "do not call external write-side systems"
+    ]);
     expectSectionContains(sections, "resume", ["updates local run state"]);
     expectSectionContains(sections, "checkpoint", ["saves checkpoint JSON", ".orchestrator/checkpoints/", "appends a run audit event"]);
     expectSectionContains(sections, "approve-pr", ["writes an approval record", ".orchestrator/approvals/", "does not create or modify"]);

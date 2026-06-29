@@ -14,6 +14,18 @@ import {
   summarizeExecutionAuditBundle,
   summarizeExecutionAuditBundles
 } from "./execution-intents.js";
+import {
+  createRootContractArtifact,
+  createRunStateArtifact,
+  createRunSummaryMarkdown,
+  createTaskTreeArtifact
+} from "./run-state.js";
+
+const runSnapshotFileName = "loop-run.json";
+const rootContractFileName = "root-contract.json";
+const taskTreeFileName = "task-tree.json";
+const runStateFileName = "state.json";
+const runSummaryFileName = "summary.md";
 
 export class FileRunStore {
   private readonly runsDir: string;
@@ -31,28 +43,37 @@ export class FileRunStore {
   }
 
   async save(run: LoopRun): Promise<void> {
-    await mkdir(this.runsDir, { recursive: true });
-    await writeFile(this.filePath(run.id), `${JSON.stringify(run, null, 2)}\n`, "utf8");
+    const runDir = this.runDirectoryPath(run.id);
+    await mkdir(runDir, { recursive: true });
+    await Promise.all([
+      writeJson(this.runSnapshotFilePath(run.id), run),
+      writeJson(this.rootContractFilePath(run.id), createRootContractArtifact(run)),
+      writeJson(this.taskTreeFilePath(run.id), createTaskTreeArtifact(run)),
+      writeJson(this.runStateFilePath(run.id), createRunStateArtifact(run)),
+      writeFile(this.runSummaryFilePath(run.id), createRunSummaryMarkdown(run), "utf8")
+    ]);
   }
 
   async load(runId: string): Promise<LoopRun> {
-    const content = await readFile(this.filePath(runId), "utf8");
+    const content = await readRunFile(this.runSnapshotFilePath(runId), this.legacyRunFilePath(runId));
     return migrateRun(JSON.parse(content) as Partial<LoopRun>);
   }
 
   async list(): Promise<LoopRun[]> {
     await mkdir(this.runsDir, { recursive: true });
-    const entries = await readdir(this.runsDir);
+    const entries = await readdir(this.runsDir, { withFileTypes: true });
     const runs = await Promise.all(
       entries
-        .filter((entry) => entry.endsWith(".json"))
+        .filter((entry) => entry.isDirectory() || (entry.isFile() && entry.name.endsWith(".json")))
         .map(async (entry) => {
-          const content = await readFile(join(this.runsDir, entry), "utf8");
+          const content = entry.isDirectory()
+            ? await readFile(join(this.runsDir, entry.name, runSnapshotFileName), "utf8")
+            : await readFile(join(this.runsDir, entry.name), "utf8");
           return migrateRun(JSON.parse(content) as Partial<LoopRun>);
         })
     );
 
-    return runs.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    return uniqueRunsById(runs.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)));
   }
 
   async latest(): Promise<LoopRun | undefined> {
@@ -201,11 +222,55 @@ export class FileRunStore {
   }
 
   pathForRun(runId: string): string {
-    return this.filePath(runId);
+    return this.runDirectoryPath(runId);
   }
 
-  private filePath(runId: string): string {
+  pathForRunSnapshot(runId: string): string {
+    return this.runSnapshotFilePath(runId);
+  }
+
+  pathForRootContract(runId: string): string {
+    return this.rootContractFilePath(runId);
+  }
+
+  pathForTaskTree(runId: string): string {
+    return this.taskTreeFilePath(runId);
+  }
+
+  pathForRunState(runId: string): string {
+    return this.runStateFilePath(runId);
+  }
+
+  pathForRunSummary(runId: string): string {
+    return this.runSummaryFilePath(runId);
+  }
+
+  private runDirectoryPath(runId: string): string {
+    return join(this.runsDir, runId);
+  }
+
+  private runSnapshotFilePath(runId: string): string {
+    return join(this.runDirectoryPath(runId), runSnapshotFileName);
+  }
+
+  private legacyRunFilePath(runId: string): string {
     return join(this.runsDir, `${runId}.json`);
+  }
+
+  private rootContractFilePath(runId: string): string {
+    return join(this.runDirectoryPath(runId), rootContractFileName);
+  }
+
+  private taskTreeFilePath(runId: string): string {
+    return join(this.runDirectoryPath(runId), taskTreeFileName);
+  }
+
+  private runStateFilePath(runId: string): string {
+    return join(this.runDirectoryPath(runId), runStateFileName);
+  }
+
+  private runSummaryFilePath(runId: string): string {
+    return join(this.runDirectoryPath(runId), runSummaryFileName);
   }
 
   private checkpointFilePath(checkpointId: string): string {
@@ -222,6 +287,21 @@ export class FileRunStore {
 
   private executionTraceFilePath(traceId: string): string {
     return join(this.executionTracesDir, `${traceId}.json`);
+  }
+}
+
+async function writeJson(path: string, value: unknown): Promise<void> {
+  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+async function readRunFile(primaryPath: string, legacyPath: string): Promise<string> {
+  try {
+    return await readFile(primaryPath, "utf8");
+  } catch (error) {
+    if (!isMissingFileError(error) && !isNotDirectoryError(error)) {
+      throw error;
+    }
+    return readFile(legacyPath, "utf8");
   }
 }
 
@@ -245,9 +325,32 @@ function isMissingFileError(error: unknown): error is { code: "ENOENT" } {
   );
 }
 
+function isNotDirectoryError(error: unknown): error is { code: "ENOTDIR" } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "ENOTDIR"
+  );
+}
+
 export function migrateRun(run: Partial<LoopRun>): LoopRun {
   return {
     ...run,
     events: run.events ?? []
   } as LoopRun;
+}
+
+function uniqueRunsById(runs: LoopRun[]): LoopRun[] {
+  const seen = new Set<string>();
+  const result: LoopRun[] = [];
+  for (const run of runs) {
+    if (seen.has(run.id)) {
+      continue;
+    }
+    seen.add(run.id);
+    result.push(run);
+  }
+
+  return result;
 }

@@ -8,7 +8,7 @@ describe("run CLI report", () => {
   it("creates a stable automation-friendly run summary", () => {
     const run = loopRun();
     const report = createRunCliReport(run, {
-      pathForRun: (runId) => `/tmp/project/.orchestrator/runs/${runId}.json`
+      pathForRun: (runId) => `/tmp/project/.orchestrator/runs/${runId}`
     });
 
     expect(report).toMatchObject({
@@ -30,7 +30,7 @@ describe("run CLI report", () => {
         failed: 0,
         total: 3
       },
-      savedPath: "/tmp/project/.orchestrator/runs/run-1.json"
+      savedPath: "/tmp/project/.orchestrator/runs/run-1"
     });
     expect(report.run).toBe(run);
   });
