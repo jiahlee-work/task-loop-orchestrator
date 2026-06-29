@@ -10,12 +10,14 @@ import type {
   TaskSpec
 } from "./domain.js";
 import type { RepoProvider } from "./providers.js";
+import type { RootContractArtifact } from "./run-state.js";
 import type { ReviewerProvider, ReviewerProviderInput } from "./roles.js";
 
 export interface ReviewEvidenceCollectorInput {
   spec: TaskSpec;
   context: Context;
   graph: Graph;
+  rootContract?: RootContractArtifact;
   subtask: Subtask;
   executorReport: RoleReport;
   repo: RepoProvider;
@@ -69,15 +71,30 @@ export async function collectReviewEvidence(input: ReviewEvidenceCollectorInput)
     {
       kind: "acceptance_criteria_coverage",
       summary:
-        input.spec.acceptanceCriteria.length > 0
-          ? `${input.spec.acceptanceCriteria.length} acceptance criteria available for review.`
+        acceptanceCriteria(input).length > 0
+          ? `${acceptanceCriteria(input).length} acceptance criteria available for review.`
           : "No acceptance criteria available.",
       data: {
-        criteria: input.spec.acceptanceCriteria,
-        covered: input.spec.acceptanceCriteria.map((criterion) => ({
+        criteria: acceptanceCriteria(input),
+        covered: acceptanceCriteria(input).map((criterion) => ({
           criterion,
           covered: false,
           reason: "Automated evidence coverage is not implemented yet."
+        }))
+      }
+    },
+    {
+      kind: "context_guard_coverage",
+      summary:
+        contextGuard(input).length > 0
+          ? `${contextGuard(input).length} context guard item(s) available for review.`
+          : "No context guard items available.",
+      data: {
+        contextGuard: contextGuard(input),
+        checked: contextGuard(input).map((item) => ({
+          item,
+          passed: false,
+          reason: "Automated context guard checking is not implemented yet."
         }))
       }
     }
@@ -131,7 +148,7 @@ function decideVerdict(input: ReviewerProviderInput, evidence: ReviewEvidence[])
     return "request_changes";
   }
 
-  if (input.spec.acceptanceCriteria.length === 0) {
+  if (acceptanceCriteria(input).length === 0) {
     return "owner_decision";
   }
 
@@ -169,4 +186,12 @@ function isLimitedEvidence(evidence: ReviewEvidence[]): boolean {
 function extractExecutorCommand(report: RoleReport): string[] | undefined {
   const command = report.data?.command;
   return Array.isArray(command) && command.every((item) => typeof item === "string") ? command : undefined;
+}
+
+function acceptanceCriteria(input: Pick<ReviewEvidenceCollectorInput, "spec" | "rootContract">): string[] {
+  return input.rootContract?.acceptanceCriteria.length ? input.rootContract.acceptanceCriteria : input.spec.acceptanceCriteria;
+}
+
+function contextGuard(input: Pick<ReviewEvidenceCollectorInput, "rootContract">): string[] {
+  return input.rootContract?.contextGuard ?? [];
 }

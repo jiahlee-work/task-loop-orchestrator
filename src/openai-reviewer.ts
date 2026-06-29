@@ -46,6 +46,13 @@ export class OpenAIReviewer implements ReviewerProvider {
         readOnly: true,
         provider: "openai",
         model: this.config.model,
+        rootContract: input.rootContract
+          ? {
+              goal: input.rootContract.goal,
+              acceptanceCriteria: input.rootContract.acceptanceCriteria,
+              contextGuard: input.rootContract.contextGuard
+            }
+          : undefined,
         reasons: response.reasons ?? []
       };
 
@@ -131,22 +138,51 @@ function reviewPrompt(input: ReviewerProviderInput): string {
     "",
     "Rules:",
     "- Use accept only when the executor succeeded and evidence supports the acceptance criteria.",
-    "- Use request_changes when the executor failed, evidence is missing, or the diff/test evidence is insufficient.",
+    "- Use accept only when the executor succeeded, diff evidence exists, test evidence is sufficient, acceptance criteria are satisfied, and context guard items are not violated.",
+    "- Use request_changes when the executor failed, evidence is missing, diff/test evidence is insufficient, or context guard alignment is unclear.",
+    "- Use owner_decision when the root contract or task lacks enough information for a safe review decision.",
     "- Do not mutate files or propose shell commands.",
     "",
-    `Task: ${input.spec.title}`,
-    input.spec.description ? `Task description:\n${input.spec.description}` : "Task description: none",
-    `Acceptance criteria:\n${input.spec.acceptanceCriteria.map((item) => `- ${item}`).join("\n") || "- none"}`,
+    "Root contract:",
+    input.rootContract ? formatRootContract(input.rootContract) : "Root contract: not provided",
     `Subtask: ${input.subtask.title}`,
     input.subtask.description ? `Subtask description:\n${input.subtask.description}` : "Subtask description: none",
     `Executor status: ${input.executorReport.status}`,
     `Executor summary: ${input.executorReport.summary}`,
-    `Evidence:\n${(input.evidence ?? []).map(formatEvidence).join("\n") || "- none"}`
+    `Diff evidence:\n${formatEvidenceByKind(input.evidence ?? [], "diff_stat")}`,
+    `Test evidence:\n${formatEvidenceByKind(input.evidence ?? [], "test_result_placeholder")}`,
+    `Acceptance criteria evidence:\n${formatEvidenceByKind(input.evidence ?? [], "acceptance_criteria_coverage")}`,
+    `Context guard evidence:\n${formatEvidenceByKind(input.evidence ?? [], "context_guard_coverage")}`,
+    `All evidence:\n${(input.evidence ?? []).map(formatEvidence).join("\n") || "- none"}`
   ].join("\n");
 }
 
 function formatEvidence(item: ReviewEvidence): string {
   return `- ${item.kind}: ${item.summary}`;
+}
+
+function formatEvidenceByKind(items: ReviewEvidence[], kind: ReviewEvidence["kind"]): string {
+  const matches = items.filter((item) => item.kind === kind);
+  return matches.length > 0 ? matches.map(formatEvidence).join("\n") : "- none";
+}
+
+function formatRootContract(contract: NonNullable<ReviewerProviderInput["rootContract"]>): string {
+  return [
+    `Goal: ${contract.goal}`,
+    contract.description ? `Description: ${contract.description}` : undefined,
+    `Acceptance criteria:\n${listOrNone(contract.acceptanceCriteria)}`,
+    `Context guard:\n${listOrNone(contract.contextGuard)}`,
+    `Non-goals:\n${listOrNone(contract.nonGoals)}`,
+    `Must follow:\n${listOrNone(contract.mustFollow)}`,
+    `Repo constraints:\n${listOrNone(contract.repoConstraints)}`,
+    contract.userDecisions.length > 0 ? `User decisions:\n${listOrNone(contract.userDecisions)}` : undefined
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function listOrNone(values: string[]): string {
+  return values.length > 0 ? values.map((value) => `- ${value}`).join("\n") : "- none";
 }
 
 function normalizeReviewResponse(value: unknown): OpenAIReviewResponse {

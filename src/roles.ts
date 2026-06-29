@@ -10,6 +10,7 @@ import type {
 } from "./domain.js";
 import { createContextDeltaItem } from "./context.js";
 import { createId, nowIso } from "./ids.js";
+import type { RootContractArtifact } from "./run-state.js";
 
 export interface PlannerProvider {
   plan(input: { spec: TaskSpec; context: Context; graph: Graph }): Promise<RoleReport>;
@@ -32,6 +33,7 @@ export interface ReviewerProviderInput {
   spec: TaskSpec;
   context: Context;
   graph: Graph;
+  rootContract?: RootContractArtifact;
   subtask: Subtask;
   executorReport: RoleReport;
   evidence?: ReviewEvidence[];

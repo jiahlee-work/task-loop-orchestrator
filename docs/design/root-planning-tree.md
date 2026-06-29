@@ -1,6 +1,6 @@
 # Root Planning Tree Model
 
-Status: design draft with initial run directory artifact storage and Gemini root-contract/task-tree output implemented. This document defines the intended planning model for the real Gemini Planner, Codex Executor, and OpenAI Reviewer loop. The current storage layer writes `root-contract.json`, `task-tree.json`, `state.json`, and `summary.md`; Gemini Planner now requests `rootContract` and `taskTree` JSON and preserves those artifacts in run state. This does not mean the full tree executor is implemented.
+Status: design draft with initial run directory artifact storage and Gemini root-contract/task-tree output implemented; executor root-contract injection and reviewer contract/evidence prompts are also implemented. This document defines the intended planning model for the real Gemini Planner, Codex Executor, and OpenAI Reviewer loop. The current storage layer writes `root-contract.json`, `task-tree.json`, `state.json`, and `summary.md`; Gemini Planner now requests `rootContract` and `taskTree` JSON and preserves those artifacts in run state. Codex Executor receives the approved root contract plus the assigned task, and OpenAI Reviewer receives diff/test evidence, acceptance criteria, and context guard context. This does not mean the full tree executor is implemented.
 
 ## 왜 필요한가
 

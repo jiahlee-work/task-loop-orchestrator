@@ -54,6 +54,20 @@ describe("review evidence and LocalEvidenceReviewer", () => {
       spec,
       context,
       graph,
+      rootContract: {
+        schemaVersion: 1,
+        runId: "run-1",
+        taskId: "task-1",
+        goal: "Review milestone",
+        nonGoals: ["Do not change unrelated files."],
+        mustFollow: ["Keep the reviewer read-only."],
+        acceptanceCriteria: ["Root criteria is verified."],
+        contextGuard: ["Reject changes outside the approved task."],
+        repoConstraints: ["Do not commit."],
+        userDecisions: [],
+        permissionMode: "write",
+        updatedAt: "2026-06-22T00:00:00.000Z"
+      },
       subtask,
       executorReport: {
         role: "executor",
@@ -69,7 +83,14 @@ describe("review evidence and LocalEvidenceReviewer", () => {
 
     expect(evidence.some((item) => item.kind === "repo_status" && item.summary.includes("src/reviewers.ts"))).toBe(true);
     expect(evidence.some((item) => item.kind === "diff_stat" && item.summary.includes("42"))).toBe(true);
-    expect(evidence.some((item) => item.kind === "acceptance_criteria_coverage")).toBe(true);
+    expect(
+      evidence.some(
+        (item) => item.kind === "acceptance_criteria_coverage" && item.summary.includes("1 acceptance criteria")
+      )
+    ).toBe(true);
+    expect(
+      evidence.some((item) => item.kind === "context_guard_coverage" && item.summary.includes("1 context guard"))
+    ).toBe(true);
   });
 
   it("returns request_changes for executor failure without mutating context or graph", async () => {

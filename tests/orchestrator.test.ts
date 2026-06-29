@@ -139,6 +139,83 @@ describe("RootOrchestrator", () => {
     expect(run.events.at(-1)?.kind).toBe("run_blocked");
   });
 
+  it("passes the root contract and assigned task into the executor boundary", async () => {
+    const root = await tempRoot();
+    const store = new FileRunStore(root);
+    const createdAt = "2026-06-22T00:00:00.000Z";
+    let executorTaskGoal = "";
+    let executorAssignedTitle = "";
+    const roles: RoleProviders = {
+      planner: {
+        async plan(input): Promise<RoleReport> {
+          if (input.graph.subtasks.length > 0) {
+            return {
+              role: "planner",
+              status: "ok",
+              summary: "Graph already planned."
+            };
+          }
+
+          return {
+            role: "planner",
+            status: "ok",
+            summary: "Planned with root contract.",
+            proposedSubtasks: [
+              {
+                id: "subtask-contract",
+                title: "Implement only assigned contract task",
+                description: "Apply the assigned task without expanding scope.",
+                dependsOn: [],
+                createdAt,
+                updatedAt: createdAt
+              }
+            ],
+            data: {
+              rootContract: {
+                goal: "Approved root goal",
+                nonGoals: ["Do not perform unrelated cleanup."],
+                mustFollow: ["Preserve approved context."],
+                acceptanceCriteria: ["Assigned task is completed."],
+                contextGuard: ["Reject scope drift."],
+                repoConstraints: ["Do not commit."],
+                userDecisions: ["User approved the root plan."]
+              }
+            }
+          };
+        }
+      },
+      executor: {
+        async execute(input): Promise<RoleReport> {
+          executorTaskGoal = input.task.rootContract.goal;
+          executorAssignedTitle = input.task.assignedTask.title;
+          return {
+            role: "executor",
+            status: "ok",
+            subtaskId: input.subtask.id,
+            summary: "Executor received bounded task."
+          };
+        }
+      },
+      reviewer: {
+        async review(input): Promise<RoleReport> {
+          return {
+            role: "reviewer",
+            status: "ok",
+            subtaskId: input.subtask.id,
+            summary: `Verified ${input.subtask.title}.`
+          };
+        }
+      }
+    };
+    const orchestrator = new RootOrchestrator({ store, roles });
+
+    const run = await orchestrator.runTask(createTaskSpec({ title: "Root contract execution boundary" }));
+
+    expect(run.status).toBe("completed");
+    expect(executorTaskGoal).toBe("Approved root goal");
+    expect(executorAssignedTitle).toBe("Implement only assigned contract task");
+  });
+
   it("treats resume maxIterations as additional iterations", async () => {
     const root = await tempRoot();
     const store = new FileRunStore(root);

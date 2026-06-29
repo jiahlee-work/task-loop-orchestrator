@@ -17,6 +17,7 @@ import { applyPermissionGate } from "./permission.js";
 import { createMockToolProviders, type ToolProviders } from "./providers.js";
 import { collectReviewEvidence } from "./reviewers.js";
 import { createMockRoleProviders, type RoleProviders } from "./roles.js";
+import { createRootContractArtifact } from "./run-state.js";
 import { FileRunStore } from "./store.js";
 
 export interface RootOrchestratorOptions {
@@ -214,6 +215,7 @@ export class RootOrchestrator {
         spec: activeRun.spec,
         context: activeRun.context,
         subtask: { ...subtask, status: "active" },
+        rootContract: createRootContractArtifact(activeRun),
         worktreeEnabled: this.worktreeEnabled
       })
     });
@@ -243,6 +245,7 @@ export class RootOrchestrator {
       spec: run.spec,
       context: run.context,
       graph: run.graph,
+      rootContract: createRootContractArtifact(run),
       subtask,
       executorReport,
       repo: this.tools.repo
@@ -261,6 +264,7 @@ export class RootOrchestrator {
       spec: run.spec,
       context: run.context,
       graph: run.graph,
+      rootContract: createRootContractArtifact(run),
       subtask,
       executorReport,
       evidence

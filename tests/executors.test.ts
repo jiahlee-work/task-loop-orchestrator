@@ -81,6 +81,18 @@ describe("CodexCliExecutor", () => {
         sandbox: "workspace-write"
       })
     );
+    const prompt = (report.data?.command as string[]).at(-1);
+    expect(prompt).toContain("Approved root contract:");
+    expect(prompt).toContain("Assigned task:");
+    expect(prompt).toContain("Goal: Build adapter boundary");
+    expect(prompt).toContain("Title: Prepare dry-run executor");
+    expect(prompt).toContain("Context guard:");
+    expect(prompt).not.toContain("Existing graph is managed by root.");
+    expect(task.rootContract.acceptanceCriteria).toEqual(["Command can be inspected without execution."]);
+    expect(task.assignedTask).toMatchObject({
+      id: "subtask-1",
+      title: "Prepare dry-run executor"
+    });
     expect(task.worktree.branchHint).toContain("orchestrator/");
     expect(context).toEqual(contextBefore);
     expect(graph).toEqual(graphBefore);

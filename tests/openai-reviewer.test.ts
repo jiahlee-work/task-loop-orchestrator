@@ -14,14 +14,17 @@ afterEach(async () => {
 
 describe("OpenAI reviewer", () => {
   it("converts OpenAI JSON review output into a reviewer report", async () => {
+    let capturedPrompt = "";
     const reviewer = new OpenAIReviewer({
       config: {
         endpoint: "https://openai.example.test/v1",
         model: "gpt-test",
         apiKey: "secret"
       },
-      fetchImpl: async () =>
-        new Response(
+      fetchImpl: async (_url, init) => {
+        const body = JSON.parse(String(init?.body ?? "{}")) as { input?: string };
+        capturedPrompt = body.input ?? "";
+        return new Response(
           JSON.stringify({
             output_text: JSON.stringify({
               verdict: "accept",
@@ -30,16 +33,22 @@ describe("OpenAI reviewer", () => {
             })
           }),
           { status: 200 }
-        )
+        );
+      }
     });
 
     const report = await reviewer.review({
       spec,
       context,
       graph,
+      rootContract,
       subtask,
       executorReport,
-      evidence: [{ kind: "diff_stat", summary: "src/app.ts | 2 +-", data: { raw: "src/app.ts | 2 +-" } }]
+      evidence: [
+        { kind: "diff_stat", summary: "src/app.ts | 2 +-", data: { raw: "src/app.ts | 2 +-" } },
+        { kind: "test_result_placeholder", summary: "pnpm test passed", data: { executed: true } },
+        { kind: "context_guard_coverage", summary: "Context guard available.", data: { contextGuard: rootContract.contextGuard } }
+      ]
     });
 
     expect(report.status).toBe("ok");
@@ -50,6 +59,13 @@ describe("OpenAI reviewer", () => {
       model: "gpt-test",
       readOnly: true
     });
+    expect(capturedPrompt).toContain("Root contract:");
+    expect(capturedPrompt).toContain("Goal: Review task through root contract");
+    expect(capturedPrompt).toContain("Context guard:");
+    expect(capturedPrompt).toContain("Diff evidence:");
+    expect(capturedPrompt).toContain("Test evidence:");
+    expect(capturedPrompt).toContain("Acceptance criteria evidence:");
+    expect(capturedPrompt).toContain("Context guard evidence:");
   });
 
   it("blocks when OpenAI API key is missing", async () => {
@@ -146,6 +162,22 @@ const executorReport: RoleReport = {
   status: "ok",
   subtaskId: subtask.id,
   summary: "Executor completed work."
+};
+
+const rootContract = {
+  schemaVersion: 1 as const,
+  runId: "run-1",
+  taskId: "task-1",
+  goal: "Review task through root contract",
+  description: "Review executor output with the approved root contract.",
+  nonGoals: ["Do not accept unrelated changes."],
+  mustFollow: ["Use supplied evidence only."],
+  acceptanceCriteria: ["Evidence is sufficient."],
+  contextGuard: ["Reject output that violates the root goal."],
+  repoConstraints: ["Do not mutate files."],
+  userDecisions: [],
+  permissionMode: "write" as const,
+  updatedAt: "2026-06-29T00:00:00.000Z"
 };
 
 async function tempRoot(): Promise<string> {

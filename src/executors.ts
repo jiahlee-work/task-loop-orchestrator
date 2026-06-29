@@ -3,6 +3,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { Context, ExecutorMode, ExecutorTaskSpec, RoleReport, Subtask, TaskSpec } from "./domain.js";
 import { createContextDeltaItem } from "./context.js";
 import { runCommand, type CommandRunner } from "./providers.js";
+import type { RootContractArtifact } from "./run-state.js";
 import type { ExecutorProvider, ExecutorProviderInput } from "./roles.js";
 
 export interface CodexCliExecutorOptions {
@@ -36,11 +37,29 @@ export function createExecutorTaskSpec(input: {
   spec: TaskSpec;
   context: Context;
   subtask: Subtask;
+  rootContract?: RootContractArtifact;
   worktreeEnabled: boolean;
 }): ExecutorTaskSpec {
+  const rootContract = input.rootContract ?? fallbackRootContract(input.runId, input.spec);
   return {
     runId: input.runId,
     subtaskId: input.subtask.id,
+    rootContract: {
+      goal: rootContract.goal,
+      description: rootContract.description,
+      nonGoals: [...rootContract.nonGoals],
+      mustFollow: [...rootContract.mustFollow],
+      acceptanceCriteria: [...rootContract.acceptanceCriteria],
+      contextGuard: [...rootContract.contextGuard],
+      repoConstraints: [...rootContract.repoConstraints],
+      userDecisions: [...rootContract.userDecisions]
+    },
+    assignedTask: {
+      id: input.subtask.id,
+      title: input.subtask.title,
+      description: input.subtask.description,
+      dependsOn: [...input.subtask.dependsOn]
+    },
     taskSpecSummary: summarizeTaskSpec(input.spec),
     boundedGoal: input.subtask.description ?? input.subtask.title,
     nonGoals: [
@@ -73,6 +92,8 @@ export function buildCodexCliCommand(
   const codexBinary = normalizedOptions.codexBinary ?? "codex";
   const prompt = [
     "You are an Executor in a role-split task orchestrator.",
+    "Only use the approved root contract and the assigned task below.",
+    "Do not infer extra scope from the full run history.",
     `Run ID: ${task.runId}`,
     `Subtask ID: ${task.subtaskId}`,
     `Permission mode: ${task.permissionMode}`,
@@ -80,17 +101,17 @@ export function buildCodexCliCommand(
     `Branch hint: ${task.worktree.branchHint}`,
     "Execution workspace: a Git worktree copy of the target repository.",
     "",
-    "Task spec:",
-    task.taskSpecSummary,
+    "Approved root contract:",
+    formatRootContract(task.rootContract),
     "",
-    "Bounded goal:",
-    task.boundedGoal,
+    "Assigned task:",
+    formatAssignedTask(task.assignedTask),
     "",
     "Non-goals:",
-    task.nonGoals.map((nonGoal) => `- ${nonGoal}`).join("\n"),
+    uniqueStrings([...task.rootContract.nonGoals, ...task.nonGoals]).map((nonGoal) => `- ${nonGoal}`).join("\n"),
     "",
-    "Context:",
-    task.contextSummary,
+    "Context guard:",
+    listOrNone(task.rootContract.contextGuard),
     "",
     "Return a concise RoleReport-style summary and context_delta only."
   ].join("\n");
@@ -256,4 +277,60 @@ function createBranchHint(runId: string, subtaskId: string): string {
   const compactRunId = runId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 12);
   const compactSubtaskId = subtaskId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 12);
   return `orchestrator/${compactRunId}-${compactSubtaskId}`.toLowerCase();
+}
+
+function fallbackRootContract(runId: string, spec: TaskSpec): RootContractArtifact {
+  return {
+    schemaVersion: 1,
+    runId,
+    taskId: spec.id,
+    goal: spec.title,
+    description: spec.description,
+    nonGoals: [],
+    mustFollow: [...spec.acceptanceCriteria],
+    acceptanceCriteria: [...spec.acceptanceCriteria],
+    contextGuard: [
+      "Keep the assigned task aligned with the approved root goal.",
+      "Do not expand into unrelated work.",
+      "Stop and report when the assigned task conflicts with the root contract."
+    ],
+    repoConstraints: [
+      "Do not create branches, commits, pushes, pull requests, tags, releases, or Jira transitions unless explicitly approved."
+    ],
+    userDecisions: [],
+    permissionMode: spec.permissionMode,
+    updatedAt: new Date(0).toISOString()
+  };
+}
+
+function formatRootContract(contract: ExecutorTaskSpec["rootContract"]): string {
+  return [
+    `Goal: ${contract.goal}`,
+    contract.description ? `Description: ${contract.description}` : undefined,
+    `Must follow:\n${listOrNone(contract.mustFollow)}`,
+    `Acceptance criteria:\n${listOrNone(contract.acceptanceCriteria)}`,
+    `Repo constraints:\n${listOrNone(contract.repoConstraints)}`,
+    contract.userDecisions.length > 0 ? `User decisions:\n${listOrNone(contract.userDecisions)}` : undefined
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function formatAssignedTask(task: ExecutorTaskSpec["assignedTask"]): string {
+  return [
+    `ID: ${task.id}`,
+    `Title: ${task.title}`,
+    task.description ? `Description: ${task.description}` : undefined,
+    `Depends on: ${task.dependsOn.length > 0 ? task.dependsOn.join(", ") : "none"}`
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function listOrNone(values: string[]): string {
+  return values.length > 0 ? values.map((value) => `- ${value}`).join("\n") : "- none";
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }

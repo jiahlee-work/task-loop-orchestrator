@@ -22,7 +22,8 @@ export type ReviewEvidenceKind =
   | "repo_status"
   | "diff_stat"
   | "test_result_placeholder"
-  | "acceptance_criteria_coverage";
+  | "acceptance_criteria_coverage"
+  | "context_guard_coverage";
 
 export type ActionType =
   | "read_state"
@@ -135,6 +136,22 @@ export interface ContextDelta {
 export interface ExecutorTaskSpec {
   runId: string;
   subtaskId: string;
+  rootContract: {
+    goal: string;
+    description?: string;
+    nonGoals: string[];
+    mustFollow: string[];
+    acceptanceCriteria: string[];
+    contextGuard: string[];
+    repoConstraints: string[];
+    userDecisions: string[];
+  };
+  assignedTask: {
+    id: string;
+    title: string;
+    description?: string;
+    dependsOn: string[];
+  };
   taskSpecSummary: string;
   boundedGoal: string;
   nonGoals: string[];
